@@ -1,0 +1,108 @@
+# Multi-stage build для оптимизации
+FROM node:18-alpine AS base
+
+# Устанавливаем зависимости для всех этапов
+RUN apk update && apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    ttf-dejavu \
+    ttf-liberation \
+    bash \
+    libc6-compat
+
+# Устанавливаем переменные окружения для Puppeteer
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Устанавливаем рабочую директорию
+WORKDIR /app
+
+# Этап установки зависимостей
+FROM base AS deps
+COPY package*.json ./
+RUN npm ci
+
+# Этап сборки
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# ARG переменные для сборки
+ARG DATABASE_URL
+ARG AWS_ACCESS_KEY_ID
+ARG AWS_SECRET_ACCESS_KEY
+ARG AWS_REGION
+ARG AWS_BUCKET_NAME
+ARG S3_ENDPOINT
+ARG NEXTAUTH_SECRET
+ARG JWT_SECRET
+ARG NEXTAUTH_URL
+ARG BEELINE_SMS_USER
+ARG BEELINE_SMS_PASS
+ARG BEELINE_SMS_SENDER
+ARG LAXIMO_LOGIN
+ARG LAXIMO_PASSWORD
+ARG LAXIMO_DOC_LOGIN
+ARG LAXIMO_DOC_PASSWORD
+ARG AUTOEURO_API_KEY
+ARG YOOKASSA_SHOP_ID
+ARG YOOKASSA_SECRET_KEY
+ARG PARTSAPI_CATEGORIES_KEY
+ARG PARTSAPI_ARTICLES_KEY
+ARG PARTSAPI_MEDIA_KEY
+ARG PARTSAPI_URL
+ARG PARTSINDEX_API_KEY
+ARG YANDEX_MAPS_API_KEY
+ARG YANDEX_DELIVERY_TOKEN
+ARG YANDEX_GEOSUGGEST_API_KEY
+ARG YANDEX_DELIVERY_SOURCE_STATION_ID
+
+# ENV переменные для сборки
+ENV NODE_ENV=production
+ENV DOCKER_BUILD=true
+
+# Генерируем Prisma Client
+RUN npx prisma generate
+
+# Собираем приложение
+RUN npm run build
+
+# Проверяем сборку
+RUN echo "Checking build output..." && \
+    ls -la .next/ && \
+    ls -la .next/static/ && \
+    (ls -la .next/static/css/ || echo "No CSS directory found") && \
+    echo "Build check complete"
+
+# Финальный этап
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Создаем пользователя
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Копируем необходимые файлы
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+
+# Устанавливаем права доступа
+RUN chown -R nextjs:nodejs /app
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"] 

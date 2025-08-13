@@ -1,0 +1,877 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String                 @id @default(cuid())
+  firstName      String
+  lastName       String
+  email          String                 @unique
+  password       String
+  avatar         String?
+  role           UserRole               @default(ADMIN)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  auditLogs      AuditLog[]
+  balanceChanges ClientBalanceHistory[]
+  managedClients Client[]
+  productHistory ProductHistory[]
+
+  @@map("users")
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String
+  action    AuditAction
+  details   String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime    @default(now())
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
+
+model Category {
+  id                         String     @id @default(cuid())
+  name                       String
+  slug                       String     @unique
+  description                String?
+  seoTitle                   String?
+  seoDescription             String?
+  image                      String?
+  isHidden                   Boolean    @default(false)
+  includeSubcategoryProducts Boolean    @default(false)
+  parentId                   String?
+  createdAt                  DateTime   @default(now())
+  updatedAt                  DateTime   @updatedAt
+  parent                     Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children                   Category[] @relation("CategoryHierarchy")
+  products                   Product[]  @relation("CategoryToProduct")
+
+  @@map("categories")
+}
+
+model NavigationCategory {
+  id        String   @id @default(cuid())
+  
+  // Привязка к категории PartsIndex
+  partsIndexCatalogId String  // ID каталога из PartsIndex API
+  partsIndexGroupId   String? // ID группы из PartsIndex API (необязательно)
+  
+  // Только иконка - название берем из PartsIndex
+  icon      String?  // URL иконки в S3
+  
+  // Настройки отображения
+  isHidden  Boolean  @default(false)
+  sortOrder Int      @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Уникальная комбинация catalogId + groupId
+  @@unique([partsIndexCatalogId, partsIndexGroupId])
+  @@map("navigation_categories")
+}
+
+model Product {
+  id                           String                  @id @default(cuid())
+  name                         String
+  slug                         String                  @unique
+  article                      String?                 @unique
+  description                  String?
+  videoUrl                     String?
+  wholesalePrice               Float?
+  retailPrice                  Float?
+  weight                       Float?
+  dimensions                   String?
+  unit                         String                  @default("шт")
+  isVisible                    Boolean                 @default(true)
+  applyDiscounts               Boolean                 @default(true)
+  stock                        Int                     @default(0)
+  createdAt                    DateTime                @default(now())
+  updatedAt                    DateTime                @updatedAt
+  brand                        String?
+  bestPriceProducts            BestPriceProduct?
+  dailyProducts                DailyProduct[]
+  topSalesProducts             TopSalesProduct?
+  orderItems                   OrderItem[]
+  characteristics              ProductCharacteristic[]
+  history                      ProductHistory[]
+  images                       ProductImage[]
+  options                      ProductOption[]
+  products_AccessoryProducts_A Product[]               @relation("AccessoryProducts")
+  products_AccessoryProducts_B Product[]               @relation("AccessoryProducts")
+  categories                   Category[]              @relation("CategoryToProduct")
+  products_RelatedProducts_A   Product[]               @relation("RelatedProducts")
+  products_RelatedProducts_B   Product[]               @relation("RelatedProducts")
+
+  @@map("products")
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  url       String
+  alt       String?
+  order     Int      @default(0)
+  productId String
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_images")
+}
+
+model Option {
+  id        String          @id @default(cuid())
+  name      String          @unique
+  type      OptionType      @default(SINGLE)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  values    OptionValue[]
+  products  ProductOption[]
+
+  @@map("options")
+}
+
+model OptionValue {
+  id        String          @id @default(cuid())
+  value     String
+  price     Float           @default(0)
+  optionId  String
+  createdAt DateTime        @default(now())
+  option    Option          @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  products  ProductOption[]
+
+  @@map("option_values")
+}
+
+model ProductOption {
+  id            String      @id @default(cuid())
+  productId     String
+  optionId      String
+  optionValueId String
+  option        Option      @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  optionValue   OptionValue @relation(fields: [optionValueId], references: [id], onDelete: Cascade)
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, optionId, optionValueId])
+  @@map("product_options")
+}
+
+model Characteristic {
+  id        String                  @id @default(cuid())
+  name      String                  @unique
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+  products  ProductCharacteristic[]
+
+  @@map("characteristics")
+}
+
+model ProductCharacteristic {
+  id               String         @id @default(cuid())
+  value            String
+  productId        String
+  characteristicId String
+  characteristic   Characteristic @relation(fields: [characteristicId], references: [id], onDelete: Cascade)
+  product          Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, characteristicId])
+  @@map("product_characteristics")
+}
+
+model ProductHistory {
+  id        String   @id @default(cuid())
+  productId String
+  action    String
+  changes   Json?
+  userId    String?
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("product_history")
+}
+
+model Client {
+  id                   String                  @id @default(cuid())
+  clientNumber         String                  @unique
+  type                 ClientType              @default(INDIVIDUAL)
+  name                 String
+  email                String?
+  phone                String
+  city                 String?
+  markup               Float?                  @default(0)
+  isConfirmed          Boolean                 @default(false)
+  profileId            String?
+  managerId            String?
+  balance              Float                   @default(0)
+  comment              String?
+  emailNotifications   Boolean                 @default(true)
+  smsNotifications     Boolean                 @default(true)
+  pushNotifications    Boolean                 @default(false)
+  legalEntityType      String?
+  legalEntityName      String?
+  inn                  String?
+  kpp                  String?
+  ogrn                 String?
+  okpo                 String?
+  legalAddress         String?
+  actualAddress        String?
+  bankAccount          String?
+  bankName             String?
+  bankBik              String?
+  correspondentAccount String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  balanceHistory       ClientBalanceHistory[]
+  bankDetails          ClientBankDetails[]
+  contacts             ClientContact[]
+  contracts            ClientContract[]
+  deliveryAddresses    ClientDeliveryAddress[]
+  discounts            ClientDiscount[]
+  legalEntities        ClientLegalEntity[]
+  vehicles             ClientVehicle[]
+  manager              User?                   @relation(fields: [managerId], references: [id])
+  profile              ClientProfile?          @relation(fields: [profileId], references: [id])
+  favorites            Favorite[]
+  orders               Order[]
+  partsSearchHistory   PartsSearchHistory[]
+
+  @@map("clients")
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  clientId  String
+  productId String?
+  offerKey  String?
+  name      String
+  brand     String
+  article   String
+  price     Float?
+  currency  String?
+  image     String?
+  createdAt DateTime @default(now())
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, productId, offerKey, article, brand])
+  @@map("favorites")
+}
+
+model ClientProfile {
+  id                 String                    @id @default(cuid())
+  code               String                    @unique
+  name               String                    @unique
+  description        String?
+  baseMarkup         Float                     @default(0)
+  autoSendInvoice    Boolean                   @default(true)
+  vinRequestModule   Boolean                   @default(false)
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  clients            Client[]
+  discountProfiles   DiscountProfile[]
+  brandMarkups       ProfileBrandMarkup[]
+  categoryMarkups    ProfileCategoryMarkup[]
+  excludedBrands     ProfileExcludedBrand[]
+  excludedCategories ProfileExcludedCategory[]
+  orderDiscounts     ProfileOrderDiscount[]
+  paymentTypes       ProfilePaymentType[]
+  priceRangeMarkups  ProfilePriceRangeMarkup[]
+  supplierMarkups    ProfileSupplierMarkup[]
+
+  @@map("client_profiles")
+}
+
+model ProfilePriceRangeMarkup {
+  id          String        @id @default(cuid())
+  profileId   String
+  priceFrom   Float
+  priceTo     Float
+  markupType  MarkupType    @default(PERCENTAGE)
+  markupValue Float
+  createdAt   DateTime      @default(now())
+  profile     ClientProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("profile_price_range_markups")
+}
+
+model ProfileOrderDiscount {
+  id            String        @id @default(cuid())
+  profileId     String
+  minOrderSum   Float
+  discountType  DiscountType  @default(PERCENTAGE)
+  discountValue Float
+  createdAt     DateTime      @default(now())
+  profile       ClientProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("profile_order_discounts")
+}
+
+model ProfileSupplierMarkup {
+  id           String        @id @default(cuid())
+  profileId    String
+  supplierName String
+  markupType   MarkupType    @default(PERCENTAGE)
+  markupValue  Float
+  createdAt    DateTime      @default(now())
+  profile      ClientProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("profile_supplier_markups")
+}
+
+model ProfileBrandMarkup {
+  id          String        @id @default(cuid())
+  profileId   String
+  brandName   String
+  markupType  MarkupType    @default(PERCENTAGE)
+  markupValue Float
+  createdAt   DateTime      @default(now())
+  profile     ClientProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("profile_brand_markups")
+}
+
+model ProfileCategoryMarkup {
+  id           String        @id @default(cuid())
+  profileId    String
+  categoryName String
+  markupType   MarkupType    @default(PERCENTAGE)
+  markupValue  Float
+  createdAt    DateTime      @default(now())
+  profile      ClientProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("profile_category_markups")
+}
+
+model ProfileExcludedBrand {
+  id        String        @id @default(cuid())
+  profileId String
+  brandName String
+  createdAt DateTime      @default(now())
+  profile   ClientProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("profile_excluded_brands")
+}
+
+model ProfileExcludedCategory {
+  id           String        @id @default(cuid())
+  profileId    String
+  categoryName String
+  createdAt    DateTime      @default(now())
+  profile      ClientProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("profile_excluded_categories")
+}
+
+model ProfilePaymentType {
+  id          String        @id @default(cuid())
+  profileId   String
+  paymentType PaymentType
+  isEnabled   Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  profile     ClientProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("profile_payment_types")
+}
+
+model ClientVehicle {
+  id           String   @id @default(cuid())
+  clientId     String
+  name         String
+  vin          String?
+  frame        String?
+  licensePlate String?
+  brand        String?
+  model        String?
+  modification String?
+  year         Int?
+  mileage      Int?
+  comment      String?
+  createdAt    DateTime @default(now())
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_vehicles")
+}
+
+model PartsSearchHistory {
+  id            String     @id @default(cuid())
+  clientId      String
+  searchQuery   String
+  searchType    SearchType
+  brand         String?
+  articleNumber String?
+  vehicleBrand  String?
+  vehicleModel  String?
+  vehicleYear   Int?
+  resultCount   Int        @default(0)
+  createdAt     DateTime   @default(now())
+  client        Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("parts_search_history")
+}
+
+// История запросов ZZAP со скриншотами
+model ZzapRequest {
+  id          String   @id @default(cuid())
+  provider    String   @default("zzap")
+  article     String
+  statsUrl    String?
+  imageUrl    String?
+  ok          Boolean  @default(false)
+  selector    String?
+  logs        Json?
+  requestedBy String?
+  createdAt   DateTime @default(now())
+
+  @@index([article])
+  @@map("zzap_requests")
+}
+
+model ClientDeliveryAddress {
+  id           String       @id @default(cuid())
+  clientId     String
+  name         String
+  address      String
+  deliveryType DeliveryType @default(COURIER)
+  comment      String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  apartment    String?
+  contactPhone String?
+  deliveryTime String?
+  entrance     String?
+  floor        String?
+  intercom     String?
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_delivery_addresses")
+}
+
+model ClientContact {
+  id        String   @id @default(cuid())
+  clientId  String
+  phone     String?
+  email     String?
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_contacts")
+}
+
+model ClientContract {
+  id                String           @id @default(cuid())
+  clientId          String
+  contractNumber    String
+  contractDate      DateTime
+  name              String
+  ourLegalEntity    String
+  clientLegalEntity String
+  balance           Float            @default(0)
+  currency          String           @default("RUB")
+  isActive          Boolean          @default(true)
+  isDefault         Boolean          @default(false)
+  contractType      String
+  relationship      String
+  paymentDelay      Boolean          @default(false)
+  creditLimit       Float?
+  delayDays         Int?
+  fileUrl           String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  balanceInvoices   BalanceInvoice[]
+  client            Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_contracts")
+}
+
+model BalanceInvoice {
+  id            String         @id @default(cuid())
+  contractId    String
+  amount        Float
+  currency      String         @default("RUB")
+  status        InvoiceStatus  @default(PENDING)
+  invoiceNumber String         @unique
+  qrCode        String
+  pdfUrl        String?
+  paymentUrl    String?
+  expiresAt     DateTime
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  contract      ClientContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@map("balance_invoices")
+}
+
+model ClientLegalEntity {
+  id                     String              @id @default(cuid())
+  clientId               String
+  shortName              String
+  fullName               String
+  form                   String
+  legalAddress           String
+  actualAddress          String?
+  taxSystem              String
+  responsiblePhone       String?
+  responsiblePosition    String?
+  responsibleName        String?
+  accountant             String?
+  signatory              String?
+  registrationReasonCode String?
+  ogrn                   String?
+  inn                    String
+  vatPercent             Float               @default(20)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  bankDetails            ClientBankDetails[]
+  client                 Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_legal_entities")
+}
+
+model ClientBankDetails {
+  id                   String             @id @default(cuid())
+  clientId             String
+  legalEntityId        String?
+  name                 String
+  accountNumber        String
+  bankName             String
+  bik                  String
+  correspondentAccount String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  client               Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  legalEntity          ClientLegalEntity? @relation(fields: [legalEntityId], references: [id])
+
+  @@map("client_bank_details")
+}
+
+model ClientBalanceHistory {
+  id        String   @id @default(cuid())
+  clientId  String
+  userId    String?
+  oldValue  Float
+  newValue  Float
+  comment   String?
+  createdAt DateTime @default(now())
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("client_balance_history")
+}
+
+model ClientDiscount {
+  id        String       @id @default(cuid())
+  clientId  String
+  name      String
+  type      DiscountType
+  value     Float
+  isActive  Boolean      @default(true)
+  validFrom DateTime?
+  validTo   DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  client    Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_discounts")
+}
+
+model ClientStatus {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  color       String   @default("#6B7280")
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("client_statuses")
+}
+
+model Discount {
+  id             String            @id @default(cuid())
+  name           String
+  type           DiscountCodeType  @default(DISCOUNT)
+  code           String?           @unique
+  minOrderAmount Float?            @default(0)
+  discountType   DiscountType      @default(PERCENTAGE)
+  discountValue  Float
+  isActive       Boolean           @default(true)
+  validFrom      DateTime?
+  validTo        DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  profiles       DiscountProfile[]
+
+  @@map("discounts")
+}
+
+model DiscountProfile {
+  id         String        @id @default(cuid())
+  discountId String
+  profileId  String
+  createdAt  DateTime      @default(now())
+  discount   Discount      @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  profile    ClientProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([discountId, profileId])
+  @@map("discount_profiles")
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  clientId        String?
+  clientEmail     String?
+  clientPhone     String?
+  clientName      String?
+  status          OrderStatus @default(PENDING)
+  totalAmount     Float
+  discountAmount  Float       @default(0)
+  finalAmount     Float
+  currency        String      @default("RUB")
+  deliveryAddress String?
+  comment         String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  items           OrderItem[]
+  client          Client?     @relation(fields: [clientId], references: [id])
+  payments        Payment[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  productId  String?
+  externalId String?
+  name       String
+  article    String?
+  brand      String?
+  price      Float
+  quantity   Int
+  totalPrice Float
+  createdAt  DateTime @default(now())
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product    Product? @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  orderId           String
+  yookassaPaymentId String        @unique
+  status            PaymentStatus @default(PENDING)
+  amount            Float
+  currency          String        @default("RUB")
+  paymentMethod     String?
+  description       String?
+  confirmationUrl   String?
+  metadata          Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  paidAt            DateTime?
+  canceledAt        DateTime?
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model DailyProduct {
+  id          String   @id @default(cuid())
+  productId   String
+  displayDate DateTime
+  discount    Float?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, displayDate])
+  @@map("daily_products")
+}
+
+model BestPriceProduct {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  discount  Float?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("best_price_products")
+}
+
+model TopSalesProduct {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("top_sales_products")
+}
+
+model HeroBanner {
+  id          String   @id @default(cuid())
+  title       String
+  subtitle    String?
+  imageUrl    String
+  linkUrl     String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("hero_banners")
+}
+
+enum UserRole {
+  ADMIN
+  MODERATOR
+  USER
+}
+
+enum AuditAction {
+  USER_LOGIN
+  USER_LOGOUT
+  USER_CREATE
+  USER_UPDATE
+  USER_DELETE
+  PASSWORD_CHANGE
+  AVATAR_UPLOAD
+  PROFILE_UPDATE
+  CATEGORY_CREATE
+  CATEGORY_UPDATE
+  CATEGORY_DELETE
+  PRODUCT_CREATE
+  PRODUCT_UPDATE
+  PRODUCT_DELETE
+}
+
+enum OptionType {
+  SINGLE
+  MULTIPLE
+}
+
+enum MarkupType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum PaymentType {
+  CASH
+  CARD
+  BANK_TRANSFER
+  ONLINE
+  CREDIT
+}
+
+enum SearchType {
+  TEXT
+  ARTICLE
+  OEM
+  VIN
+  PLATE
+  WIZARD
+  PART_VEHICLES
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+enum ClientType {
+  INDIVIDUAL
+  LEGAL_ENTITY
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum DiscountCodeType {
+  DISCOUNT
+  PROMOCODE
+}
+
+// Cart models for backend cart storage
+model Cart {
+  id        String     @id @default(cuid())
+  clientId  String     @unique // Can be authenticated client ID or anonymous session ID
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("carts")
+}
+
+model CartItem {
+  id          String  @id @default(cuid())
+  cartId      String
+  productId   String? // For internal products
+  offerKey    String? // For external products (AutoEuro)
+  name        String
+  description String
+  brand       String
+  article     String
+  price       Float
+  currency    String  @default("RUB")
+  quantity    Int
+  stock       Int?
+  deliveryTime String?
+  warehouse   String?
+  supplier    String?
+  isExternal  Boolean @default(false)
+  image       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  cart Cart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  @@map("cart_items")
+}
+
+enum DeliveryType {
+  COURIER
+  PICKUP
+  POST
+  TRANSPORT
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  WAITING_FOR_CAPTURE
+  SUCCEEDED
+  CANCELED
+  REFUNDED
+}
