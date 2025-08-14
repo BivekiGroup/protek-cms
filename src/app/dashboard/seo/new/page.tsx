@@ -72,14 +72,24 @@ export default function SeoCreatePage(): React.JSX.Element {
 
         <div className="space-y-2">
           <Label>Structured Data (JSON-LD)</Label>
-          <Textarea rows={6} placeholder="{\n  \"@context\": \"https://schema.org\"\n}" value={typeof input.structuredData === 'string' ? input.structuredData : (input.structuredData ? JSON.stringify(input.structuredData, null, 2) : '')} onChange={(e) => {
-            try {
-              const val = e.target.value?.trim()
-              setInput({ ...input, structuredData: val ? JSON.parse(val) : null })
-            } catch {
-              setInput({ ...input, structuredData: e.target.value })
+          <Textarea
+            rows={6}
+            placeholder={'{\n  "@context": "https://schema.org"\n}'}
+            value={
+              typeof input.structuredData === 'string'
+                ? input.structuredData
+                : (input.structuredData ? JSON.stringify(input.structuredData, null, 2) : '')
             }
-          }} />
+            onChange={(e) => {
+              const raw = e.target.value || ''
+              try {
+                const trimmed = raw.trim()
+                setInput({ ...input, structuredData: trimmed ? JSON.parse(trimmed) : null })
+              } catch {
+                setInput({ ...input, structuredData: raw })
+              }
+            }}
+          />
         </div>
 
         <div className="flex gap-3">
