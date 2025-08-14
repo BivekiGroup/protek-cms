@@ -1,4 +1,6 @@
-"use client"
+"use client";
+
+import React from 'react'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -16,7 +18,7 @@ const CREATE_SEO = gql`
   }
 `
 
-export default function SeoCreatePage() {
+export default function SeoCreatePage(): React.JSX.Element {
   const router = useRouter()
   const [input, setInput] = useState<any>({ matchType: 'EXACT', noIndex: false, noFollow: false })
   const [createSeo, { loading }] = useMutation(CREATE_SEO, {
@@ -88,4 +90,3 @@ export default function SeoCreatePage() {
     </div>
   )
 }
-
