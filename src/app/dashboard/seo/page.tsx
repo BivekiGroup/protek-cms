@@ -31,7 +31,7 @@ const DELETE_SEO = gql`
 
 export default function SeoListPage() {
   const [search, setSearch] = useState('')
-  const { data, loading, refetch } = useQuery(GET_SEO_LIST, { variables: { search, skip: 0, take: 50 } })
+  const { data, loading, error, refetch } = useQuery(GET_SEO_LIST, { variables: { search, skip: 0, take: 50 } })
   const [deleteSeo] = useMutation(DELETE_SEO, { onCompleted: () => refetch() })
 
   return (
@@ -42,6 +42,19 @@ export default function SeoListPage() {
           <Link href="/dashboard/seo/new">Новая запись</Link>
         </Button>
       </div>
+
+      {!!error && (
+        <div className="mb-4 p-3 rounded-md border text-sm 
+            border-yellow-300 bg-yellow-50 text-yellow-800">
+          {String(error.message || '').includes('Не авторизовано') ? (
+            <>
+              Не авторизовано. Пожалуйста, <Link href="/login" className="underline">войдите</Link> и повторите попытку.
+            </>
+          ) : (
+            <>Ошибка загрузки: {error.message}</>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-2 mb-4">
         <Input placeholder="Поиск по пути/тайтлу..." value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -76,4 +89,3 @@ export default function SeoListPage() {
     </div>
   )
 }
-
