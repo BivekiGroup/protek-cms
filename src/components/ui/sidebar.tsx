@@ -69,6 +69,7 @@ const navigationGroups: NavGroup[] = [
     title: 'Система',
     items: [
       { title: 'Настройки', href: '/dashboard/settings', icon: Settings },
+      { title: 'SEO', href: '/dashboard/seo', icon: Palette },
     ],
   },
 ]

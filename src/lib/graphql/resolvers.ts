@@ -3897,6 +3897,34 @@ export const resolvers = {
       }
     },
 
+    // SEO configs
+    seoPageConfigs: async (_: unknown, { search, skip = 0, take = 50 }: { search?: string; skip?: number; take?: number }, context: Context) => {
+      if (!context.userId) throw new Error('Не авторизовано')
+      const where: any = search ? {
+        OR: [
+          { pattern: { contains: search, mode: 'insensitive' } },
+          { title: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } },
+        ]
+      } : {}
+      return prisma.seoPageConfig.findMany({ where, orderBy: { updatedAt: 'desc' }, skip, take })
+    },
+    seoPageConfigsCount: async (_: unknown, { search }: { search?: string }, context: Context) => {
+      if (!context.userId) throw new Error('Не авторизовано')
+      const where: any = search ? {
+        OR: [
+          { pattern: { contains: search, mode: 'insensitive' } },
+          { title: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } },
+        ]
+      } : {}
+      return prisma.seoPageConfig.count({ where })
+    },
+    seoPageConfig: async (_: unknown, { id }: { id: string }, context: Context) => {
+      if (!context.userId) throw new Error('Не авторизовано')
+      return prisma.seoPageConfig.findUnique({ where: { id } })
+    },
+
     // Daily Products queries
     dailyProducts: async (_: unknown, { displayDate }: { displayDate: string }) => {
       try {
@@ -10151,6 +10179,47 @@ export const resolvers = {
           error: 'Ошибка обновления количества товара'
         };
       }
+    },
+
+    // SEO configs
+    createSeoPageConfig: async (_: unknown, { input }: { input: any }, context: Context) => {
+      if (!context.userId) throw new Error('Не авторизовано')
+      return prisma.seoPageConfig.create({ data: {
+        pattern: input.pattern,
+        matchType: input.matchType,
+        title: input.title,
+        description: input.description,
+        keywords: input.keywords,
+        ogTitle: input.ogTitle,
+        ogDescription: input.ogDescription,
+        ogImage: input.ogImage,
+        canonicalUrl: input.canonicalUrl,
+        noIndex: input.noIndex ?? false,
+        noFollow: input.noFollow ?? false,
+        structuredData: input.structuredData ?? undefined,
+      }})
+    },
+    updateSeoPageConfig: async (_: unknown, { id, input }: { id: string; input: any }, context: Context) => {
+      if (!context.userId) throw new Error('Не авторизовано')
+      return prisma.seoPageConfig.update({ where: { id }, data: {
+        ...(input.pattern !== undefined ? { pattern: input.pattern } : {}),
+        ...(input.matchType !== undefined ? { matchType: input.matchType } : {}),
+        title: input.title,
+        description: input.description,
+        keywords: input.keywords,
+        ogTitle: input.ogTitle,
+        ogDescription: input.ogDescription,
+        ogImage: input.ogImage,
+        canonicalUrl: input.canonicalUrl,
+        ...(input.noIndex !== undefined ? { noIndex: input.noIndex } : {}),
+        ...(input.noFollow !== undefined ? { noFollow: input.noFollow } : {}),
+        structuredData: input.structuredData ?? undefined,
+      }})
+    },
+    deleteSeoPageConfig: async (_: unknown, { id }: { id: string }, context: Context) => {
+      if (!context.userId) throw new Error('Не авторизовано')
+      await prisma.seoPageConfig.delete({ where: { id } })
+      return true
     },
 
     clearCart: async (_: unknown, {}, context: Context) => {

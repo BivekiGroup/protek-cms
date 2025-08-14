@@ -27,6 +27,60 @@ export const typeDefs = gql`
   scalar DateTime
   scalar JSON
 
+  enum SeoMatchType {
+    EXACT
+    PREFIX
+    REGEX
+  }
+
+  type SeoPageConfig {
+    id: ID!
+    pattern: String!
+    matchType: SeoMatchType!
+    title: String
+    description: String
+    keywords: String
+    ogTitle: String
+    ogDescription: String
+    ogImage: String
+    canonicalUrl: String
+    noIndex: Boolean!
+    noFollow: Boolean!
+    structuredData: JSON
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  input SeoPageConfigInput {
+    pattern: String!
+    matchType: SeoMatchType!
+    title: String
+    description: String
+    keywords: String
+    ogTitle: String
+    ogDescription: String
+    ogImage: String
+    canonicalUrl: String
+    noIndex: Boolean
+    noFollow: Boolean
+    structuredData: JSON
+  }
+
+  input SeoPageConfigUpdateInput {
+    pattern: String
+    matchType: SeoMatchType
+    title: String
+    description: String
+    keywords: String
+    ogTitle: String
+    ogDescription: String
+    ogImage: String
+    canonicalUrl: String
+    noIndex: Boolean
+    noFollow: Boolean
+    structuredData: JSON
+  }
+
   type User {
     id: ID!
     firstName: String!
@@ -1064,6 +1118,11 @@ export const typeDefs = gql`
     
     # Корзина
     getCart: Cart
+
+    # SEO
+    seoPageConfigs(search: String, skip: Int, take: Int): [SeoPageConfig!]!
+    seoPageConfigsCount(search: String): Int!
+    seoPageConfig(id: ID!): SeoPageConfig
   }
 
   type AuthPayload {
@@ -1288,6 +1347,11 @@ export const typeDefs = gql`
     updateCartItemQuantity(itemId: ID!, quantity: Int!): AddToCartResult!
     clearCart: AddToCartResult!
     getCart: Cart
+
+    # SEO
+    createSeoPageConfig(input: SeoPageConfigInput!): SeoPageConfig!
+    updateSeoPageConfig(id: ID!, input: SeoPageConfigUpdateInput!): SeoPageConfig!
+    deleteSeoPageConfig(id: ID!): Boolean!
   }
 
   input LoginInput {

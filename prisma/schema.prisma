@@ -875,3 +875,30 @@ enum PaymentStatus {
   CANCELED
   REFUNDED
 }
+
+// SEO конфиги для страниц сайта
+enum SeoMatchType {
+  EXACT   // Полное совпадение пути, например "/about"
+  PREFIX  // Начинается с, например "/catalog"
+  REGEX   // Регулярное выражение
+}
+
+model SeoPageConfig {
+  id             String        @id @default(cuid())
+  pattern        String        @unique // Путь, префикс или регэксп
+  matchType      SeoMatchType  @default(EXACT)
+  title          String?
+  description    String?
+  keywords       String?
+  ogTitle        String?
+  ogDescription  String?
+  ogImage        String?
+  canonicalUrl   String?
+  noIndex        Boolean       @default(false)
+  noFollow       Boolean       @default(false)
+  structuredData Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@map("seo_page_configs")
+}
