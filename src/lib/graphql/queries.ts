@@ -477,6 +477,7 @@ export const GET_PRODUCTS = gql`
       name
       slug
       article
+      brand
       description
       videoUrl
       wholesalePrice

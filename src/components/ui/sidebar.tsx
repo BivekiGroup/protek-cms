@@ -18,7 +18,8 @@ import {
   Image,
   BarChart3,
   Shield,
-  Bot
+  Bot,
+  Store
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -61,6 +62,7 @@ const navigationGroups: NavGroup[] = [
     items: [
       { title: 'Чат с ИИ', href: '/dashboard/ai', icon: Bot },
       { title: 'Тест стилей', href: '/dashboard/test-styles', icon: Palette },
+      { title: 'Ozon', href: '/dashboard/ozon', icon: Store },
     ],
   },
   {
