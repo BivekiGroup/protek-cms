@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { ShoppingCart, Users, ExternalLink, Clock, AlertCircle } from 'lucide-react'
 import { useQuery } from '@apollo/client'
 import { GET_DASHBOARD_CLIENTS, GET_DASHBOARD_ORDERS } from '@/lib/graphql/queries'
+import { useMemo } from 'react'
 
 function statusBadgeColor(status?: string) {
   switch (status) {
@@ -36,9 +37,14 @@ export default function DashboardPage() {
     variables: { status: 'PENDING', limit: 5, offset: 0 },
     fetchPolicy: 'no-cache',
   })
+  // Важно: стабилизируем дату, чтобы не триггерить бесконечные перезапросы
+  const registeredFromISO = useMemo(() => (
+    new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  ), [])
+
   const { data: clientsData, loading: clientsLoading } = useQuery(GET_DASHBOARD_CLIENTS, {
     variables: {
-      filter: { registeredFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() },
+      filter: { registeredFrom: registeredFromISO },
       limit: 5,
       offset: 0,
       sortBy: 'createdAt',
