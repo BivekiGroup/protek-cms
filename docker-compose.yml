@@ -88,6 +88,15 @@ services:
       - AWS_S3_BUCKET=${AWS_S3_BUCKET}
       - S3_ENDPOINT=${S3_ENDPOINT}
       
+      # Ozon API
+      - OZON_CLIENT_ID=${OZON_CLIENT_ID}
+      - OZON_API_KEY=${OZON_API_KEY}
+      - OZON_MOCK=${OZON_MOCK}
+      
+      # OpenAI (AI Chat)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL}
+      
       # Окружение
       - NODE_ENV=production
       
