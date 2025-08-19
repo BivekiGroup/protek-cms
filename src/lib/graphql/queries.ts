@@ -691,6 +691,41 @@ export const GET_CLIENTS = gql`
   }
 `
 
+// Dashboard: last orders and recent clients
+export const GET_DASHBOARD_ORDERS = gql`
+  query GetDashboardOrders($status: OrderStatus, $limit: Int, $offset: Int) {
+    orders(status: $status, limit: $limit, offset: $offset) {
+      orders {
+        id
+        orderNumber
+        clientName
+        clientPhone
+        createdAt
+        status
+        finalAmount
+        currency
+      }
+      total
+      hasMore
+    }
+  }
+`
+
+export const GET_DASHBOARD_CLIENTS = gql`
+  query GetDashboardClients($filter: ClientFilterInput, $limit: Int, $offset: Int, $sortBy: String, $sortOrder: String) {
+    clients(filter: $filter, limit: $limit, offset: $offset, sortBy: $sortBy, sortOrder: $sortOrder) {
+      id
+      name
+      phone
+      email
+      type
+      createdAt
+      isConfirmed
+    }
+    clientsCount(filter: $filter)
+  }
+`
+
 export const GET_CLIENT = gql`
   query GetClient($id: ID!) {
     client(id: $id) {

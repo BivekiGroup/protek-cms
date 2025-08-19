@@ -19,10 +19,13 @@ import {
   BarChart3,
   Shield,
   Bot,
-  Store
+  Store,
+  ChevronRight,
+  ChevronDown
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { useEffect, useMemo, useState } from 'react'
 
 interface SidebarProps {
   className?: string
@@ -77,6 +80,19 @@ const navigationGroups: NavGroup[] = [
 export const Sidebar = ({ className }: SidebarProps) => {
   const pathname = usePathname()
   const { user, logout } = useAuth()
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+
+  const groupsWithActive = useMemo(() => {
+    const map: Record<string, boolean> = {}
+    for (const g of navigationGroups) {
+      map[g.title] = g.items.some(i => pathname === i.href || pathname.startsWith(i.href + '/'))
+    }
+    return map
+  }, [pathname])
+
+  useEffect(() => {
+    setExpanded(prev => ({ ...prev, ...groupsWithActive }))
+  }, [groupsWithActive])
 
   const handleLogout = async () => {
     await logout()
@@ -97,12 +113,22 @@ export const Sidebar = ({ className }: SidebarProps) => {
               </div>
             </div>
             <div className="space-y-6">
-              {navigationGroups.map((group) => (
+              {navigationGroups.map((group) => {
+                const isOpen = expanded[group.title]
+                return (
                 <div key={group.title}>
-                  <div className="px-2 pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
-                    {group.title}
-                  </div>
-                  <div className="space-y-1">
+                  <button
+                    type="button"
+                    className={cn(
+                      'w-full flex items-center gap-2 px-2 pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground/80 hover:text-foreground transition-colors'
+                    )}
+                    onClick={() => setExpanded(prev => ({ ...prev, [group.title]: !isOpen }))}
+                    aria-expanded={isOpen}
+                  >
+                    {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                    <span>{group.title}</span>
+                  </button>
+                  <div className={cn('space-y-1 pl-4', !isOpen && 'hidden') }>
                     {group.items.map((item) => {
                       const Icon = item.icon
                       const isActive = pathname === item.href
@@ -125,7 +151,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
                     })}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         </div>
