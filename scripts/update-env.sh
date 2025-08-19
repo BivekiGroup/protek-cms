@@ -66,25 +66,6 @@ else
     exit 1
 fi
 
-echo "🔧 Обновление переменных окружения PartsAPI..."
-
-# Проверяем, есть ли уже переменные PartsAPI
-if docker exec protekauto-cms-protekauto-cms-1 printenv | grep -q "PARTSAPI_"; then
-    echo "⚠️  Переменные PartsAPI уже существуют в контейнере"
-    docker exec protekauto-cms-protekauto-cms-1 printenv | grep "PARTSAPI_"
-else
-    echo "❌ Переменные PartsAPI отсутствуют в контейнере!"
-    echo ""
-    echo "🔑 Нужно добавить следующие переменные в файл переменных окружения вашего сервера:"
-    echo ""
-    echo "PARTSAPI_CATEGORIES_KEY=8260834d954cf000b9d61cc31ff0655d"
-    echo "PARTSAPI_ARTICLES_KEY=a516f2b87c4f98c078f5e758d6d44a91"
-    echo "PARTSAPI_MEDIA_KEY=230d8c7118a36cc6d36d72681b76982b"
-    echo ""
-    echo "📝 После добавления переменных, перезапустите контейнер:"
-    echo "docker-compose down && docker-compose up -d"
-fi
-
 echo ""
 echo "🔍 Текущие переменные окружения в контейнере:"
-docker exec protekauto-cms-protekauto-cms-1 printenv | grep -E "(PARTSAPI_|LAXIMO_|AUTOEURO_)" || echo "Переменные API не найдены" 
+docker exec protekauto-cms-protekauto-cms-1 printenv | grep -E "(LAXIMO_|AUTOEURO_)" || echo "Переменные API не найдены" 

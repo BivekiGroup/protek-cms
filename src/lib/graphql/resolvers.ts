@@ -8,8 +8,25 @@ import { smsCodeStore } from '../sms-code-store'
 import { laximoService, laximoDocService, laximoUnitService } from '../laximo-service'
 import { autoEuroService } from '../autoeuro-service'
 import { yooKassaService } from '../yookassa-service'
-import { partsAPIService } from '../partsapi-service'
-import { partsIndexService } from '../partsindex-service'
+// PartsAPI/PartsIndex integration removed: provide no-op stubs to keep schema stable
+const partsAPIService = {
+  getSearchTree: async () => [],
+  getArticles: async () => [],
+  getArticleMedia: async () => [],
+  getArticleMainImage: async () => null,
+}
+const partsIndexService = {
+  getCatalogs: async () => [],
+  getCatalogGroups: async () => [],
+  getCategoriesWithGroups: async () => [],
+  getCatalogEntities: async () => ({
+    pagination: { limit: 0, page: { prev: 0, current: 1, next: 0 } },
+    list: [],
+    catalog: { id: '', name: '', image: '', groups: [] },
+    subgroup: null,
+  } as any),
+  getCatalogParams: async () => ({ list: [], paramsQuery: {} } as any),
+}
 // Removed static import - will use dynamic import for server-only package
 import { yandexDeliveryService, YandexPickupPoint, getAddressSuggestions } from '../yandex-delivery-service'
 import { InvoiceService } from '../invoice-service'

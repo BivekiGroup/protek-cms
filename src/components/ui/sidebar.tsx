@@ -43,7 +43,6 @@ const navigationGroups: NavGroup[] = [
     title: 'Каталог и контент',
     items: [
       { title: 'Каталог', href: '/dashboard/catalog', icon: Package },
-      { title: 'Навигация сайта', href: '/dashboard/navigation', icon: Star },
       { title: 'Товары главной', href: '/dashboard/homepage-products', icon: Star },
       { title: 'Баннеры героя', href: '/dashboard/hero-banners', icon: Image },
     ],
@@ -61,7 +60,6 @@ const navigationGroups: NavGroup[] = [
     title: 'Инструменты',
     items: [
       { title: 'Чат с ИИ', href: '/dashboard/ai', icon: Bot },
-      { title: 'Кража', href: '/dashboard/kraja', icon: Shield },
       { title: 'Тест стилей', href: '/dashboard/test-styles', icon: Palette },
     ],
   },
