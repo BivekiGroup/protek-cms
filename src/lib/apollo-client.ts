@@ -1,9 +1,16 @@
-import { ApolloClient, InMemoryCache, createHttpLink, from } from '@apollo/client'
+import { ApolloClient, InMemoryCache, createHttpLink, from, ApolloLink } from '@apollo/client'
 import { onError } from '@apollo/client/link/error'
 import { setContext } from '@apollo/client/link/context'
+import { incNetwork, decNetwork } from '@/lib/network-activity'
 
 const httpLink = createHttpLink({
   uri: '/api/graphql',
+})
+
+const activityLink = new ApolloLink((operation, forward) => {
+  incNetwork()
+  const finalize = () => decNetwork()
+  return forward(operation).map((result) => { finalize(); return result })
 })
 
 // Добавление JWT токена к запросам
@@ -65,7 +72,7 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
 })
 
 export const apolloClient = new ApolloClient({
-  link: from([errorLink, authLink, httpLink]),
+  link: from([errorLink, authLink, activityLink, httpLink]),
   cache: new InMemoryCache(),
   defaultOptions: {
     watchQuery: {
