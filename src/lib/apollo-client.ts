@@ -1,4 +1,5 @@
 import { ApolloClient, InMemoryCache, createHttpLink, from, ApolloLink } from '@apollo/client'
+import { Observable } from '@apollo/client/core'
 import { onError } from '@apollo/client/link/error'
 import { setContext } from '@apollo/client/link/context'
 import { incNetwork, decNetwork } from '@/lib/network-activity'
@@ -8,9 +9,15 @@ const httpLink = createHttpLink({
 })
 
 const activityLink = new ApolloLink((operation, forward) => {
-  incNetwork()
-  const finalize = () => decNetwork()
-  return forward(operation).map((result) => { finalize(); return result })
+  return new Observable((observer) => {
+    incNetwork()
+    const sub = forward(operation).subscribe({
+      next: (v) => observer.next(v),
+      error: (err) => { decNetwork(); observer.error(err) },
+      complete: () => { decNetwork(); observer.complete() },
+    })
+    return () => { try { sub.unsubscribe() } finally { decNetwork() } }
+  })
 })
 
 // Добавление JWT токена к запросам
