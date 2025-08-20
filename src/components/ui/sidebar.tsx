@@ -39,7 +39,6 @@ const navigationGroups: NavGroup[] = [
     title: 'Обзор',
     items: [
       { title: 'Главная', href: '/dashboard', icon: Home },
-      { title: 'ZZAP статистика', href: '/dashboard/zzap', icon: BarChart3 },
       { title: 'Аудит', href: '/dashboard/audit', icon: Activity },
     ],
   },
@@ -66,6 +65,7 @@ const navigationGroups: NavGroup[] = [
       { title: 'Чат с ИИ', href: '/dashboard/ai', icon: Bot },
       { title: 'Тест стилей', href: '/dashboard/test-styles', icon: Palette },
       { title: 'Ozon', href: '/dashboard/ozon', icon: Store },
+      { title: 'ZZAP статистика', href: '/dashboard/zzap', icon: BarChart3 },
     ],
   },
   {
