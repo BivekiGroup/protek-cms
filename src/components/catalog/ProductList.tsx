@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState } from 'react'
-import { Loader2, Package, Plus, Edit, Trash2, FolderOpen } from 'lucide-react'
+import React, { useMemo, useState } from 'react'
+import { Loader2, Package, Plus, Edit, Trash2, FolderOpen, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
@@ -13,6 +13,7 @@ interface Product {
   id: string
   name: string
   article?: string
+  brand?: string
   retailPrice?: number
   wholesalePrice?: number
   stock: number
@@ -51,6 +52,21 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
   const [updateProductVisibility] = useMutation(UPDATE_PRODUCT_VISIBILITY)
   const [updateProductsVisibility] = useMutation(UPDATE_PRODUCTS_VISIBILITY)
   const [moveProductsToCategory] = useMutation(MOVE_PRODUCTS_TO_CATEGORY)
+
+  const frontendOrigin = useMemo(() => {
+    const envOrigin = process.env.NEXT_PUBLIC_FRONTEND_ORIGIN
+    if (envOrigin && typeof envOrigin === 'string') return envOrigin
+    return process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://protekauto.ru'
+  }, [])
+
+  const buildFrontendProductUrl = (p: Product) => {
+    const article = p.article?.trim()
+    const brand = p.brand?.trim()
+    const path = article && brand
+      ? `/card?article=${encodeURIComponent(article)}&brand=${encodeURIComponent(brand)}`
+      : '/card'
+    return `${frontendOrigin}${path}`
+  }
 
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked)
@@ -342,6 +358,15 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                   >
                     <Edit className="w-4 h-4 mr-1" />
                     Редактировать
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(buildFrontendProductUrl(product), '_blank')}
+                    className="flex-shrink-0"
+                  >
+                    <ExternalLink className="w-4 h-4 mr-1" />
+                    Открыть на сайте
                   </Button>
                   <Button
                     variant="outline"
