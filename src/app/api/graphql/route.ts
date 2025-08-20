@@ -115,10 +115,38 @@ const handler = startServerAndCreateNextHandler(server, {
   }
 })
 
+// Простая CORS-поддержка (особенно полезна в dev при разных порталах)
+function getCorsHeaders() {
+  const isDev = process.env.NODE_ENV === 'development'
+  // В dev явно укажем фронтенд-оригин, чтобы работать с заголовками/креденшелами корректно
+  const allowedOrigin = isDev
+    ? (process.env.FRONTEND_ORIGIN || 'http://localhost:3001')
+    : (process.env.FRONTEND_ORIGIN || 'https://protekauto.ru')
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  }
+}
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: getCorsHeaders() })
+}
+
+async function withCors(request: Request) {
+  const res = await handler(request)
+  const resHeaders = new Headers(res.headers)
+  const cors = getCorsHeaders()
+  Object.entries(cors).forEach(([k, v]) => resHeaders.set(k, v))
+  // Безопасно клонируем тело в текст, чтобы не ломать поток
+  const text = await res.text()
+  return new Response(text, { status: res.status, statusText: res.statusText, headers: resHeaders })
+}
+
 export async function GET(request: Request) {
-  return handler(request)
+  return withCors(request)
 }
 
 export async function POST(request: Request) {
-  return handler(request)
+  return withCors(request)
 } 

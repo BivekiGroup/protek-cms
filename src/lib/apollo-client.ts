@@ -1,5 +1,4 @@
-import { ApolloClient, InMemoryCache, createHttpLink, from, ApolloLink } from '@apollo/client'
-import { Observable } from '@apollo/client/core'
+import { ApolloClient, InMemoryCache, createHttpLink, from, ApolloLink, Observable } from '@apollo/client'
 import { onError } from '@apollo/client/link/error'
 import { setContext } from '@apollo/client/link/context'
 import { incNetwork, decNetwork } from '@/lib/network-activity'
@@ -8,17 +7,18 @@ const httpLink = createHttpLink({
   uri: '/api/graphql',
 })
 
-const activityLink = new ApolloLink((operation, forward) => {
-  return new Observable((observer) => {
-    incNetwork()
-    const sub = forward(operation).subscribe({
-      next: (v) => observer.next(v),
-      error: (err) => { decNetwork(); observer.error(err) },
-      complete: () => { decNetwork(); observer.complete() },
-    })
-    return () => { try { sub.unsubscribe() } finally { decNetwork() } }
+const activityLink = new ApolloLink((operation, forward) => new Observable((observer) => {
+  incNetwork()
+  let settled = false
+  const settle = () => { if (!settled) { settled = true; decNetwork() } }
+  const sub = forward(operation).subscribe({
+    next: (v) => { settle(); observer.next(v) },
+    error: (err) => { settle(); observer.error(err) },
+    complete: () => { settle(); observer.complete() },
   })
-})
+  return () => { try { sub.unsubscribe() } finally { settle() } }
+}))
+
 
 // Добавление JWT токена к запросам
 const authLink = setContext((_, { headers }) => {
