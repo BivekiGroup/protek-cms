@@ -32,6 +32,7 @@ services:
         - YANDEX_GEOSUGGEST_API_KEY=${YANDEX_GEOSUGGEST_API_KEY}
         - YANDEX_DELIVERY_SOURCE_STATION_ID=${YANDEX_DELIVERY_SOURCE_STATION_ID}
         - CMS_PORT=${CMS_PORT}
+        - NEXT_PUBLIC_FRONTEND_ORIGIN=${NEXT_PUBLIC_FRONTEND_ORIGIN}
     ports:
       - "${CMS_PORT:-3000}:3000"
     environment:
@@ -96,6 +97,16 @@ services:
       # OpenAI (AI Chat)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=${OPENAI_MODEL}
+      
+      # DaData API
+      - DADATA_API_KEY=${DADATA_API_KEY}
+
+      # ZZAP (опционально, скриншоты)
+      - ZZAP_EMAIL=${ZZAP_EMAIL}
+      - ZZAP_PASSWORD=${ZZAP_PASSWORD}
+
+      # Публичный origin фронтенда (используется в клиентском коде)
+      - NEXT_PUBLIC_FRONTEND_ORIGIN=${NEXT_PUBLIC_FRONTEND_ORIGIN}
       
       # Окружение
       - NODE_ENV=production
