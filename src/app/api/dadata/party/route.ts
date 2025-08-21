@@ -51,8 +51,7 @@ export async function POST(req: NextRequest) {
     }
     return new Response(JSON.stringify(data), { status: 200, headers: resHeaders })
   } catch (e: any) {
-    const resHeaders = { ...Object.fromEntries(getCorsHeaders()), 'Content-Type': 'application/json' }
+    const resHeaders = { ...getCorsHeaders(), 'Content-Type': 'application/json' }
     return new Response(JSON.stringify({ error: e?.message || 'Internal error' }), { status: 500, headers: resHeaders })
   }
 }
-
