@@ -1,9 +1,11 @@
 import { streamText } from 'ai'
+import { openai } from '@ai-sdk/openai'
 import 'dotenv/config'
 
 async function main() {
+  const modelName = process.env.OPENAI_MODEL || 'gpt-4o'
   const result = streamText({
-    model: 'openai/gpt-4.1',
+    model: openai(modelName),
     prompt: 'Invent a new holiday and describe its traditions.',
   })
 
@@ -17,4 +19,3 @@ async function main() {
 }
 
 main().catch(console.error)
-
