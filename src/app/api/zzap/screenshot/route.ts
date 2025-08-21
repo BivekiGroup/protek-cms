@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server'
 import puppeteer from 'puppeteer'
+import type { Page, ElementHandle } from 'puppeteer'
 import { uploadBuffer } from '@/lib/s3'
 import { prisma } from '@/lib/prisma'
 import fs from 'fs'
@@ -17,7 +18,7 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-async function waitForAnySelector(page: any, selectors: string[], timeoutMs = 10000) {
+async function waitForAnySelector(page: Page, selectors: string[], timeoutMs = 10000) {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
     for (const sel of selectors) {
@@ -28,7 +29,7 @@ async function waitForAnySelector(page: any, selectors: string[], timeoutMs = 10
   return null as string | null
 }
 
-async function setInputValue(page: any, selector: string, value: string) {
+async function setInputValue(page: Page, selector: string, value: string) {
   const exists = await page.$(selector)
   if (!exists) return false
   try {
@@ -53,7 +54,7 @@ async function setInputValue(page: any, selector: string, value: string) {
   }
 }
 
-async function clickByText(page: any, text: string) {
+async function clickByText(page: Page, text: string) {
   const handle = await page.evaluateHandle((t: string) => {
     const target = t.toLowerCase()
     const candidates = Array.from(document.querySelectorAll('button, a, input[type="submit"], span, div')) as HTMLElement[]
@@ -75,7 +76,7 @@ async function clickByText(page: any, text: string) {
   return false
 }
 
-async function findLargestElementHandle(page: any, selectors: string[]) {
+async function findLargestElementHandle(page: Page, selectors: string[]): Promise<ElementHandle<Element> | null> {
   for (const sel of selectors) {
     const handles = await page.$$(sel)
     if (handles.length) {
@@ -96,7 +97,7 @@ async function findLargestElementHandle(page: any, selectors: string[]) {
 }
 
 async function persistHistorySafely(
-  data: { article: string; statsUrl: string | null; imageUrl?: string; ok: boolean; selector?: string | null; logs?: any },
+  data: { article: string; statsUrl: string | null; imageUrl?: string; ok: boolean; selector?: string | null; logs?: unknown },
   log: (m: string) => void
 ) {
   try {
@@ -125,7 +126,7 @@ async function persistHistorySafely(
   }
 }
 
-async function restoreSession(page: any, log: (m: string) => void) {
+async function restoreSession(page: Page, log: (m: string) => void) {
   try {
     if (!fs.existsSync(COOKIE_FILE)) return false
     const raw = fs.readFileSync(COOKIE_FILE, 'utf-8')
@@ -142,7 +143,7 @@ async function restoreSession(page: any, log: (m: string) => void) {
   }
 }
 
-async function saveSession(page: any, log: (m: string) => void) {
+async function saveSession(page: Page, log: (m: string) => void) {
   try {
     const cookies = await page.cookies()
     const payload = { cookies, savedAt: Date.now() }
@@ -177,7 +178,7 @@ export async function GET(req: NextRequest) {
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     })
     const page = await browser.newPage()
-    let workPage: any = page
+    let workPage: Page = page
     await page.setViewport({ width: 1440, height: 900 })
     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
     await page.setExtraHTTPHeaders({ 'accept-language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7' })
@@ -349,9 +350,9 @@ export async function GET(req: NextRequest) {
     // Try DevExpress selectors first on whatever login UI is visible
     const emailSel = ['#ctl00_BodyPlace_LogonFormCallbackPanel_LogonFormLayout_AddrEmail1TextBox_I', 'input[id$="AddrEmail1TextBox_I"]', 'input[name="ctl00$BodyPlace$LogonFormCallbackPanel$LogonFormLayout$AddrEmail1TextBox"]', 'input[type="email"]', 'input[name="email" i]', 'input[name*="login" i]']
     const passSel = ['#ctl00_BodyPlace_LogonFormCallbackPanel_LogonFormLayout_PasswordTextBox_I', 'input[id$="PasswordTextBox_I"]', 'input[name="ctl00$BodyPlace$LogonFormCallbackPanel$LogonFormLayout$PasswordTextBox"]', 'input[type="password"]', 'input[name="password" i]']
-    let emailInput = null
+    let emailInput: ElementHandle<Element> | null = null
     for (const sel of emailSel) { emailInput = await page.$(sel); if (emailInput) break }
-    let passInput = null
+    let passInput: ElementHandle<Element> | null = null
     for (const sel of passSel) { passInput = await page.$(sel); if (passInput) break }
 
     if (emailInput && passInput) {
@@ -402,7 +403,7 @@ export async function GET(req: NextRequest) {
       // fallback: try search input on homepage
       await page.goto(ZZAP_BASE, { waitUntil: 'domcontentloaded', timeout: Math.min(15000, ZZAP_TIMEOUT_MS) })
       const inputCandidates = ['input[type="search"]', 'input[name*="search" i]', 'input[placeholder*="артик" i]']
-      let searchInput = null
+      let searchInput: ElementHandle<Element> | null = null
       for (const sel of inputCandidates) { searchInput = await page.$(sel); if (searchInput) break }
       if (!searchInput) throw new Error('Не найдено поле поиска')
       await searchInput.type(article, { delay: 30 })
