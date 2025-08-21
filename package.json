@@ -7,7 +7,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "ai:gateway": "tsx scripts/gateway.ts",
+    "ai:gateway": "node scripts/gateway.mjs",
     "test-db": "node scripts/test-db.mjs",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
