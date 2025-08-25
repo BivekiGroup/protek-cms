@@ -173,10 +173,18 @@ export async function POST(request: NextRequest) {
           dimStr = `${fmt(d)}x${fmt(w)}x${fmt(h)}`
         }
 
-        // Find existing by article if present and mode says update/auto
-        let existing = null as null | { id: string; article: string | null }
+        // Find existing product
+        // Prefer compound unique (article+brand) when brand is known; otherwise fallback to first by article
+        let existing: { id: string; article: string | null } | null = null
         if (effectiveArticle && (raw.mode === 'update' || raw.mode === 'auto')) {
-          existing = await prisma.product.findUnique({ where: { article: effectiveArticle } })
+          if (effectiveBrand) {
+            existing = await prisma.product.findUnique({
+              where: { article_brand: { article: effectiveArticle, brand: effectiveBrand } },
+            })
+          }
+          if (!existing) {
+            existing = await prisma.product.findFirst({ where: { article: effectiveArticle } })
+          }
         }
 
         // Upload multiple images to S3 (up to 8)

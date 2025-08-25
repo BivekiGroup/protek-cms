@@ -10,22 +10,45 @@ import { autoEuroService } from '../autoeuro-service'
 import { yooKassaService } from '../yookassa-service'
 // PartsAPI/PartsIndex integration removed: provide no-op stubs to keep schema stable
 const partsAPIService = {
-  getSearchTree: async () => [],
-  getArticles: async () => [],
-  getArticleMedia: async () => [],
-  getArticleMainImage: async () => null,
+  getSearchTree: async (_carId?: number, _carType?: string): Promise<any[]> => [],
+  getArticles: async (..._args: any[]): Promise<any[]> => [],
+  getArticleMedia: async (..._args: any[]): Promise<any[]> => [],
+  getArticleMainImage: async (..._args: any[]): Promise<string | null> => null,
+  getRootCategories: (_tree: any): any[] => [],
+  getTopLevelCategories: (_tree: any): any[] => [],
+  getImageUrl: (_src: string): string => (_src || ''),
 }
 const partsIndexService = {
-  getCatalogs: async () => [],
-  getCatalogGroups: async () => [],
-  getCategoriesWithGroups: async () => [],
-  getCatalogEntities: async () => ({
+  getCatalogs: async (_lang?: string): Promise<any[]> => [],
+  getCatalogGroups: async (_catalogId?: string, _lang?: string): Promise<any[]> => [],
+  getCategoriesWithGroups: async (_lang?: string): Promise<any[]> => [],
+  getCatalogEntities: async (
+    _catalogId?: string,
+    _groupId?: string,
+    _opts?: { lang?: string; limit?: number; page?: number; q?: string; engineId?: string; generationId?: string; params?: Record<string, any> }
+  ): Promise<any> => ({
     pagination: { limit: 0, page: { prev: 0, current: 1, next: 0 } },
     list: [],
     catalog: { id: '', name: '', image: '', groups: [] },
     subgroup: null,
   } as any),
-  getCatalogParams: async () => ({ list: [], paramsQuery: {} } as any),
+  getCatalogParams: async (
+    _catalogId?: string,
+    _groupId?: string,
+    _opts?: any
+  ): Promise<any> => ({ list: [], paramsQuery: {} } as any),
+  searchEntityByCode: async (_code: string, _brand?: string, _lang?: string): Promise<any | null> => null,
+  getEntityById: async (_catalogId: string, _entityId: string, _lang?: string): Promise<any | null> => null,
+  getAllCatalogEntities: async (
+    _catalogId: string,
+    _groupId: string,
+    _opts?: any
+  ): Promise<any> => ({
+    pagination: { limit: 0, page: { prev: 0, current: 1, next: 0 } },
+    list: [],
+    catalog: { id: _catalogId, name: '', image: '', groups: [] },
+    subgroup: { id: _groupId, name: '' },
+  }),
 }
 // Removed static import - will use dynamic import for server-only package
 import { yandexDeliveryService, YandexPickupPoint, getAddressSuggestions } from '../yandex-delivery-service'
@@ -2420,7 +2443,97 @@ export const resolvers = {
             
             console.log('🎯 GraphQL Resolver - создано внешних предложений:', externalOffers.length)
           } else {
-            console.log('❌ GraphQL Resolver - AutoEuro не вернул данные:', autoEuroResult)
+            console.log('❌ GraphQL Resolver - AutoEuro не вернул данные для бренда из запроса, пробуем подобрать бренд по коду')
+
+            // Fallback 1: Получаем точные бренды по коду и пробуем каждый
+            try {
+              const brandsResp = await autoEuroService.getBrandsByCode(cleanArticleNumber)
+              if (brandsResp.success && brandsResp.data && brandsResp.data.length > 0) {
+                // Сначала пробуем те бренды, которые совпадают по регистронезависимому сравнению или содержат искомый бренд
+                const brandCandidates = brandsResp.data
+                  .map(b => b.brand?.toString().trim())
+                  .filter(Boolean) as string[]
+
+                const prioritized = Array.from(new Set([
+                  // точное совпадение
+                  ...brandCandidates.filter(b => b.toLowerCase() === cleanBrand.toLowerCase()),
+                  // содержит искомый бренд
+                  ...brandCandidates.filter(b => b.toLowerCase().includes(cleanBrand.toLowerCase())),
+                  // остальные
+                  ...brandCandidates
+                ]))
+
+                for (const candidateBrand of prioritized.slice(0, 5)) {
+                  console.log('🔁 AutoEuro fallback: пробуем бренд-кандидат:', candidateBrand)
+                  const retry = await autoEuroService.searchItems({
+                    code: cleanArticleNumber,
+                    brand: candidateBrand,
+                    with_crosses: false,
+                    with_offers: true
+                  })
+                  if (retry.success && retry.data && retry.data.length > 0) {
+                    externalOffers = retry.data.map(offer => ({
+                      offerKey: offer.offer_key,
+                      brand: offer.brand,
+                      code: offer.code,
+                      name: offer.name,
+                      price: parseFloat(offer.price.toString()),
+                      currency: offer.currency || 'RUB',
+                      deliveryTime: calculateDeliveryDays(offer.delivery_time || ''),
+                      deliveryTimeMax: calculateDeliveryDays(offer.delivery_time_max || ''),
+                      quantity: offer.amount || 0,
+                      warehouse: offer.warehouse_name || 'Внешний склад',
+                      warehouseName: offer.warehouse_name || null,
+                      rejects: offer.rejects || 0,
+                      supplier: 'AutoEuro',
+                      canPurchase: true,
+                      isInCart: isItemInCart(undefined, offer.offer_key, offer.code, offer.brand)
+                    }))
+                    console.log('✅ AutoEuro fallback: получены предложения по бренду', candidateBrand, 'кол-во:', externalOffers.length)
+                    break
+                  }
+                }
+              } else {
+                console.log('⚠️ AutoEuro fallback: бренды по коду не найдены')
+              }
+            } catch (fallbackErr) {
+              console.error('❌ Ошибка fallback-подбора бренда по коду в AutoEuro:', fallbackErr)
+            }
+
+            // Fallback 2: если всё ещё пусто — пробуем включить кроссы (внешние аналоги)
+            if (externalOffers.length === 0) {
+              try {
+                console.log('🔁 AutoEuro fallback: ищем предложения с кроссами для основного товара')
+                const crossesTry = await autoEuroService.searchItems({
+                  code: cleanArticleNumber,
+                  brand: cleanBrand,
+                  with_crosses: true,
+                  with_offers: true
+                })
+                if (crossesTry.success && crossesTry.data && crossesTry.data.length > 0) {
+                  externalOffers = crossesTry.data.map(offer => ({
+                    offerKey: offer.offer_key,
+                    brand: offer.brand,
+                    code: offer.code,
+                    name: offer.name,
+                    price: parseFloat(offer.price.toString()),
+                    currency: offer.currency || 'RUB',
+                    deliveryTime: calculateDeliveryDays(offer.delivery_time || ''),
+                    deliveryTimeMax: calculateDeliveryDays(offer.delivery_time_max || ''),
+                    quantity: offer.amount || 0,
+                    warehouse: offer.warehouse_name || 'Внешний склад',
+                    warehouseName: offer.warehouse_name || null,
+                    rejects: offer.rejects || 0,
+                    supplier: 'AutoEuro',
+                    canPurchase: true,
+                    isInCart: isItemInCart(undefined, offer.offer_key, offer.code, offer.brand)
+                  }))
+                  console.log('✅ AutoEuro fallback (with_crosses): получены предложения-аналоги:', externalOffers.length)
+                }
+              } catch (crossErr) {
+                console.error('❌ Ошибка AutoEuro fallback (with_crosses):', crossErr)
+              }
+            }
           }
         } catch (error) {
           console.error('❌ Ошибка поиска в AutoEuro:', error)
@@ -5126,12 +5239,17 @@ export const resolvers = {
           throw new Error('Товар с таким адресом уже существует')
         }
 
-        // Проверяем уникальность артикула
+        // Проверяем уникальность артикула (учитывая уникальный составной индекс article+brand)
         if (input.article) {
-          const existingByArticle = await prisma.product.findUnique({
-            where: { article: input.article }
-          })
-          
+          let existingByArticle = null as any
+          if (input.brand) {
+            existingByArticle = await prisma.product.findUnique({
+              where: { article_brand: { article: input.article, brand: input.brand } },
+            })
+          }
+          if (!existingByArticle) {
+            existingByArticle = await prisma.product.findFirst({ where: { article: input.article } })
+          }
           if (existingByArticle) {
             throw new Error('Товар с таким артикулом уже существует')
           }
@@ -5334,13 +5452,19 @@ export const resolvers = {
           }
         }
 
-        // Проверяем уникальность артикула если он изменился
+        // Проверяем уникальность артикула если он изменился (учитывая составной индекс article+brand)
         if (input.article && input.article !== existingProduct.article) {
-          const existingByArticle = await prisma.product.findUnique({
-            where: { article: input.article }
-          })
-          
-          if (existingByArticle) {
+          const brandToCheck = input.brand ?? existingProduct.brand ?? undefined
+          let existingByArticle: { id: string } | null = null
+          if (brandToCheck) {
+            existingByArticle = await prisma.product.findUnique({
+              where: { article_brand: { article: input.article, brand: brandToCheck } },
+            })
+          }
+          if (!existingByArticle) {
+            existingByArticle = await prisma.product.findFirst({ where: { article: input.article } })
+          }
+          if (existingByArticle && existingByArticle.id !== id) {
             throw new Error('Товар с таким артикулом уже существует')
           }
         }
@@ -5514,6 +5638,44 @@ export const resolvers = {
           throw error
         }
         throw new Error('Не удалось обновить товар')
+      }
+    },
+    
+    deleteProduct: async (_: unknown, { id }: { id: string }, context: Context) => {
+      try {
+        if (!context.userId) {
+          throw new Error('Пользователь не авторизован')
+        }
+
+        const product = await prisma.product.findUnique({
+          where: { id },
+          select: { id: true, name: true }
+        })
+
+        if (!product) {
+          throw new Error('Товар не найден')
+        }
+
+        await prisma.product.delete({ where: { id } })
+
+        if (context.headers) {
+          const { ipAddress, userAgent } = getClientInfo(context.headers)
+          await createAuditLog({
+            userId: context.userId,
+            action: AuditAction.PRODUCT_DELETE,
+            details: `Товар "${product.name}"`,
+            ipAddress,
+            userAgent
+          })
+        }
+
+        return true
+      } catch (error) {
+        console.error('Ошибка удаления товара:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось удалить товар')
       }
     },
 
@@ -9944,9 +10106,7 @@ export const resolvers = {
           categoryId,
           categoryName,
           categoryType.toLowerCase() as 'partsindex' | 'partsapi',
-          products,
-          groupId,
-          groupName
+          products
         )
         
         console.log(`✅ Database insertion result: ${insertedCount} of ${products.length} products saved`)
@@ -9996,7 +10156,7 @@ export const resolvers = {
 
         const { getPartsDb } = await import('../parts-db-wrapper')
         const partsDb = await getPartsDb()
-        await partsDb.deleteCategoryTable(categoryId, categoryType.toLowerCase() as 'partsindex' | 'partsapi')
+        await partsDb.deleteCategoryTable()
         return true
 
       } catch (error) {

@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+# stack.env хранится в репозитории как шаблон без секретов
 
 # vercel
 .vercel
@@ -42,3 +43,6 @@ next-env.d.ts
 
 /src/generated
 .zzap-session.json
+
+# local secret copy
+stack.env.local

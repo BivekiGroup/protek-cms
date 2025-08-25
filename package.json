@@ -7,7 +7,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "ai:gateway": "tsx scripts/gateway.ts",
+    "ai:gateway": "node scripts/gateway.mjs",
     "test-db": "node scripts/test-db.mjs",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
@@ -16,7 +16,10 @@
     "check:sms": "node scripts/check-sms-config.mjs",
     "prebuild": "npm run check:sms",
     "deploy": "bash scripts/deploy.sh",
-    "update:env": "bash scripts/update-env.sh"
+    "update:env": "bash scripts/update-env.sh",
+    "env:check": "bash scripts/sync-env.sh check",
+    "env:sync": "bash scripts/sync-env.sh sync",
+    "make:admin": "node scripts/make-admin.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.24",

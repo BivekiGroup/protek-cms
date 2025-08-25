@@ -18,4 +18,8 @@ async function main() {
   console.log('Finish reason:', await result.finishReason)
 }
 
-main().catch(console.error)
+main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})
+

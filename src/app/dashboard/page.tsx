@@ -179,7 +179,9 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-center space-x-2">
                     <Badge variant={client.isConfirmed ? 'secondary' : 'destructive'}>{client.isConfirmed ? 'Подтверждён' : 'Не подтверждён'}</Badge>
-                    <Clock className="h-4 w-4 text-gray-400" title={new Date(client.createdAt).toLocaleString('ru-RU')} />
+                    <span title={new Date(client.createdAt).toLocaleString('ru-RU')}>
+                      <Clock className="h-4 w-4 text-gray-400" />
+                    </span>
                   </div>
                 </div>
               ))}
