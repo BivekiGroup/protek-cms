@@ -2654,6 +2654,8 @@ export const resolvers = {
         let productCharacteristics: any[] = []
         let partsIndexImages: any[] = []
         let partsIndexCharacteristics: any[] = []
+        let productWeight: number | null = null
+        let productDimensions: string | null = null
         
         // Приоритет: внутренняя база -> PartsIndex -> AutoEuro
         if (internalProducts.length > 0) {
@@ -2662,6 +2664,12 @@ export const resolvers = {
           productDescription = firstProduct.description || ''
           productImages = firstProduct.images
           productCharacteristics = firstProduct.characteristics
+          if (typeof firstProduct.weight === 'number') {
+            productWeight = firstProduct.weight
+          }
+          if (firstProduct.dimensions) {
+            productDimensions = firstProduct.dimensions
+          }
         }
         
         // Добавляем данные из PartsIndex
@@ -2729,6 +2737,8 @@ export const resolvers = {
           brand: cleanBrand,
           name: productName,
           description: productDescription,
+          weight: productWeight,
+          dimensions: productDimensions,
           images: productImages,
           characteristics: productCharacteristics,
           partsIndexImages,
