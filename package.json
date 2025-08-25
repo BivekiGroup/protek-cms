@@ -17,6 +17,8 @@
     "prebuild": "npm run check:sms",
     "deploy": "bash scripts/deploy.sh",
     "update:env": "bash scripts/update-env.sh",
+    "env:check": "bash scripts/sync-env.sh check",
+    "env:sync": "bash scripts/sync-env.sh sync",
     "make:admin": "node scripts/make-admin.mjs"
   },
   "dependencies": {

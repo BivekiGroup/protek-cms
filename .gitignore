@@ -43,3 +43,6 @@ next-env.d.ts
 
 /src/generated
 .zzap-session.json
+
+# local secret copy
+stack.env.local

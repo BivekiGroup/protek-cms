@@ -2420,7 +2420,97 @@ export const resolvers = {
             
             console.log('🎯 GraphQL Resolver - создано внешних предложений:', externalOffers.length)
           } else {
-            console.log('❌ GraphQL Resolver - AutoEuro не вернул данные:', autoEuroResult)
+            console.log('❌ GraphQL Resolver - AutoEuro не вернул данные для бренда из запроса, пробуем подобрать бренд по коду')
+
+            // Fallback 1: Получаем точные бренды по коду и пробуем каждый
+            try {
+              const brandsResp = await autoEuroService.getBrandsByCode(cleanArticleNumber)
+              if (brandsResp.success && brandsResp.data && brandsResp.data.length > 0) {
+                // Сначала пробуем те бренды, которые совпадают по регистронезависимому сравнению или содержат искомый бренд
+                const brandCandidates = brandsResp.data
+                  .map(b => b.brand?.toString().trim())
+                  .filter(Boolean) as string[]
+
+                const prioritized = Array.from(new Set([
+                  // точное совпадение
+                  ...brandCandidates.filter(b => b.toLowerCase() === cleanBrand.toLowerCase()),
+                  // содержит искомый бренд
+                  ...brandCandidates.filter(b => b.toLowerCase().includes(cleanBrand.toLowerCase())),
+                  // остальные
+                  ...brandCandidates
+                ]))
+
+                for (const candidateBrand of prioritized.slice(0, 5)) {
+                  console.log('🔁 AutoEuro fallback: пробуем бренд-кандидат:', candidateBrand)
+                  const retry = await autoEuroService.searchItems({
+                    code: cleanArticleNumber,
+                    brand: candidateBrand,
+                    with_crosses: false,
+                    with_offers: true
+                  })
+                  if (retry.success && retry.data && retry.data.length > 0) {
+                    externalOffers = retry.data.map(offer => ({
+                      offerKey: offer.offer_key,
+                      brand: offer.brand,
+                      code: offer.code,
+                      name: offer.name,
+                      price: parseFloat(offer.price.toString()),
+                      currency: offer.currency || 'RUB',
+                      deliveryTime: calculateDeliveryDays(offer.delivery_time || ''),
+                      deliveryTimeMax: calculateDeliveryDays(offer.delivery_time_max || ''),
+                      quantity: offer.amount || 0,
+                      warehouse: offer.warehouse_name || 'Внешний склад',
+                      warehouseName: offer.warehouse_name || null,
+                      rejects: offer.rejects || 0,
+                      supplier: 'AutoEuro',
+                      canPurchase: true,
+                      isInCart: isItemInCart(undefined, offer.offer_key, offer.code, offer.brand)
+                    }))
+                    console.log('✅ AutoEuro fallback: получены предложения по бренду', candidateBrand, 'кол-во:', externalOffers.length)
+                    break
+                  }
+                }
+              } else {
+                console.log('⚠️ AutoEuro fallback: бренды по коду не найдены')
+              }
+            } catch (fallbackErr) {
+              console.error('❌ Ошибка fallback-подбора бренда по коду в AutoEuro:', fallbackErr)
+            }
+
+            // Fallback 2: если всё ещё пусто — пробуем включить кроссы (внешние аналоги)
+            if (externalOffers.length === 0) {
+              try {
+                console.log('🔁 AutoEuro fallback: ищем предложения с кроссами для основного товара')
+                const crossesTry = await autoEuroService.searchItems({
+                  code: cleanArticleNumber,
+                  brand: cleanBrand,
+                  with_crosses: true,
+                  with_offers: true
+                })
+                if (crossesTry.success && crossesTry.data && crossesTry.data.length > 0) {
+                  externalOffers = crossesTry.data.map(offer => ({
+                    offerKey: offer.offer_key,
+                    brand: offer.brand,
+                    code: offer.code,
+                    name: offer.name,
+                    price: parseFloat(offer.price.toString()),
+                    currency: offer.currency || 'RUB',
+                    deliveryTime: calculateDeliveryDays(offer.delivery_time || ''),
+                    deliveryTimeMax: calculateDeliveryDays(offer.delivery_time_max || ''),
+                    quantity: offer.amount || 0,
+                    warehouse: offer.warehouse_name || 'Внешний склад',
+                    warehouseName: offer.warehouse_name || null,
+                    rejects: offer.rejects || 0,
+                    supplier: 'AutoEuro',
+                    canPurchase: true,
+                    isInCart: isItemInCart(undefined, offer.offer_key, offer.code, offer.brand)
+                  }))
+                  console.log('✅ AutoEuro fallback (with_crosses): получены предложения-аналоги:', externalOffers.length)
+                }
+              } catch (crossErr) {
+                console.error('❌ Ошибка AutoEuro fallback (with_crosses):', crossErr)
+              }
+            }
           }
         } catch (error) {
           console.error('❌ Ошибка поиска в AutoEuro:', error)
@@ -5514,6 +5604,44 @@ export const resolvers = {
           throw error
         }
         throw new Error('Не удалось обновить товар')
+      }
+    },
+    
+    deleteProduct: async (_: unknown, { id }: { id: string }, context: Context) => {
+      try {
+        if (!context.userId) {
+          throw new Error('Пользователь не авторизован')
+        }
+
+        const product = await prisma.product.findUnique({
+          where: { id },
+          select: { id: true, name: true }
+        })
+
+        if (!product) {
+          throw new Error('Товар не найден')
+        }
+
+        await prisma.product.delete({ where: { id } })
+
+        if (context.headers) {
+          const { ipAddress, userAgent } = getClientInfo(context.headers)
+          await createAuditLog({
+            userId: context.userId,
+            action: AuditAction.PRODUCT_DELETE,
+            details: `Товар "${product.name}"`,
+            ipAddress,
+            userAgent
+          })
+        }
+
+        return true
+      } catch (error) {
+        console.error('Ошибка удаления товара:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось удалить товар')
       }
     },
 

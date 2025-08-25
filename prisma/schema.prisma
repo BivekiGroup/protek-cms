@@ -85,7 +85,8 @@ model Product {
   id                           String                  @id @default(cuid())
   name                         String
   slug                         String                  @unique
-  article                      String?                 @unique
+  externalId                   String?                 @unique
+  article                      String?
   description                  String?
   videoUrl                     String?
   wholesalePrice               Float?
@@ -114,6 +115,7 @@ model Product {
   products_RelatedProducts_B   Product[]               @relation("RelatedProducts")
 
   @@map("products")
+  @@unique([article, brand])
 }
 
 model ProductImage {
