@@ -1857,6 +1857,8 @@ export const typeDefs = gql`
     brand: String!
     name: String!
     description: String
+    weight: Float
+    dimensions: String
     images: [ProductImage!]!
     characteristics: [ProductCharacteristic!]!
     partsIndexImages: [PartsIndexImage!]!
