@@ -15,13 +15,13 @@
 
 ### 1) Подготовка переменных окружения
 1. Заполните `stack.env` боевыми значениями на сервере:
-   - Обязательно задать: `DATABASE_URL`, `NEXTAUTH_SECRET`, `JWT_SECRET`, S3 (`AWS_*`, `S3_ENDPOINT`), платежи (`YOOKASSA_*` при необходимости), логины API (LAXIMO, AUTOEURO, OZON, Яндекс), OpenAI, DaData.
+   - Обязательно задать: `DATABASE_URL`, `NEXTAUTH_SECRET`, `JWT_SECRET`, S3 (`AWS_*`, `S3_ENDPOINT`), платежи (`YOOKASSA_*` при необходимости), логины API (LAXIMO, AUTOEURO, OZON, Яндекс), Polza.ai (`POLZA_AI_API_KEY`, `POLZA_AI_MODEL`, `POLZA_AI_BASE_URL`), DaData.
    - При необходимости можно пересоздать файл из шаблона: `cp stack.example.env stack.env` и затем заменить плейсхолдеры.
 2. Для локальной разработки используйте `.env` (не обязателен в Docker):
    - `cp .env.example .env`
 
 Примечания:
-- Публичные ключи Next начинаются с `NEXT_PUBLIC_` (например, `NEXT_PUBLIC_FRONTEND_ORIGIN`).
+- Публичные ключи Next начинаются с `NEXT_PUBLIC_` (например, `NEXT_PUBLIC_FRONTEND_ORIGIN`). Для CORS в API также используется `FRONTEND_ORIGIN`.
 - Для работы Zzap‑скриншотов (опционально) нужны `ZZAP_EMAIL`/`ZZAP_PASSWORD`.
 - Для DaData используйте `DADATA_API_KEY`.
 
