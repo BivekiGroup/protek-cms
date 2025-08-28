@@ -5,7 +5,6 @@ import { ApolloProvider } from "@/components/providers/ApolloProvider";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { InitializationProvider } from "@/components/providers/InitializationProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
-import { RoutePreloader } from "@/components/ui/route-preloader";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,7 +34,6 @@ export default function RootLayout({
         <ApolloProvider>
           <AuthProvider>
             <InitializationProvider>
-              <RoutePreloader />
               {children}
               <ToastProvider />
             </InitializationProvider>

@@ -1123,6 +1123,9 @@ export const typeDefs = gql`
     seoPageConfigs(search: String, skip: Int, take: Int): [SeoPageConfig!]!
     seoPageConfigsCount(search: String): Int!
     seoPageConfig(id: ID!): SeoPageConfig
+    
+    # Интеграции/Поставщики
+    integrationSettings: IntegrationSettings!
   }
 
   type AuthPayload {
@@ -1352,6 +1355,29 @@ export const typeDefs = gql`
     createSeoPageConfig(input: SeoPageConfigInput!): SeoPageConfig!
     updateSeoPageConfig(id: ID!, input: SeoPageConfigUpdateInput!): SeoPageConfig!
     deleteSeoPageConfig(id: ID!): Boolean!
+
+    # Интеграции/Поставщики
+    updateIntegrationSettings(input: IntegrationSettingsInput!): IntegrationSettings!
+  }
+
+  # Интеграции/Поставщики
+  type IntegrationSettings {
+    id: ID!
+    externalProvider: String!
+    trinityClientCode: String
+    trinityOnlyStock: Boolean!
+    trinityOnline: String!
+    trinityCrosses: String!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  input IntegrationSettingsInput {
+    externalProvider: String
+    trinityClientCode: String
+    trinityOnlyStock: Boolean
+    trinityOnline: String
+    trinityCrosses: String
   }
 
   input LoginInput {
@@ -2295,6 +2321,7 @@ export const typeDefs = gql`
   enum YandexPaymentMethod {
     already_paid
     card_on_receipt
+    bound_card
   }
 
   type YandexPickupPoint {

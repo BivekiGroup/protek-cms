@@ -200,6 +200,37 @@ export const ADMIN_CHANGE_PASSWORD = gql`
   }
 `
 
+// Интеграции/Поставщики
+export const GET_INTEGRATION_SETTINGS = gql`
+  query GetIntegrationSettings {
+    integrationSettings {
+      id
+      externalProvider
+      trinityClientCode
+      trinityOnlyStock
+      trinityOnline
+      trinityCrosses
+      createdAt
+      updatedAt
+    }
+  }
+`
+
+export const UPDATE_INTEGRATION_SETTINGS = gql`
+  mutation UpdateIntegrationSettings($input: IntegrationSettingsInput!) {
+    updateIntegrationSettings(input: $input) {
+      id
+      externalProvider
+      trinityClientCode
+      trinityOnlyStock
+      trinityOnline
+      trinityCrosses
+      createdAt
+      updatedAt
+    }
+  }
+`
+
 // Daily Products queries
 export const GET_DAILY_PRODUCTS = gql`
   query GetDailyProducts($displayDate: String!) {

@@ -7,6 +7,7 @@ import { smsService } from '../sms-service'
 import { smsCodeStore } from '../sms-code-store'
 import { laximoService, laximoDocService, laximoUnitService } from '../laximo-service'
 import { autoEuroService } from '../autoeuro-service'
+import { trinityService } from '../trinity-service'
 import { yooKassaService } from '../yookassa-service'
 // PartsAPI/PartsIndex integration removed: provide no-op stubs to keep schema stable
 const partsAPIService = {
@@ -102,6 +103,18 @@ interface Context {
   userRole?: string
   userEmail?: string
   headers?: Headers
+}
+
+// Глобальные настройки интеграций (провайдеров внешних API)
+const getIntegrationSettings = async () => {
+  const settings = await (prisma as any).integrationProviderSetting.findUnique({ where: { id: 'default' } })
+  return {
+    externalProvider: settings?.externalProvider || 'autoeuro',
+    trinityClientCode: settings?.trinityClientCode || process.env.TRINITY_CLIENT_CODE || 'e75d0b169ffeb90d4b805790ce68a239',
+    trinityOnlyStock: settings?.trinityOnlyStock ?? false,
+    trinityOnline: (settings?.trinityOnline as 'allow' | 'disallow') || 'allow',
+    trinityCrosses: (settings?.trinityCrosses as 'allow' | 'disallow') || 'disallow',
+  }
 }
 
 // Функция для сохранения истории поиска запчастей и автомобилей
@@ -2402,144 +2415,100 @@ export const resolvers = {
 
         console.log(`📦 Найдено ${internalProducts.length} товаров в нашей базе`)
 
-        // 2. Поиск в AutoEuro
+        // 2. Поиск во внешнем поставщике (AutoEuro/Trinity)
         let externalOffers: any[] = []
         try {
-          console.log('🔍 GraphQL Resolver - начинаем поиск в AutoEuro:', { articleNumber: cleanArticleNumber, brand: cleanBrand })
-          
-          const autoEuroResult = await autoEuroService.searchItems({
-            code: cleanArticleNumber,
-            brand: cleanBrand,
-            with_crosses: false,
-            with_offers: true
-          })
-
-          console.log('📊 GraphQL Resolver - результат AutoEuro:', {
-            success: autoEuroResult.success,
-            dataLength: autoEuroResult.data?.length || 0,
-            error: autoEuroResult.error
-          })
-
-          if (autoEuroResult.success && autoEuroResult.data) {
-            console.log('✅ GraphQL Resolver - обрабатываем данные AutoEuro, количество:', autoEuroResult.data.length)
-            
-            externalOffers = autoEuroResult.data.map(offer => ({
-              offerKey: offer.offer_key,
-              brand: offer.brand,
-              code: offer.code,
-              name: offer.name,
-              price: parseFloat(offer.price.toString()),
-              currency: offer.currency || 'RUB',
-              deliveryTime: calculateDeliveryDays(offer.delivery_time || ''),
-              deliveryTimeMax: calculateDeliveryDays(offer.delivery_time_max || ''),
-              quantity: offer.amount || 0,
-              warehouse: offer.warehouse_name || 'Внешний склад',
-              warehouseName: offer.warehouse_name || null,
-              rejects: offer.rejects || 0,
-              supplier: 'AutoEuro',
-              canPurchase: true,
-              isInCart: isItemInCart(undefined, offer.offer_key, offer.code, offer.brand)
-            }))
-            
-            console.log('🎯 GraphQL Resolver - создано внешних предложений:', externalOffers.length)
-          } else {
-            console.log('❌ GraphQL Resolver - AutoEuro не вернул данные для бренда из запроса, пробуем подобрать бренд по коду')
-
-            // Fallback 1: Получаем точные бренды по коду и пробуем каждый
-            try {
-              const brandsResp = await autoEuroService.getBrandsByCode(cleanArticleNumber)
-              if (brandsResp.success && brandsResp.data && brandsResp.data.length > 0) {
-                // Сначала пробуем те бренды, которые совпадают по регистронезависимому сравнению или содержат искомый бренд
-                const brandCandidates = brandsResp.data
-                  .map(b => b.brand?.toString().trim())
-                  .filter(Boolean) as string[]
-
-                const prioritized = Array.from(new Set([
-                  // точное совпадение
-                  ...brandCandidates.filter(b => b.toLowerCase() === cleanBrand.toLowerCase()),
-                  // содержит искомый бренд
-                  ...brandCandidates.filter(b => b.toLowerCase().includes(cleanBrand.toLowerCase())),
-                  // остальные
-                  ...brandCandidates
-                ]))
-
-                for (const candidateBrand of prioritized.slice(0, 5)) {
-                  console.log('🔁 AutoEuro fallback: пробуем бренд-кандидат:', candidateBrand)
-                  const retry = await autoEuroService.searchItems({
-                    code: cleanArticleNumber,
-                    brand: candidateBrand,
-                    with_crosses: false,
-                    with_offers: true
-                  })
-                  if (retry.success && retry.data && retry.data.length > 0) {
-                    externalOffers = retry.data.map(offer => ({
-                      offerKey: offer.offer_key,
-                      brand: offer.brand,
-                      code: offer.code,
-                      name: offer.name,
-                      price: parseFloat(offer.price.toString()),
-                      currency: offer.currency || 'RUB',
-                      deliveryTime: calculateDeliveryDays(offer.delivery_time || ''),
-                      deliveryTimeMax: calculateDeliveryDays(offer.delivery_time_max || ''),
-                      quantity: offer.amount || 0,
-                      warehouse: offer.warehouse_name || 'Внешний склад',
-                      warehouseName: offer.warehouse_name || null,
-                      rejects: offer.rejects || 0,
-                      supplier: 'AutoEuro',
-                      canPurchase: true,
-                      isInCart: isItemInCart(undefined, offer.offer_key, offer.code, offer.brand)
-                    }))
-                    console.log('✅ AutoEuro fallback: получены предложения по бренду', candidateBrand, 'кол-во:', externalOffers.length)
-                    break
-                  }
-                }
-              } else {
-                console.log('⚠️ AutoEuro fallback: бренды по коду не найдены')
+          const providerSettings = await getIntegrationSettings()
+          if (providerSettings.externalProvider === 'trinity') {
+            console.log('🔍 GraphQL Resolver - Trinity: поиск предложений', { articleNumber: cleanArticleNumber, brand: cleanBrand })
+            const triRes = await trinityService.searchItemsByCodeBrand(cleanArticleNumber, cleanBrand, {
+              clientCode: providerSettings.trinityClientCode,
+              onlyStock: providerSettings.trinityOnlyStock,
+              online: providerSettings.trinityOnline,
+              crosses: 'disallow',
+            })
+            const parseQuantity = (val: unknown): number => {
+              if (typeof val === 'number') {
+                return Number.isFinite(val) ? Math.max(0, Math.floor(val)) : 0
               }
-            } catch (fallbackErr) {
-              console.error('❌ Ошибка fallback-подбора бренда по коду в AutoEuro:', fallbackErr)
+              if (typeof val === 'string') {
+                // Берем первое числовое значение из строки (например, "10+", "~5", "X" -> 0)
+                const m = val.match(/\d+/)
+                return m ? parseInt(m[0], 10) : 0
+              }
+              return 0
             }
-
-            // Fallback 2: если всё ещё пусто — пробуем включить кроссы (внешние аналоги)
-            if (externalOffers.length === 0) {
-              try {
-                console.log('🔁 AutoEuro fallback: ищем предложения с кроссами для основного товара')
-                const crossesTry = await autoEuroService.searchItems({
-                  code: cleanArticleNumber,
-                  brand: cleanBrand,
-                  with_crosses: true,
-                  with_offers: true
-                })
-                if (crossesTry.success && crossesTry.data && crossesTry.data.length > 0) {
-                  externalOffers = crossesTry.data.map(offer => ({
-                    offerKey: offer.offer_key,
-                    brand: offer.brand,
-                    code: offer.code,
-                    name: offer.name,
-                    price: parseFloat(offer.price.toString()),
-                    currency: offer.currency || 'RUB',
-                    deliveryTime: calculateDeliveryDays(offer.delivery_time || ''),
-                    deliveryTimeMax: calculateDeliveryDays(offer.delivery_time_max || ''),
-                    quantity: offer.amount || 0,
-                    warehouse: offer.warehouse_name || 'Внешний склад',
-                    warehouseName: offer.warehouse_name || null,
-                    rejects: offer.rejects || 0,
-                    supplier: 'AutoEuro',
-                    canPurchase: true,
-                    isInCart: isItemInCart(undefined, offer.offer_key, offer.code, offer.brand)
-                  }))
-                  console.log('✅ AutoEuro fallback (with_crosses): получены предложения-аналоги:', externalOffers.length)
-                }
-              } catch (crossErr) {
-                console.error('❌ Ошибка AutoEuro fallback (with_crosses):', crossErr)
+            externalOffers = triRes.map((o) => {
+              const [minStr, maxStr] = (o.deliverydays || '').split('/')
+              const min = Number.parseInt(minStr || '0', 10)
+              const max = Number.parseInt(maxStr || String(min || 0), 10)
+              const offerKey = `TRINITY:${o.code}:${o.producer}:${o.stock || ''}:${o.bid || ''}`
+              return {
+                offerKey,
+                brand: o.producer,
+                code: o.code,
+                name: o.caption,
+                price: parseFloat(String(o.price)),
+                currency: o.currency || 'RUB',
+                deliveryTime: isNaN(min) ? 0 : min,
+                deliveryTimeMax: isNaN(max) ? (isNaN(min) ? 0 : min) : max,
+                quantity: parseQuantity((o as any).rest),
+                warehouse: o.stock || 'Trinity-Parts',
+                warehouseName: o.stock || null,
+                rejects: 0,
+                supplier: 'Trinity',
+                canPurchase: true,
+                isInCart: isItemInCart(undefined, offerKey, o.code, o.producer)
               }
+            })
+            console.log('🎯 GraphQL Resolver - создано внешних предложений Trinity:', externalOffers.length)
+          } else {
+            console.log('🔍 GraphQL Resolver - начинаем поиск в AutoEuro:', { articleNumber: cleanArticleNumber, brand: cleanBrand })
+            const autoEuroResult = await autoEuroService.searchItems({
+              code: cleanArticleNumber,
+              brand: cleanBrand,
+              with_crosses: false,
+              with_offers: true
+            })
+            console.log('📊 GraphQL Resolver - результат AutoEuro:', {
+              success: autoEuroResult.success,
+              dataLength: autoEuroResult.data?.length || 0,
+              error: autoEuroResult.error
+            })
+            if (autoEuroResult.success && autoEuroResult.data) {
+              const parseQuantityAE = (val: any): number => {
+                if (typeof val === 'number') return Number.isFinite(val) ? Math.max(0, Math.floor(val)) : 0
+                if (typeof val === 'string') {
+                  const m = val.match(/\d+/)
+                  return m ? parseInt(m[0], 10) : 0
+                }
+                return 0
+              }
+              externalOffers = autoEuroResult.data.map(offer => ({
+                offerKey: offer.offer_key,
+                brand: offer.brand,
+                code: offer.code,
+                name: offer.name,
+                price: parseFloat(offer.price.toString()),
+                currency: offer.currency || 'RUB',
+                deliveryTime: calculateDeliveryDays(offer.delivery_time || ''),
+                deliveryTimeMax: calculateDeliveryDays(offer.delivery_time_max || ''),
+                quantity: parseQuantityAE(offer.amount),
+                warehouse: offer.warehouse_name || 'Внешний склад',
+                warehouseName: offer.warehouse_name || null,
+                rejects: offer.rejects || 0,
+                supplier: 'AutoEuro',
+                canPurchase: true,
+                isInCart: isItemInCart(undefined, offer.offer_key, offer.code, offer.brand)
+              }))
+              console.log('🎯 GraphQL Resolver - создано внешних предложений AutoEuro:', externalOffers.length)
             }
           }
         } catch (error) {
-          console.error('❌ Ошибка поиска в AutoEuro:', error)
+          console.error('❌ Ошибка поиска у внешнего поставщика:', error)
         }
 
-        console.log(`🌐 Найдено ${externalOffers.length} предложений в AutoEuro`)
+        console.log(`🌐 Найдено ${externalOffers.length} внешних предложений`)
         console.log('📦 Первые 3 внешних предложения:', externalOffers.slice(0, 3))
 
         // 3. Поиск в PartsIndex для получения дополнительных характеристик и изображений (может быть отключён)
@@ -2576,57 +2545,95 @@ export const resolvers = {
           console.log('⚠️ Продолжаем без данных PartsIndex из-за ошибки API')
         }
 
-        // 4. Поиск аналогов через AutoEuro (используем кроссы)
+        // 4. Поиск аналогов: уважать выбор поставщика
         const analogs: any[] = []
         try {
-          console.log('🔍 GraphQL Resolver - поиск аналогов через AutoEuro с кроссами')
-          
-          const analogsResult = await autoEuroService.searchItems({
-            code: cleanArticleNumber,
-            brand: cleanBrand,
-            with_crosses: true, // Включаем кроссы для получения аналогов
-            with_offers: false
-          })
-
-          if (analogsResult.success && analogsResult.data) {
-            console.log('✅ GraphQL Resolver - найдены аналоги через AutoEuro:', analogsResult.data.length)
-            
-            // Фильтруем только кроссы и аналоги (не оригинальный товар)
-            // Убираем дубликаты по комбинации brand + articleNumber
+          const providerSettings = await getIntegrationSettings()
+          if (providerSettings.externalProvider === 'trinity') {
+            console.log('🔍 GraphQL Resolver - Trinity: поиск аналогов с crosses/includeStocks')
+            const triCrossRes = await trinityService.searchItemsByCodeBrand(cleanArticleNumber, cleanBrand, {
+              clientCode: providerSettings.trinityClientCode,
+              // Для получения агрегированных кроссов Trinity рекомендует искать НЕ только по своим складам
+              onlyStock: false,
+              online: providerSettings.trinityOnline || 'allow',
+              crosses: 'allow',
+              includeStocks: '1', // чтобы получить агрегированные позиции аналогов
+            })
+            console.log('🔎 Trinity crosses raw count:', triCrossRes.length)
+            // Trinity возвращает агрегированные элементы аналогов с caption === 'crosses'.
+            // На некоторых аккаунтах может приходить тот же формат без явной метки, но с пустыми stock/source.
+            const isCrossItem = (item: any) => {
+              const caption = (item?.caption || '').toString().toLowerCase()
+              const stock = (item?.stock ?? '').toString()
+              const source = (item?.source ?? '').toString()
+              const hasMinFields = !!item && typeof item === 'object' && item.code && item.producer && item.price
+              return (
+                (caption === 'crosses') ||
+                (hasMinFields && stock === '' && source === '')
+              )
+            }
             const uniqueAnalogs = new Map<string, any>()
-            
-            analogsResult.data
-              .filter(item => item.cross !== null && item.cross !== undefined)
-              .forEach(item => {
-                const key = `${item.brand}-${item.code}`
+            triCrossRes
+              .filter((item: any) => isCrossItem(item))
+              .forEach((item: any) => {
+                const brandName = (item.producer || '').toString()
+                const article = (item.code || '').toString()
+                if (!brandName || !article) return
+                const key = `${brandName}-${article}`
                 if (!uniqueAnalogs.has(key)) {
-                  const crossType = Number(item.cross)
                   uniqueAnalogs.set(key, {
-                    brand: item.brand,
-                    articleNumber: item.code,
-                    name: item.name,
-                    type: crossType === 0 ? 'Кросс' : 
-                          crossType === 1 ? 'Замена номера' :
-                          crossType === 2 ? 'Синоним бренда' :
-                          crossType === 3 ? 'Проверенный кросс' :
-                          crossType === 10 ? 'Комплект' :
-                          crossType === 11 ? 'Часть' :
-                          crossType === 12 ? 'Тюнинг' : 'Аналог'
+                    brand: brandName,
+                    articleNumber: article,
+                    name: item.caption && item.caption !== 'crosses' ? item.caption : `${brandName} ${article}`,
+                    type: 'Аналог'
                   })
                 }
               })
-            
-            // Берем первые 5 уникальных аналогов
-            const analogsFromAutoEuro = Array.from(uniqueAnalogs.values()).slice(0, 5)
-            
-            analogs.push(...analogsFromAutoEuro)
-            console.log('🎯 GraphQL Resolver - добавлено аналогов из AutoEuro:', analogsFromAutoEuro.length)
+            console.log('🔎 Trinity crosses parsed:', uniqueAnalogs.size)
+            const analogsFromTrinity = Array.from(uniqueAnalogs.values()).slice(0, 5)
+            analogs.push(...analogsFromTrinity)
+            console.log('🎯 GraphQL Resolver - добавлено аналогов из Trinity:', analogsFromTrinity.length)
           } else {
-            console.log('⚠️ GraphQL Resolver - AutoEuro не вернул аналоги')
+            console.log('🔍 GraphQL Resolver - поиск аналогов через AutoEuro с кроссами')
+            const analogsResult = await autoEuroService.searchItems({
+              code: cleanArticleNumber,
+              brand: cleanBrand,
+              with_crosses: true, // Включаем кроссы для получения аналогов
+              with_offers: false
+            })
+
+            if (analogsResult.success && analogsResult.data) {
+              console.log('✅ GraphQL Resolver - найдены аналоги через AutoEuro:', analogsResult.data.length)
+              const uniqueAnalogs = new Map<string, any>()
+              analogsResult.data
+                .filter(item => item.cross !== null && item.cross !== undefined)
+                .forEach(item => {
+                  const key = `${item.brand}-${item.code}`
+                  if (!uniqueAnalogs.has(key)) {
+                    const crossType = Number(item.cross)
+                    uniqueAnalogs.set(key, {
+                      brand: item.brand,
+                      articleNumber: item.code,
+                      name: item.name,
+                      type: crossType === 0 ? 'Кросс' : 
+                            crossType === 1 ? 'Замена номера' :
+                            crossType === 2 ? 'Синоним бренда' :
+                            crossType === 3 ? 'Проверенный кросс' :
+                            crossType === 10 ? 'Комплект' :
+                            crossType === 11 ? 'Часть' :
+                            crossType === 12 ? 'Тюнинг' : 'Аналог'
+                    })
+                  }
+                })
+              const analogsFromAutoEuro = Array.from(uniqueAnalogs.values()).slice(0, 5)
+              analogs.push(...analogsFromAutoEuro)
+              console.log('🎯 GraphQL Resolver - добавлено аналогов из AutoEuro:', analogsFromAutoEuro.length)
+            } else {
+              console.log('⚠️ GraphQL Resolver - AutoEuro не вернул аналоги')
+            }
           }
         } catch (error) {
-          console.error('❌ Ошибка поиска аналогов через AutoEuro:', error)
-          // Не бросаем ошибку, просто продолжаем без аналогов
+          console.error('❌ Ошибка поиска аналогов у внешнего поставщика:', error)
           console.log('⚠️ Продолжаем без поиска аналогов из-за ошибки API')
         }
 
@@ -2831,38 +2838,81 @@ export const resolvers = {
             supplier: 'Protek'
           }))
 
-          // Поиск в AutoEuro только для аналогов без внутренних предложений
+          // Поиск у внешнего поставщика только для аналогов без внутренних предложений
           let analogExternalOffers: any[] = []
           if (internalOffers.length === 0) {
             try {
-              const analogAutoEuroResult = await autoEuroService.searchItems({
-                code: articleNumber,
-                brand: brand,
-                with_crosses: false,
-                with_offers: true,
-              })
-
-              if (analogAutoEuroResult.success && analogAutoEuroResult.data) {
-                analogExternalOffers = analogAutoEuroResult.data
-                  .map((offer) => ({
-                    offerKey: offer.offer_key,
-                    brand: offer.brand,
-                    code: offer.code,
-                    name: offer.name,
-                    price: parseFloat(offer.price.toString()),
-                    currency: offer.currency || 'RUB',
-                    deliveryTime: calculateDeliveryDays(offer.delivery_time || ''),
-                    deliveryTimeMax: calculateDeliveryDays(offer.delivery_time_max || ''),
-                    quantity: offer.amount || 0,
-                    warehouse: offer.warehouse_name || 'Внешний склад',
-                    warehouseName: offer.warehouse_name || null,
-                    rejects: offer.rejects || 0,
-                    supplier: 'AutoEuro',
+              const providerSettings = await getIntegrationSettings()
+              if (providerSettings.externalProvider === 'trinity') {
+                const triRes = await trinityService.searchItemsByCodeBrand(articleNumber, brand, {
+                  clientCode: providerSettings.trinityClientCode,
+                  onlyStock: providerSettings.trinityOnlyStock,
+                  online: providerSettings.trinityOnline,
+                  crosses: 'disallow',
+                  includeStocks: '0',
+                })
+                const parseQuantity = (val: unknown): number => {
+                  if (typeof val === 'number') {
+                    return Number.isFinite(val) ? Math.max(0, Math.floor(val)) : 0
+                  }
+                  if (typeof val === 'string') {
+                    const m = val.match(/\d+/)
+                    return m ? parseInt(m[0], 10) : 0
+                  }
+                  return 0
+                }
+                analogExternalOffers = triRes.map(o => {
+                  const [minStr, maxStr] = (o.deliverydays || '').split('/')
+                  const min = Number.parseInt(minStr || '0', 10)
+                  const max = Number.parseInt(maxStr || String(min || 0), 10)
+                  const offerKey = `TRINITY:${o.code}:${o.producer}:${o.stock || ''}:${o.bid || ''}`
+                  return {
+                    offerKey,
+                    brand: o.producer,
+                    code: o.code,
+                    name: o.caption,
+                    price: parseFloat(String(o.price)),
+                    currency: o.currency || 'RUB',
+                    deliveryTime: isNaN(min) ? 0 : min,
+                    deliveryTimeMax: isNaN(max) ? (isNaN(min) ? 0 : min) : max,
+                    quantity: parseQuantity((o as any).rest),
+                    warehouse: o.stock || 'Trinity-Parts',
+                    warehouseName: o.stock || null,
+                    rejects: 0,
+                    supplier: 'Trinity',
                     canPurchase: true,
-                  }))
+                  }
+                })
+              } else {
+                const analogAutoEuroResult = await autoEuroService.searchItems({
+                  code: articleNumber,
+                  brand: brand,
+                  with_crosses: false,
+                  with_offers: true,
+                })
+
+                if (analogAutoEuroResult.success && analogAutoEuroResult.data) {
+                  analogExternalOffers = analogAutoEuroResult.data
+                    .map((offer) => ({
+                      offerKey: offer.offer_key,
+                      brand: offer.brand,
+                      code: offer.code,
+                      name: offer.name,
+                      price: parseFloat(offer.price.toString()),
+                      currency: offer.currency || 'RUB',
+                      deliveryTime: calculateDeliveryDays(offer.delivery_time || ''),
+                      deliveryTimeMax: calculateDeliveryDays(offer.delivery_time_max || ''),
+                      quantity: offer.amount || 0,
+                      warehouse: offer.warehouse_name || 'Внешний склад',
+                      warehouseName: offer.warehouse_name || null,
+                      rejects: offer.rejects || 0,
+                      supplier: 'AutoEuro',
+                      canPurchase: true,
+                    }))
+                }
               }
             } catch (error) {
-              console.error(`❌ Ошибка поиска аналога ${articleNumber} в AutoEuro:`, error)
+              console.error(`❌ Ошибка поиска аналога ${articleNumber} у внешнего поставщика:`, error)
             }
           }
           
@@ -2911,30 +2961,32 @@ export const resolvers = {
         }
 
         const cleanCode = code.trim()
-        console.log('🔍 GraphQL Resolver - начинаем поиск брендов в AutoEuro:', { code: cleanCode })
-        
-        const autoEuroResult = await autoEuroService.getBrandsByCode(cleanCode)
-        
-        console.log('📊 GraphQL Resolver - результат поиска брендов AutoEuro:', {
-          success: autoEuroResult.success,
-          brandsCount: autoEuroResult.data?.length || 0,
-          error: autoEuroResult.error
-        })
-
-        if (autoEuroResult.success && autoEuroResult.data) {
-          console.log('✅ GraphQL Resolver - найдены бренды:', autoEuroResult.data.length)
-          
+        const providerSettings = await getIntegrationSettings()
+        if (providerSettings.externalProvider === 'trinity') {
+          console.log('🔍 GraphQL Resolver - Trinity: бренды по коду', { code: cleanCode })
+          const brands = await trinityService.searchBrandsByCode(cleanCode, {
+            clientCode: providerSettings.trinityClientCode,
+            online: providerSettings.trinityOnline,
+          })
           return {
             success: true,
-            brands: autoEuroResult.data,
+            brands: brands.map(b => ({ brand: b.producer, code: cleanCode, name: b.ident })),
             error: null
           }
         } else {
-          console.log('❌ GraphQL Resolver - AutoEuro не вернул бренды:', autoEuroResult)
-          return {
-            success: false,
-            error: autoEuroResult.error || 'Бренды не найдены',
-            brands: []
+          console.log('🔍 GraphQL Resolver - начинаем поиск брендов в AutoEuro:', { code: cleanCode })
+          const autoEuroResult = await autoEuroService.getBrandsByCode(cleanCode)
+          console.log('📊 GraphQL Resolver - результат поиска брендов AutoEuro:', {
+            success: autoEuroResult.success,
+            brandsCount: autoEuroResult.data?.length || 0,
+            error: autoEuroResult.error
+          })
+          if (autoEuroResult.success && autoEuroResult.data) {
+            console.log('✅ GraphQL Resolver - найдены бренды:', autoEuroResult.data.length)
+            return { success: true, brands: autoEuroResult.data, error: null }
+          } else {
+            console.log('❌ GraphQL Resolver - AutoEuro не вернул бренды:', autoEuroResult)
+            return { success: false, error: autoEuroResult.error || 'Бренды не найдены', brands: [] }
           }
         }
       } catch (error) {
@@ -3043,7 +3095,7 @@ export const resolvers = {
 
         console.log(`📦 Найдено ${internalProducts.length} товаров в категории из нашей базы`)
 
-        // 3. Проверяем наличие предложений AutoEuro для каждого товара
+        // 3. Проверяем наличие предложений выбранного поставщика для каждого товара
         const productsWithOffers: any[] = []
         
         for (const product of internalProducts) {
@@ -3058,34 +3110,32 @@ export const resolvers = {
           }
 
           try {
-            // Проверяем наличие предложений в AutoEuro
-            const autoEuroResult = await autoEuroService.searchItems({
-              code: product.article,
-              brand: productBrand,
-              with_crosses: false,
-              with_offers: true
-            })
-
-            if (autoEuroResult.success && autoEuroResult.data && autoEuroResult.data.length > 0) {
-              // Находим минимальную цену
-              const minPrice = Math.min(...autoEuroResult.data.map(offer => parseFloat(offer.price.toString())))
-              
-              productsWithOffers.push({
-                articleNumber: product.article,
-                brand: productBrand,
-                name: product.name,
-                artId: product.id, // Используем ID товара как artId
-                minPrice,
-                hasOffers: true
+            const providerSettings = await getIntegrationSettings()
+            if (providerSettings.externalProvider === 'trinity') {
+              const triRes = await trinityService.searchItemsByCodeBrand(product.article, productBrand, {
+                clientCode: providerSettings.trinityClientCode,
+                onlyStock: providerSettings.trinityOnlyStock,
+                online: providerSettings.trinityOnline,
+                crosses: 'disallow',
               })
-
-              console.log('✅ Товар с предложениями:', {
-                article: product.article,
+              if (triRes.length > 0) {
+                const prices = triRes.map(o => parseFloat(String(o.price))).filter(n => !Number.isNaN(n))
+                const minPrice = prices.length ? Math.min(...prices) : 0
+                productsWithOffers.push({ articleNumber: product.article, brand: productBrand, name: product.name, artId: product.id, minPrice, hasOffers: true })
+                console.log('✅ Товар с предложениями (Trinity):', { article: product.article, brand: productBrand, name: product.name, minPrice, offersCount: triRes.length })
+              }
+            } else {
+              const autoEuroResult = await autoEuroService.searchItems({
+                code: product.article,
                 brand: productBrand,
-                name: product.name,
-                minPrice,
-                offersCount: autoEuroResult.data.length
+                with_crosses: false,
+                with_offers: true
               })
+              if (autoEuroResult.success && autoEuroResult.data && autoEuroResult.data.length > 0) {
+                const minPrice = Math.min(...autoEuroResult.data.map(offer => parseFloat(offer.price.toString())))
+                productsWithOffers.push({ articleNumber: product.article, brand: productBrand, name: product.name, artId: product.id, minPrice, hasOffers: true })
+                console.log('✅ Товар с предложениями:', { article: product.article, brand: productBrand, name: product.name, minPrice, offersCount: autoEuroResult.data.length })
+              }
             }
           } catch (error) {
             console.error(`❌ Ошибка проверки предложений для ${product.article}:`, error)
@@ -4412,6 +4462,22 @@ export const resolvers = {
         console.error('❌ Error getting cart:', error);
         return null;
       }
+    },
+
+    // Интеграции/Поставщики — текущие настройки
+    integrationSettings: async () => {
+      const s = await (prisma as any).integrationProviderSetting.findUnique({ where: { id: 'default' } })
+      if (s) return s
+      return {
+        id: 'default',
+        externalProvider: 'autoeuro',
+        trinityClientCode: process.env.TRINITY_CLIENT_CODE || 'e75d0b169ffeb90d4b805790ce68a239',
+        trinityOnlyStock: false,
+        trinityOnline: 'allow',
+        trinityCrosses: 'disallow',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as any
     }
   },
 
@@ -10407,6 +10473,30 @@ export const resolvers = {
       if (!context.userId) throw new Error('Не авторизовано')
       await prisma.seoPageConfig.delete({ where: { id } })
       return true
+    },
+
+    // Интеграции/Поставщики — обновление настроек
+    updateIntegrationSettings: async (_: unknown, { input }: { input: any }, context: Context) => {
+      if (!context.userId) throw new Error('Не авторизовано')
+      const updated = await (prisma as any).integrationProviderSetting.upsert({
+        where: { id: 'default' },
+        update: {
+          externalProvider: input.externalProvider ?? undefined,
+          trinityClientCode: input.trinityClientCode ?? undefined,
+          trinityOnlyStock: input.trinityOnlyStock ?? undefined,
+          trinityOnline: input.trinityOnline ?? undefined,
+          trinityCrosses: input.trinityCrosses ?? undefined,
+        },
+        create: {
+          id: 'default',
+          externalProvider: input.externalProvider || 'autoeuro',
+          trinityClientCode: input.trinityClientCode || process.env.TRINITY_CLIENT_CODE || 'e75d0b169ffeb90d4b805790ce68a239',
+          trinityOnlyStock: input.trinityOnlyStock ?? false,
+          trinityOnline: input.trinityOnline || 'allow',
+          trinityCrosses: input.trinityCrosses || 'disallow',
+        },
+      })
+      return updated
     },
 
     clearCart: async (_: unknown, {}, context: Context) => {
