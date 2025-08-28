@@ -43,6 +43,10 @@ model Category {
   id                         String     @id @default(cuid())
   name                       String
   slug                       String     @unique
+  // 1C integration codes
+  code                       String?    @unique
+  headCode                   String?
+  headName                   String?
   description                String?
   seoTitle                   String?
   seoDescription             String?
@@ -903,4 +907,18 @@ model SeoPageConfig {
   updatedAt      DateTime      @updatedAt
 
   @@map("seo_page_configs")
+}
+
+// Настройки интеграций и поставщиков внешних API
+model IntegrationProviderSetting {
+  id                String   @id @default("default")
+  externalProvider  String   @default("autoeuro") // autoeuro | trinity
+  trinityClientCode String?
+  trinityOnlyStock  Boolean  @default(false)
+  trinityOnline     String   @default("allow")     // allow | disallow
+  trinityCrosses    String   @default("disallow")  // allow | disallow
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("integration_provider_settings")
 }

@@ -39,15 +39,14 @@ export default function OneCCatalogDocs() {
   -d '{
   "items": [
     {
-      "externalId": "demo-ext-1",
+      "externalId": "941024_dayco", // если не передать — сформируется автоматически: article+"_"+brand (в нижнем регистре)
       "article": "941024",
       "brand": "DAYCO",
       "name": "Тестовый товар",
-      "retailPrice": 1290,
-      "price": 990.5,
+      "price": 1290,
       "stock": 15,
       "images": ["https://example.com/img1.jpg"],
-      "categories": ["Автотовары/Ремни"],
+      "category_code": "001254",
       "characteristics": {"Длина": "500 мм"},
       "isVisible": true
     }
@@ -55,21 +54,54 @@ export default function OneCCatalogDocs() {
 }'`
 
   const itemSchema = `{
-  externalId?: string,
+  externalId?: string,       // если не передан — будет article+"_"+brand (нижний регистр)
   article: string,           // очистка пробелов/дефисов, UPPERCASE
   brand: string,             // UPPERCASE
   name: string,
   description?: string,
-  price?: number,
-  retailPrice?: number,
+  price?: number,            // продажная цена (retail)
   stock?: number,
   weight?: number,
   dimensions?: string,
   images?: string[],         // URL
-  categories?: string[],     // иерархия через '/': A/B/C
+  category_code: string,     // ОБЯЗАТЕЛЬНО: код категории из справочника
   characteristics?: { [key: string]: string },
   isVisible?: boolean
 }`
+
+  const curlCategories = `curl -X POST "${typeof window === 'undefined' ? 'http://localhost:3000' : ''}/api/1c/catalog/categories" \\
+  -H "Content-Type: application/json" \\
+  -H "X-API-Key: <ONEC_API_TOKEN>" \\
+  -d '{
+  "category_code": "001254",
+  "category_name": "Ремни ГРМ",
+  "category_head_code": "151554",
+  "category_head_name": "ГРМ, рем. комплекты и тд"
+}'`
+
+  const curlPrices = `curl -X POST "${typeof window === 'undefined' ? 'http://localhost:3000' : ''}/api/1c/catalog/prices" \\
+  -H "Content-Type: application/json" \\
+  -H "X-API-Key: <ONEC_API_TOKEN>" \\
+  -d '{
+  "items": [
+    { "sku": "941024", "price": "1290,00" }
+  ]
+}'`
+
+  const curlStocks = `curl -X POST "${typeof window === 'undefined' ? 'http://localhost:3000' : ''}/api/1c/catalog/stocks" \\
+  -H "Content-Type: application/json" \\
+  -H "X-API-Key: <ONEC_API_TOKEN>" \\
+  -d '{
+  "items": [
+    { "sku": "941024", "stock": 15 }
+  ]
+}'`
+
+  const curlVisits = `curl -sS "${typeof window === 'undefined' ? 'http://localhost:3000' : ''}/api/1c/catalog/visits?limit=100" \\
+  -H "X-API-Key: <ONEC_API_TOKEN>" | jq`
+
+  const curlClients = `curl -sS "${typeof window === 'undefined' ? 'http://localhost:3000' : ''}/api/1c/catalog/clients" \\
+  -H "X-API-Key: <ONEC_API_TOKEN>" | jq`
 
   return (
     <div className="p-6 space-y-6">
@@ -91,6 +123,11 @@ export default function OneCCatalogDocs() {
           <CardContent className="text-sm text-gray-700 space-y-1">
             <div><Badge>GET</Badge> <span className="font-mono">/api/1c/catalog/health</span></div>
             <div><Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/products</span></div>
+            <div><Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/categories</span></div>
+            <div><Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/prices</span></div>
+            <div><Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/stocks</span></div>
+            <div><Badge>GET</Badge> <span className="font-mono">/api/1c/catalog/visits</span></div>
+            <div><Badge>GET</Badge> <span className="font-mono">/api/1c/catalog/clients</span></div>
           </CardContent>
         </Card>
         <Card>
@@ -129,10 +166,10 @@ export default function OneCCatalogDocs() {
           <div className="text-sm text-gray-700">
             Правила:
             <ul className="list-disc pl-5 mt-2 space-y-1">
-              <li><b>Категории</b>: создаются при отсутствии, иерархия по <span className="font-mono">A/B/C</span>.</li>
+              <li><b>Категория</b>: передаётся код <span className="font-mono">category_code</span> (обяз.), справочник заполняется отдельным запросом.</li>
               <li><b>Изображения</b>: синхронизация полного набора (удаление отсутствующих, порядок по индексу).</li>
               <li><b>Характеристики</b>: создаются ключи; upsert по паре (productId, characteristicId).</li>
-              <li><b>Нормализация</b>: brand → UPPERCASE; article → без пробелов/дефисов, UPPERCASE.</li>
+              <li><b>Нормализация</b>: brand → UPPERCASE; article → без пробелов/дефисов, UPPERCASE; <b>externalId</b> по умолчанию = <span className="font-mono">article+"_"+brand</span> в нижнем регистре.</li>
             </ul>
             <div className="mt-3 flex items-center text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 text-sm">
               <TriangleAlert className="h-4 w-4 mr-2"/> При дублях <span className="font-mono">(article, brand)</span> в БД — сначала почистите данные для успешного применения уникального индекса.
@@ -140,7 +177,51 @@ export default function OneCCatalogDocs() {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Отправка структуры категорий</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CodeBlock title="curl" code={curlCategories} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Отправка цен товаров</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CodeBlock title="curl" code={curlPrices} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Отправка остатков товаров</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CodeBlock title="curl" code={curlStocks} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Получение истории посещений</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CodeBlock title="curl" code={curlVisits} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Получение новых контрагентов</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CodeBlock title="curl" code={curlClients} />
+        </CardContent>
+      </Card>
     </div>
   )
 }
-

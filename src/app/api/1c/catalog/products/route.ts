@@ -86,13 +86,12 @@ const productItemSchema = z.object({
   brand: z.string().trim().min(1),
   name: z.string().trim().min(1),
   description: z.string().trim().optional(),
-  price: z.number().finite().nonnegative().optional(),
-  retailPrice: z.number().finite().nonnegative().optional(),
+  price: z.number().finite().nonnegative().optional(), // продажная цена
   stock: z.number().int().optional(),
   weight: z.number().finite().nonnegative().optional(),
   dimensions: z.string().trim().optional(),
   images: z.array(z.string().url()).optional(),
-  categories: z.array(z.string().trim()).optional(),
+  category_code: z.string().trim().min(1),
   characteristics: z.record(z.string().trim()).optional(),
   isVisible: z.boolean().optional(),
 })
@@ -160,14 +159,18 @@ export async function POST(req: NextRequest) {
       name: raw.name.trim(),
       description: raw.description?.trim(),
       price: raw.price,
-      retailPrice: raw.retailPrice,
       stock: typeof raw.stock === 'number' ? raw.stock : undefined,
       weight: raw.weight,
       dimensions: raw.dimensions?.trim(),
       images: (raw.images || []).map((u) => String(u).trim()).filter(Boolean),
-      categories: (raw.categories || []).map((c) => c.trim()).filter(Boolean),
+      category_code: raw.category_code?.trim(),
       characteristics: raw.characteristics || {},
       isVisible: typeof raw.isVisible === 'boolean' ? raw.isVisible : undefined,
+    }
+
+    // externalId по умолчанию: article + '_' + brand в нижнем регистре
+    if (!norm.externalId && norm.article && norm.brand) {
+      norm.externalId = `${norm.article.toLowerCase()}_${norm.brand.toLowerCase()}`
     }
 
     const itemKey = norm.externalId ? { externalId: norm.externalId } : { article: norm.article, brand: norm.brand }
@@ -198,8 +201,7 @@ export async function POST(req: NextRequest) {
             brand: norm.brand || undefined,
             externalId: norm.externalId,
             description: norm.description,
-            retailPrice: norm.retailPrice ?? norm.price,
-            wholesalePrice: norm.price,
+            retailPrice: norm.price,
             stock: norm.stock ?? 0,
             weight: norm.weight,
             dimensions: norm.dimensions,
@@ -213,8 +215,7 @@ export async function POST(req: NextRequest) {
         if (norm.name) updateData.name = norm.name
         if (norm.externalId && !product.externalId) updateData.externalId = norm.externalId
         if (norm.description !== undefined) updateData.description = norm.description
-        if (norm.retailPrice !== undefined) updateData.retailPrice = norm.retailPrice
-        if (norm.price !== undefined) updateData.wholesalePrice = norm.price
+        if (norm.price !== undefined) updateData.retailPrice = norm.price
         if (norm.stock !== undefined) updateData.stock = norm.stock
         if (norm.weight !== undefined) updateData.weight = norm.weight
         if (norm.dimensions !== undefined) updateData.dimensions = norm.dimensions
@@ -225,24 +226,16 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // sync categories (create path like A/B/C)
-      if (norm.categories?.length) {
-        const allCatIds: string[] = []
-        for (const path of norm.categories) {
-          const parts = path.split('/').map(p => p.trim()).filter(Boolean)
-          let parentId: string | undefined
-          for (const part of parts) {
-            const slug = slugify(part)
-            let cat = await prisma.category.findFirst({ where: { slug } })
-            if (!cat) {
-              cat = await prisma.category.create({ data: { name: part, slug, parentId } })
-            }
-            parentId = cat.id
-            allCatIds.push(cat.id)
-          }
+      // link product to category by category_code (required)
+      if (norm.category_code) {
+        // ensure category exists
+        let cat = await prisma.category.findFirst({ where: { code: norm.category_code } })
+        if (!cat) {
+          // create minimal category with code as name+slug
+          const name = norm.category_code
+          cat = await prisma.category.create({ data: { name, slug: slugify(name), code: norm.category_code } })
         }
-        // connect set
-        await prisma.product.update({ where: { id: product.id }, data: { categories: { set: [], connect: [...new Set(allCatIds)].map(id => ({ id })) } } })
+        await prisma.product.update({ where: { id: product.id }, data: { categories: { set: [{ id: cat.id }] } } })
       }
 
       // sync images (replace with provided set if provided)
