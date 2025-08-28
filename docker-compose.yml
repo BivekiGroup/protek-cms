@@ -100,6 +100,11 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=${OPENAI_MODEL}
 
+      # Polza.ai (AI Chat)
+      - POLZA_AI_API_KEY=${POLZA_AI_API_KEY}
+      - POLZA_AI_MODEL=${POLZA_AI_MODEL}
+      - POLZA_AI_BASE_URL=${POLZA_AI_BASE_URL}
+
       # DaData API
       - DADATA_API_KEY=${DADATA_API_KEY}
 

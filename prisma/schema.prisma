@@ -43,6 +43,10 @@ model Category {
   id                         String     @id @default(cuid())
   name                       String
   slug                       String     @unique
+  // 1C integration codes
+  code                       String?    @unique
+  headCode                   String?
+  headName                   String?
   description                String?
   seoTitle                   String?
   seoDescription             String?
