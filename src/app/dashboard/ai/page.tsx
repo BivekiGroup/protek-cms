@@ -12,6 +12,8 @@ export default function AIChat() {
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -19,6 +21,24 @@ export default function AIChat() {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Load available models and current config
+  useEffect(() => {
+    (async () => {
+      try {
+        const dbg = await fetch('/api/ai/chat/debug', { cache: 'no-store' }).then(r => r.json()).catch(() => null)
+        if (dbg?.model && typeof dbg.model === 'string') setSelectedModel(dbg.model)
+      } catch {}
+      try {
+        const res = await fetch('/api/ai/models', { cache: 'no-store' })
+        const data = await res.json().catch(() => null)
+        const ids: string[] = Array.isArray(data?.data)
+          ? data.data.map((m: any) => m?.id).filter((s: any) => typeof s === 'string')
+          : (Array.isArray(data?.data?.data) ? data.data.data.map((m: any) => m?.id).filter((s: any) => typeof s === 'string') : [])
+        if (ids.length) setModels(ids)
+      } catch {}
+    })()
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,7 +58,7 @@ export default function AIChat() {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'text/plain' },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({ messages: nextMessages, model: selectedModel || undefined }),
       });
 
       if (!res.body) {
@@ -89,9 +109,24 @@ export default function AIChat() {
             <Bot className="h-5 w-5" />
             Чат с ИИ
           </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Задайте любой вопрос искусственному интеллекту
-          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">Задайте любой вопрос искусственному интеллекту</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Модель:</span>
+              <select
+                className="h-9 rounded-md border px-2 text-sm bg-background"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+              >
+                {selectedModel && !models.includes(selectedModel) && (
+                  <option value={selectedModel}>{selectedModel}</option>
+                )}
+                {models.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+          </div>
         </CardHeader>
         
         <CardContent className="flex-1 min-h-0">
