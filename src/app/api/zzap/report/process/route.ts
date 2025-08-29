@@ -152,7 +152,18 @@ export async function POST(req: NextRequest) {
   const id = searchParams.get('id') || ''
   const batchSize = Math.max(1, Math.min(10, Number(searchParams.get('batch') || 5)))
   if (!id) return new Response(JSON.stringify({ ok: false, error: 'id required' }), { status: 400, headers: { 'content-type': 'application/json; charset=utf-8' } })
-  const job = await prisma.zzapReportJob.findUnique({ where: { id } })
+  // Load job via Prisma or raw
+  let job: any
+  try {
+    const anyPrisma: any = prisma as any
+    if (anyPrisma.zzapReportJob?.findUnique) {
+      job = await anyPrisma.zzapReportJob.findUnique({ where: { id } })
+    }
+  } catch {}
+  if (!job) {
+    const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "zzap_report_jobs" WHERE id = '${id.replace(/'/g, "''")}' LIMIT 1`)
+    job = rows?.[0]
+  }
   if (!job) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8' } })
   if (job.status === 'done') return new Response(JSON.stringify({ ok: true, status: 'done', processed: job.processed, total: job.total, resultFile: job.resultFile }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
 
@@ -162,7 +173,14 @@ export async function POST(req: NextRequest) {
   let results = (job.results as any[]) || []
   if (results.length !== rows.length) results = Array.from({ length: rows.length })
 
-  await prisma.zzapReportJob.update({ where: { id }, data: { status: 'running' } })
+  try {
+    const anyPrisma: any = prisma as any
+    if (anyPrisma.zzapReportJob?.update) {
+      await anyPrisma.zzapReportJob.update({ where: { id }, data: { status: 'running' } })
+    } else {
+      await prisma.$executeRawUnsafe(`UPDATE "zzap_report_jobs" SET "status"='running', "updatedAt"=now() WHERE id='${id.replace(/'/g, "''")}'`)
+    }
+  } catch {}
 
   let page: Page | null = null
   try {
@@ -190,7 +208,15 @@ export async function POST(req: NextRequest) {
       } catch (e: any) {
         results[realIndex] = { article, brand, error: String(e?.message || e), prices: [], stats: {} }
       }
-      await prisma.zzapReportJob.update({ where: { id }, data: { processed: realIndex + 1, results } })
+      try {
+        const anyPrisma: any = prisma as any
+        if (anyPrisma.zzapReportJob?.update) {
+          await anyPrisma.zzapReportJob.update({ where: { id }, data: { processed: realIndex + 1, results } })
+        } else {
+          const json = `'${JSON.stringify(results).replace(/'/g, "''")}'::jsonb`
+          await prisma.$executeRawUnsafe(`UPDATE "zzap_report_jobs" SET processed=${realIndex + 1}, results=${json}, "updatedAt"=now() WHERE id='${id.replace(/'/g, "''")}'`)
+        }
+      } catch {}
     }
 
     // If finished, build XLSX and upload
@@ -220,16 +246,30 @@ export async function POST(req: NextRequest) {
       const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
       const key = `reports/zzap/${id}.xlsx`
       const url = await uploadBuffer(buf, key, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').catch(() => null)
-      await prisma.zzapReportJob.update({ where: { id }, data: { status: 'done', resultFile: url || key, results } })
+      try {
+        const anyPrisma: any = prisma as any
+        if (anyPrisma.zzapReportJob?.update) {
+          await anyPrisma.zzapReportJob.update({ where: { id }, data: { status: 'done', resultFile: url || key, results } })
+        } else {
+          const json = `'${JSON.stringify(results).replace(/'/g, "''")}'::jsonb`
+          await prisma.$executeRawUnsafe(`UPDATE "zzap_report_jobs" SET status='done', "resultFile"='${(url||key).replace(/'/g, "''")}', results=${json}, "updatedAt"=now() WHERE id='${id.replace(/'/g, "''")}'`)
+        }
+      } catch {}
       return new Response(JSON.stringify({ ok: true, status: 'done', processed: rows.length, total: rows.length, resultFile: url || key }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
     } else {
       return new Response(JSON.stringify({ ok: true, status: 'running', processed: processed + toProcess.length, total: rows.length }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
     }
   } catch (e: any) {
-    await prisma.zzapReportJob.update({ where: { id }, data: { status: 'error', error: String(e?.message || e) } })
+    try {
+      const anyPrisma: any = prisma as any
+      if (anyPrisma.zzapReportJob?.update) {
+        await anyPrisma.zzapReportJob.update({ where: { id }, data: { status: 'error', error: String(e?.message || e) } })
+      } else {
+        await prisma.$executeRawUnsafe(`UPDATE "zzap_report_jobs" SET status='error', error='${String((e?.message || e)).replace(/'/g, "''")}', "updatedAt"=now() WHERE id='${id.replace(/'/g, "''")}'`)
+      }
+    } catch {}
     return new Response(JSON.stringify({ ok: false, error: e?.message || String(e) }), { status: 500, headers: { 'content-type': 'application/json; charset=utf-8' } })
   } finally {
-    try { await (await (page?.browser?.() as any))?.close?.() } catch {}
+    try { await (page?.browser()?.close?.()) } catch {}
   }
 }
-
