@@ -441,6 +441,24 @@ model ZzapRequest {
   @@map("zzap_requests")
 }
 
+// Пакетный отчёт ZZAP (массовый парсинг по файлу)
+model ZzapReportJob {
+  id           String   @id @default(cuid())
+  status       String   @default("pending") // pending|running|done|error
+  periodFrom   DateTime
+  periodTo     DateTime
+  total        Int      @default(0)
+  processed    Int      @default(0)
+  inputRows    Json     // [{ article, brand }]
+  results      Json?    // [{ article, brand, prices:[p1,p2,p3], stats:{"yyyy-mm":count} }]
+  resultFile   String?  // S3 URL
+  error        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("zzap_report_jobs")
+}
+
 model ClientDeliveryAddress {
   id           String       @id @default(cuid())
   clientId     String

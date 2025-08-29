@@ -7,6 +7,7 @@ import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
 
 export default function ZzapStatsPage() {
   const [article, setArticle] = useState('')
@@ -23,6 +24,18 @@ export default function ZzapStatsPage() {
   const [historyPageSize] = useState(20)
   const [historyTotal, setHistoryTotal] = useState(0)
   const [query, setQuery] = useState('')
+
+  // Batch report state
+  const [reportFile, setReportFile] = useState<File | null>(null)
+  const [periodFrom, setPeriodFrom] = useState<string>('') // YYYY-MM-01
+  const [periodTo, setPeriodTo] = useState<string>('')
+  const [jobId, setJobId] = useState<string>('')
+  const [jobStatus, setJobStatus] = useState<string>('')
+  const [jobProcessed, setJobProcessed] = useState<number>(0)
+  const [jobTotal, setJobTotal] = useState<number>(0)
+  const [jobResultUrl, setJobResultUrl] = useState<string>('')
+  const [jobError, setJobError] = useState<string>('')
+  const [reportRunning, setReportRunning] = useState(false)
 
   const loadHistory = useCallback(async () => {
     try {
@@ -81,6 +94,115 @@ export default function ZzapStatsPage() {
 
   return (
     <div className="p-6">
+      {/* Batch report */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>ZZAP: массовый отчёт по файлу</CardTitle>
+          <CardDescription>
+            Загрузите Excel/CSV с колонками «Артикул» и «Бренд», укажите период и получите Excel с ценами первых 3 предложений и статистикой запросов по месяцам.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid sm:grid-cols-3 gap-4">
+            <div className="grid gap-2">
+              <Label>Файл (XLSX/CSV)</Label>
+              <Input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => setReportFile(e.target.files?.[0] || null)} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Период (с)</Label>
+              <Input type="month" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Период (по)</Label>
+              <Input type="month" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={async () => {
+                try {
+                  setJobError('')
+                  setJobId('')
+                  setJobResultUrl('')
+                  setJobProcessed(0)
+                  setJobTotal(0)
+                  if (!reportFile) return
+                  if (!periodFrom || !periodTo) { setJobError('Укажите период'); return }
+                  const form = new FormData()
+                  form.append('file', reportFile)
+                  // Convert YYYY-MM to first day for server
+                  const pf = `${periodFrom}-01`
+                  const pt = `${periodTo}-01`
+                  form.append('periodFrom', pf)
+                  form.append('periodTo', pt)
+                  const res = await fetch('/api/zzap/report/start', { method: 'POST', body: form })
+                  const data = await res.json()
+                  if (!res.ok || !data?.ok) throw new Error(data?.error || `Ошибка ${res.status}`)
+                  setJobId(data.jobId)
+                  setJobTotal(data.total || 0)
+                } catch (e: any) {
+                  setJobError(e?.message || String(e))
+                }
+              }}
+              disabled={!reportFile || !periodFrom || !periodTo || reportRunning}
+            >
+              Создать отчёт
+            </Button>
+            {jobId && !reportRunning && (
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  if (!jobId) return
+                  setReportRunning(true)
+                  try {
+                    let done = false
+                    while (!done) {
+                      const proc = await fetch(`/api/zzap/report/process?id=${jobId}&batch=5`, { method: 'POST' })
+                      const j = await proc.json()
+                      if (!proc.ok || j?.ok === false) throw new Error(j?.error || `Ошибка процесса`)
+                      // Poll status to get current numbers and link
+                      const st = await fetch(`/api/zzap/report/status?id=${jobId}`)
+                      const s = await st.json()
+                      if (s?.ok) {
+                        setJobStatus(s.status)
+                        setJobProcessed(s.processed || 0)
+                        setJobTotal(s.total || 0)
+                        if (s.resultFile) setJobResultUrl(s.resultFile)
+                        if (s.status === 'done') { done = true; break }
+                      }
+                      await new Promise(r => setTimeout(r, 800))
+                    }
+                  } catch (e: any) {
+                    setJobError(e?.message || String(e))
+                  } finally {
+                    setReportRunning(false)
+                    loadHistory()
+                  }
+                }}
+              >
+                Запустить обработку
+              </Button>
+            )}
+          </div>
+          {(jobId || jobError) && (
+            <div className="text-sm">
+              {jobError && <div className="text-red-600">Ошибка: {jobError}</div>}
+              {jobId && (
+                <div className="space-y-1">
+                  <div>Задача: <span className="font-mono">{jobId}</span></div>
+                  <div>Статус: {jobStatus || '—'}; Прогресс: {jobProcessed}/{jobTotal}</div>
+                  {jobResultUrl && (
+                    <div>
+                      <a className="text-blue-600 underline" href={jobResultUrl} target="_blank" rel="noreferrer">Скачать результат (XLSX)</a>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card className="max-w-3xl">
         <CardHeader>
           <CardTitle>ZZAP: скриншот графика статистики</CardTitle>
