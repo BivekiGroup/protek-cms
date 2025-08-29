@@ -1,9 +1,11 @@
 "use client"
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Copy, Terminal, Shield, Network, CheckCircle, TriangleAlert } from 'lucide-react'
 
 function CodeBlock({ title, code }: { title?: string; code: string }) {
@@ -28,18 +30,20 @@ function CodeBlock({ title, code }: { title?: string; code: string }) {
   )
 }
 
+const CURL_BASE = typeof window === 'undefined' ? 'http://localhost:3000' : ''
+
 export default function OneCCatalogDocs() {
-  const curlHealth = `curl -sS "${typeof window === 'undefined' ? 'http://localhost:3000' : ''}/api/1c/catalog/health?debug=1" \\
+  const curlHealth = `curl -sS "${CURL_BASE}/api/1c/catalog/health?debug=1" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" | jq`
 
-  const curlUpsert = `curl -X POST "${typeof window === 'undefined' ? 'http://localhost:3000' : ''}/api/1c/catalog/products" \\
+  const curlUpsert = `curl -X POST "${CURL_BASE}/api/1c/catalog/products" \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" \\
   -H "Idempotency-Key: demo-001" \\
   -d '{
   "items": [
     {
-      "externalId": "941024_dayco", // если не передать — сформируется автоматически: article+"_"+brand (в нижнем регистре)
+      "externalId": "941024_dayco",
       "article": "941024",
       "brand": "DAYCO",
       "name": "Тестовый товар",
@@ -54,22 +58,22 @@ export default function OneCCatalogDocs() {
 }'`
 
   const itemSchema = `{
-  externalId?: string,       // если не передан — будет article+"_"+brand (нижний регистр)
-  article: string,           // очистка пробелов/дефисов, UPPERCASE
-  brand: string,             // UPPERCASE
+  externalId?: string,
+  article: string,
+  brand: string,
   name: string,
   description?: string,
-  price?: number,            // продажная цена (retail)
+  price?: number,
   stock?: number,
   weight?: number,
   dimensions?: string,
-  images?: string[],         // URL
-  category_code: string,     // ОБЯЗАТЕЛЬНО: код категории из справочника
+  images?: string[],
+  category_code: string,
   characteristics?: { [key: string]: string },
   isVisible?: boolean
 }`
 
-  const curlCategories = `curl -X POST "${typeof window === 'undefined' ? 'http://localhost:3000' : ''}/api/1c/catalog/categories" \\
+  const curlCategories = `curl -X POST "${CURL_BASE}/api/1c/catalog/categories" \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" \\
   -d '{
@@ -79,7 +83,7 @@ export default function OneCCatalogDocs() {
   "category_head_name": "ГРМ, рем. комплекты и тд"
 }'`
 
-  const curlPrices = `curl -X POST "${typeof window === 'undefined' ? 'http://localhost:3000' : ''}/api/1c/catalog/prices" \\
+  const curlPrices = `curl -X POST "${CURL_BASE}/api/1c/catalog/prices" \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" \\
   -d '{
@@ -88,7 +92,7 @@ export default function OneCCatalogDocs() {
   ]
 }'`
 
-  const curlStocks = `curl -X POST "${typeof window === 'undefined' ? 'http://localhost:3000' : ''}/api/1c/catalog/stocks" \\
+  const curlStocks = `curl -X POST "${CURL_BASE}/api/1c/catalog/stocks" \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" \\
   -d '{
@@ -97,11 +101,137 @@ export default function OneCCatalogDocs() {
   ]
 }'`
 
-  const curlVisits = `curl -sS "${typeof window === 'undefined' ? 'http://localhost:3000' : ''}/api/1c/catalog/visits?limit=100" \\
+  const curlVisits = `curl -sS "${CURL_BASE}/api/1c/catalog/visits?limit=100" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" | jq`
 
-  const curlClients = `curl -sS "${typeof window === 'undefined' ? 'http://localhost:3000' : ''}/api/1c/catalog/clients" \\
+  const curlClients = `curl -sS "${CURL_BASE}/api/1c/catalog/clients" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" | jq`
+
+  // Live Tester state
+  type Endpoint = 'health' | 'products' | 'categories' | 'prices' | 'stocks' | 'visits' | 'clients'
+  const [endpoint, setEndpoint] = useState<Endpoint>('health')
+  const [apiKey, setApiKey] = useState('')
+  const [idemKey, setIdemKey] = useState('demo-001')
+  const [body, setBody] = useState('')
+  const [resp, setResp] = useState<string>('')
+  const [status, setStatus] = useState<string>('')
+  const [loading, setLoading] = useState(false)
+  const [multiCount, setMultiCount] = useState<number>(3)
+
+  const method: 'GET' | 'POST' = useMemo(() => (
+    endpoint === 'health' || endpoint === 'visits' || endpoint === 'clients' ? 'GET' : 'POST'
+  ), [endpoint])
+
+  const path = useMemo(() => {
+    switch (endpoint) {
+      case 'health': return '/api/1c/catalog/health?debug=1'
+      case 'products': return '/api/1c/catalog/products'
+      case 'categories': return '/api/1c/catalog/categories'
+      case 'prices': return '/api/1c/catalog/prices'
+      case 'stocks': return '/api/1c/catalog/stocks'
+      case 'visits': return '/api/1c/catalog/visits?limit=50'
+      case 'clients': return '/api/1c/catalog/clients'
+    }
+  }, [endpoint])
+
+  const exampleBody = useMemo(() => {
+    switch (endpoint) {
+      case 'products':
+        return JSON.stringify({
+          items: [
+            {
+              externalId: '941024_dayco',
+              article: '941024',
+              brand: 'DAYCO',
+              name: 'Тестовый товар',
+              price: 1290,
+              stock: 15,
+              images: ['https://example.com/img1.jpg'],
+              category_code: '001254',
+              characteristics: { 'Длина': '500 мм' },
+              isVisible: true,
+            },
+          ],
+        }, null, 2)
+      case 'categories':
+        return JSON.stringify({
+          category_code: '001254',
+          category_name: 'Ремни ГРМ',
+          category_head_code: '151554',
+          category_head_name: 'ГРМ, рем. комплекты и тд',
+        }, null, 2)
+      case 'prices':
+        return JSON.stringify({
+          items: [ { sku: '941024', price: '1290,00' } ],
+        }, null, 2)
+      case 'stocks':
+        return JSON.stringify({
+          items: [ { sku: '941024', stock: 15 } ],
+        }, null, 2)
+      default:
+        return ''
+    }
+  }, [endpoint])
+
+  // keep body in sync when endpoint changes (only for POST)
+  const resetBodyForEndpoint = () => {
+    if (method === 'POST') setBody(exampleBody); else setBody('')
+  }
+
+  // initialize on mount
+  useState(() => { resetBodyForEndpoint() })
+
+  const send = async () => {
+    setLoading(true)
+    setResp('')
+    setStatus('')
+    try {
+      const headers: Record<string, string> = { 'X-API-Key': apiKey }
+      if (method === 'POST') headers['Content-Type'] = 'application/json'
+      if (method === 'POST' && endpoint === 'products' && idemKey) headers['Idempotency-Key'] = idemKey
+      const res = await fetch(path, {
+        method,
+        headers,
+        body: method === 'POST' ? body : undefined,
+      })
+      setStatus(`${res.status} ${res.statusText}`)
+      const text = await res.text()
+      // try to pretty print json
+      try {
+        const obj = JSON.parse(text)
+        setResp(JSON.stringify(obj, null, 2))
+      } catch {
+        setResp(text)
+      }
+    } catch (e: any) {
+      setStatus('')
+      setResp(String(e?.message || e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const generateSamples = (n: number) => {
+    if (endpoint !== 'products') return
+    const safeN = Math.max(1, Math.min(50, Math.floor(n || 1)))
+    const items = Array.from({ length: safeN }).map((_, i) => {
+      const suffix = String.fromCharCode(65 + (i % 26)) // A, B, C ...
+      const base = 941024 + i
+      return {
+        externalId: `${base}${suffix}_dayco`,
+        article: `${base}${suffix}`,
+        brand: 'DAYCO',
+        name: `Тестовый товар ${i + 1}`,
+        price: 1290 + i,
+        stock: 10 + i,
+        images: ['https://example.com/img1.jpg'],
+        category_code: '001254',
+        characteristics: { 'Длина': `${500 + i} мм` },
+        isVisible: true,
+      }
+    })
+    setBody(JSON.stringify({ items }, null, 2))
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -198,7 +328,7 @@ export default function OneCCatalogDocs() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Отправка остатков товаров</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Отправка остатков</CardTitle>
         </CardHeader>
         <CardContent>
           <CodeBlock title="curl" code={curlStocks} />
@@ -207,7 +337,7 @@ export default function OneCCatalogDocs() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Получение истории посещений</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> История посещений (demo)</CardTitle>
         </CardHeader>
         <CardContent>
           <CodeBlock title="curl" code={curlVisits} />
@@ -216,10 +346,88 @@ export default function OneCCatalogDocs() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Получение новых контрагентов</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Контрагенты (юр. лица)</CardTitle>
         </CardHeader>
         <CardContent>
           <CodeBlock title="curl" code={curlClients} />
+        </CardContent>
+      </Card>
+
+      {/* Live tester */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Live-тестер (отправить запрос из админки)</CardTitle>
+          <CardDescription>Введи <span className="font-mono">X-API-Key</span>, выбери эндпоинт и нажми «Отправить».</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid md:grid-cols-4 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs text-gray-600">X-API-Key</label>
+              <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Вставь ONEC_API_TOKEN" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600">Endpoint</label>
+              <select
+                className="w-full h-10 border rounded-md px-3 bg-white"
+                value={endpoint}
+                onChange={(e) => { setEndpoint(e.target.value as any); setTimeout(resetBodyForEndpoint, 0) }}
+              >
+                <option value="health">GET /api/1c/catalog/health</option>
+                <option value="products">POST /api/1c/catalog/products</option>
+                <option value="categories">POST /api/1c/catalog/categories</option>
+                <option value="prices">POST /api/1c/catalog/prices</option>
+                <option value="stocks">POST /api/1c/catalog/stocks</option>
+                <option value="visits">GET /api/1c/catalog/visits</option>
+                <option value="clients">GET /api/1c/catalog/clients</option>
+              </select>
+            </div>
+            {endpoint === 'products' && (
+              <div>
+                <label className="text-xs text-gray-600">Idempotency-Key (опц.)</label>
+                <Input value={idemKey} onChange={(e) => setIdemKey(e.target.value)} placeholder="например demo-001" />
+              </div>
+            )}
+          </div>
+
+          {method === 'POST' && (
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-gray-600">Тело запроса (JSON)</label>
+                <div className="flex items-center gap-2">
+                  {endpoint === 'products' && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-600">Количество</label>
+                      <Input
+                        type="number"
+                        className="h-8 w-16"
+                        value={multiCount}
+                        min={1}
+                        max={50}
+                        onChange={(e) => setMultiCount(Number(e.target.value))}
+                      />
+                      <Button variant="outline" size="sm" onClick={() => generateSamples(multiCount)}>Сгенерировать N</Button>
+                    </div>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => setBody(exampleBody)}>Заполнить примером</Button>
+                </div>
+              </div>
+              <Textarea className="mt-1 font-mono text-sm min-h-[180px]" value={body} onChange={(e) => setBody(e.target.value)} />
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <Button onClick={send} disabled={loading}>
+              {loading ? 'Отправка…' : 'Отправить'}
+            </Button>
+            <div className="text-sm text-gray-600">{method} <span className="font-mono">{path}</span></div>
+            {status && <div className="text-sm text-gray-900">Статус: <span className="font-mono">{status}</span></div>}
+          </div>
+
+          {resp && (
+            <div className="border rounded-md bg-gray-50">
+              <pre className="p-3 overflow-x-auto text-sm"><code>{resp}</code></pre>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

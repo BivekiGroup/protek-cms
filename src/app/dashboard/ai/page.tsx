@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useChat } from 'ai/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,10 +9,9 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Bot, Send, User } from 'lucide-react';
 
 export default function AIChat() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
-    api: '/api/ai/chat',
-  });
-  
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,6 +19,67 @@ export default function AIChat() {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const content = input.trim();
+    if (!content || isLoading) return;
+
+    const userMsg = { role: 'user' as const, content };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
+    setInput('');
+    setIsLoading(true);
+
+    // Create placeholder assistant message
+    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/plain' },
+        body: JSON.stringify({ messages: nextMessages }),
+      });
+
+      if (!res.body) {
+        const text = await res.text();
+        setMessages(prev => {
+          const updated = [...prev];
+          // update last assistant message
+          const idx = updated.findIndex((m, i) => i === updated.length - 1 && m.role === 'assistant');
+          if (idx >= 0) updated[idx] = { role: 'assistant', content: text };
+          return updated;
+        });
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let assistantText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        assistantText += decoder.decode(value, { stream: true });
+        setMessages(prev => {
+          const updated = [...prev];
+          const idx = updated.findIndex((m, i) => i === updated.length - 1 && m.role === 'assistant');
+          if (idx >= 0) updated[idx] = { role: 'assistant', content: assistantText };
+          return updated;
+        });
+      }
+    } catch (err) {
+      setMessages(prev => {
+        const updated = [...prev];
+        const idx = updated.findIndex((m, i) => i === updated.length - 1 && m.role === 'assistant');
+        const errorText = 'Ошибка запроса к ИИ провайдеру';
+        if (idx >= 0) updated[idx] = { role: 'assistant', content: errorText };
+        return updated;
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   return (
     <div className="container max-w-4xl mx-auto py-6">
@@ -109,7 +168,7 @@ export default function AIChat() {
           <form onSubmit={handleSubmit} className="flex gap-2 w-full">
             <Input
               value={input}
-              onChange={handleInputChange}
+              onChange={(e) => setInput(e.target.value)}
               placeholder="Введите ваш вопрос..."
               disabled={isLoading}
               className="flex-1"
