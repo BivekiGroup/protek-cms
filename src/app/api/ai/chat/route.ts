@@ -1,6 +1,6 @@
 export async function POST(req: Request) {
   try {
-    const { messages } = await req.json();
+    const { messages, model: modelOverride } = await req.json();
     // Minimal validation: require an array of role/content pairs
     if (!Array.isArray(messages)) {
       return new Response(
@@ -18,7 +18,9 @@ export async function POST(req: Request) {
     }
 
     const baseURL = process.env.POLZA_AI_BASE_URL || 'https://api.polza.ai/api/v1'
-    const model = process.env.POLZA_AI_MODEL || 'openai/gpt-4o'
+    const model = (typeof modelOverride === 'string' && modelOverride.trim())
+      ? modelOverride.trim()
+      : (process.env.POLZA_AI_MODEL || 'openai/gpt-4o')
 
     const response = await fetch(`${baseURL}/chat/completions`, {
       method: 'POST',
