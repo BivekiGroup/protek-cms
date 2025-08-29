@@ -134,10 +134,10 @@ export default function AIChat() {
   }
 
   return (
-    <div className="px-4 py-6">
-      <div className="grid grid-cols-12 gap-4 h-[calc(100vh-3rem)]">
+    <div className="container mx-auto max-w-6xl py-6">
+      <div className="flex gap-4 h-[calc(100vh-8rem)]">
         {/* Sidebar */}
-        <div className="col-span-12 md:col-span-3">
+        <div className="w-72 flex-none">
           <Card className="h-full flex flex-col">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">История чатов</CardTitle>
@@ -169,7 +169,7 @@ export default function AIChat() {
         </div>
 
         {/* Chat pane */}
-        <div className="col-span-12 md:col-span-9">
+        <div className="flex-1 min-w-0">
           <Card className="h-full flex flex-col">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
