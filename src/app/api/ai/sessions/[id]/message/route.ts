@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { randomUUID } from 'crypto'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
-  const { id } = ctx.params
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params
   const { content, model } = await req.json().catch(() => ({}))
   if (!content || typeof content !== 'string') {
     return new Response(JSON.stringify({ error: 'content is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
@@ -19,6 +20,13 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
       const msgs = await anyPrisma.chatMessage.findMany({ where: { sessionId: id }, orderBy: { createdAt: 'asc' } })
       history = msgs.map((m: any) => ({ role: m.role, content: m.content }))
     } else {
+      await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "chat_messages" (
+        id text primary key,
+        "sessionId" text not null,
+        role text not null,
+        content text not null,
+        "createdAt" timestamptz not null default now()
+      )`)
       const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT role, content FROM "chat_messages" WHERE "sessionId"='${id.replace(/'/g, "''")}' ORDER BY "createdAt" ASC`)
       history = rows.map((m) => ({ role: m.role, content: m.content }))
     }
@@ -33,7 +41,8 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
     if (anyPrisma.chatMessage?.create) {
       await anyPrisma.chatMessage.create({ data: { sessionId: id, role: 'user', content } })
     } else {
-      await prisma.$executeRawUnsafe(`INSERT INTO "chat_messages" (id, "sessionId", role, content) VALUES (gen_random_uuid()::text, '${id.replace(/'/g, "''")}', 'user', '${content.replace(/'/g, "''")}')`)
+      const uid = randomUUID()
+      await prisma.$executeRawUnsafe(`INSERT INTO "chat_messages" (id, "sessionId", role, content) VALUES ('${uid}', '${id.replace(/'/g, "''")}', 'user', '${content.replace(/'/g, "''")}')`)
     }
   } catch {}
 
@@ -79,7 +88,8 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
         await anyPrisma.chatMessage.create({ data: { sessionId: id, role: 'assistant', content: assistantText } })
         await anyPrisma.chatSession.update({ where: { id }, data: { updatedAt: new Date() } })
       } else {
-        await prisma.$executeRawUnsafe(`INSERT INTO "chat_messages" (id, "sessionId", role, content) VALUES (gen_random_uuid()::text, '${id.replace(/'/g, "''")}', 'assistant', '${assistantText.replace(/'/g, "''")}')`)
+        const uid2 = randomUUID()
+        await prisma.$executeRawUnsafe(`INSERT INTO "chat_messages" (id, "sessionId", role, content) VALUES ('${uid2}', '${id.replace(/'/g, "''")}', 'assistant', '${assistantText.replace(/'/g, "''")}')`)
         await prisma.$executeRawUnsafe(`UPDATE "chat_sessions" SET "updatedAt"=now() WHERE id='${id.replace(/'/g, "''")}'`)
       }
     } catch {}
@@ -87,4 +97,3 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
 
   return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' } })
 }
-
