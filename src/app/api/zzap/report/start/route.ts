@@ -46,10 +46,12 @@ export async function POST(req: NextRequest) {
       if (!table || table.length < 2) throw new Error('Пустой файл')
       const headers = (table[0] || []).map((h) => String(h || '').trim().toLowerCase())
       // allow variations
-      const artIdx = headers.findIndex((h) => ['артикул', 'article', 'sku'].includes(h))
-      const brandIdx = headers.findIndex((h) => ['бренд', 'brand', 'марка'].includes(h))
+      const artAliases = ['артикул','article','sku','номер','код','каталожный номер','oem','арт','part number','partnumber','номер детали']
+      const brandAliases = ['бренд','brand','марка','производитель','производитель/бренд','фирма','vendor','manufacturer','maker']
+      const artIdx = headers.findIndex((h) => artAliases.includes(h))
+      const brandIdx = headers.findIndex((h) => brandAliases.includes(h))
       if (artIdx < 0 || brandIdx < 0) {
-        return new Response(JSON.stringify({ ok: false, error: 'Файл должен содержать столбцы: Артикул, Бренд' }), { status: 422, headers: { 'content-type': 'application/json; charset=utf-8' } })
+        return new Response(JSON.stringify({ ok: false, error: 'Файл должен содержать столбцы: Артикул, Бренд (или эквиваленты: Номер/Производитель)' }), { status: 422, headers: { 'content-type': 'application/json; charset=utf-8' } })
       }
       const dataRows = table.slice(1).filter((r) => r && r.some((c) => String(c || '').trim()))
       rows = dataRows.map((r) => ({ article: normalizeArticle(String(r[artIdx] || '')), brand: normalizeBrand(String(r[brandIdx] || '')) }))
@@ -59,10 +61,12 @@ export async function POST(req: NextRequest) {
       const lines = text.split(/\r?\n/).filter((l) => l.trim())
       if (lines.length < 2) throw e
       const headers = lines[0].split(',').map((h) => h.replace(/"/g, '').trim().toLowerCase())
-      const artIdx = headers.findIndex((h) => ['артикул', 'article', 'sku'].includes(h))
-      const brandIdx = headers.findIndex((h) => ['бренд', 'brand', 'марка'].includes(h))
+      const artAliases = ['артикул','article','sku','номер','код','каталожный номер','oem','арт','part number','partnumber','номер детали']
+      const brandAliases = ['бренд','brand','марка','производитель','производитель/бренд','фирма','vendor','manufacturer','maker']
+      const artIdx = headers.findIndex((h) => artAliases.includes(h))
+      const brandIdx = headers.findIndex((h) => brandAliases.includes(h))
       if (artIdx < 0 || brandIdx < 0) {
-        return new Response(JSON.stringify({ ok: false, error: 'CSV: нужны столбцы Артикул, Бренд' }), { status: 422, headers: { 'content-type': 'application/json; charset=utf-8' } })
+        return new Response(JSON.stringify({ ok: false, error: 'CSV: нужны столбцы Артикул, Бренд (или Номер/Производитель)' }), { status: 422, headers: { 'content-type': 'application/json; charset=utf-8' } })
       }
       rows = lines.slice(1).map((line) => {
         const cols = line.split(',').map((v) => v.replace(/"/g, '').trim())
@@ -94,4 +98,3 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ ok: false, error: e?.message || String(e) }), { status: 500, headers: { 'content-type': 'application/json; charset=utf-8' } })
   }
 }
-
