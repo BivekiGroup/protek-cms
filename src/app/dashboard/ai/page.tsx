@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Bot, Send, User } from 'lucide-react';
+import ModelPicker from '@/components/ai/ModelPicker'
 
 export default function AIChat() {
   const [sessionId, setSessionId] = useState<string>('');
@@ -180,18 +181,7 @@ export default function AIChat() {
             <p className="text-sm text-muted-foreground">Задайте любой вопрос искусственному интеллекту</p>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Модель:</span>
-              <select
-                className="h-9 rounded-md border px-2 text-sm bg-background"
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-              >
-                {selectedModel && !models.includes(selectedModel) && (
-                  <option value={selectedModel}>{selectedModel}</option>
-                )}
-                {models.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
+              <ModelPicker value={selectedModel} onChange={(id) => setSelectedModel(id)} />
             </div>
           </div>
         </CardHeader>
