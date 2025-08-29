@@ -90,7 +90,7 @@ export default function ModelPicker({ value, onChange }: { value?: string; onCha
       }
       return true
     }).slice(0, 400)
-  }, [models, search, providers, providerList, filterVision, filterTools, filterReasoning, filterLongCtx])
+  }, [models, search, provider, filterVision, filterTools, filterReasoning, filterLongCtx])
 
   const pick = (id: string) => {
     onChange(id)
