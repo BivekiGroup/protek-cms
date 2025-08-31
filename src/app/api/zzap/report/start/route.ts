@@ -83,50 +83,32 @@ export async function POST(req: NextRequest) {
     // limit
     if (rows.length > 500) rows = rows.slice(0, 500)
 
-    // Persist job (Prisma model may be unavailable until migration)
-    try {
-      const anyPrisma: any = prisma as any
-      if (anyPrisma.zzapReportJob?.create) {
-        const job = await anyPrisma.zzapReportJob.create({
-          data: {
-            status: 'pending',
-            periodFrom: from,
-            periodTo: to,
-            total: rows.length,
-            processed: 0,
-            inputRows: rows,
-          }
-        })
-        return new Response(JSON.stringify({ ok: true, jobId: job.id, total: job.total }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
+    // Persist job via Prisma only
+    const job = await (prisma as any).zzapReportJob.create({
+      data: {
+        status: 'pending',
+        periodFrom: from,
+        periodTo: to,
+        total: rows.length,
+        processed: 0,
+        inputRows: rows,
       }
-    } catch {}
-
-    // Fallback: raw SQL (create table if not exists)
-    const id = randomUUID()
-    const esc = (v: any) => v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`
-    const jsonb = (obj: any) => obj == null ? 'NULL' : `'${JSON.stringify(obj).replace(/'/g, "''")}'::jsonb`
-    const createSql = `
-      CREATE TABLE IF NOT EXISTS "zzap_report_jobs" (
-        "id" text PRIMARY KEY,
-        "status" text NOT NULL DEFAULT 'pending',
-        "periodFrom" timestamp with time zone NOT NULL,
-        "periodTo" timestamp with time zone NOT NULL,
-        "total" integer NOT NULL DEFAULT 0,
-        "processed" integer NOT NULL DEFAULT 0,
-        "inputRows" jsonb NOT NULL,
-        "results" jsonb,
-        "resultFile" text,
-        "error" text,
-        "createdAt" timestamp with time zone NOT NULL DEFAULT now(),
-        "updatedAt" timestamp with time zone NOT NULL DEFAULT now()
-      );
-    `
-    await prisma.$executeRawUnsafe(createSql)
-    const insertSql = `INSERT INTO "zzap_report_jobs"
-      ("id","status","periodFrom","periodTo","total","processed","inputRows")
-      VALUES (${esc(id)}, 'pending', ${esc(from.toISOString())}::timestamptz, ${esc(to.toISOString())}::timestamptz, ${rows.length}, 0, ${jsonb(rows)})`
-    await prisma.$executeRawUnsafe(insertSql)
-    return new Response(JSON.stringify({ ok: true, jobId: id, total: rows.length }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
+    })
+    // Fire-and-forget background processing
+    ;(async () => {
+      const origin = (() => { try { const u = new URL(req.url); return `${u.protocol}//${u.host}` } catch { return '' } })()
+      try {
+        let done = false
+        while (!done) {
+          const proc = await fetch(`${origin}/api/zzap/report/process?id=${job.id}&batch=5`, { method: 'POST' }).catch(() => null as any)
+          if (!proc) break
+          const st = await fetch(`${origin}/api/zzap/report/status?id=${job.id}`).then(r => r.json()).catch(() => null as any)
+          if (st?.status === 'done' || st?.status === 'error' || st?.status === 'failed' || st?.status === 'canceled') done = true
+          if (!done) await new Promise(r => setTimeout(r, 800))
+        }
+      } catch {}
+    })()
+    return new Response(JSON.stringify({ ok: true, jobId: job.id, total: job.total, background: true }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
   } catch (e: any) {
     return new Response(JSON.stringify({ ok: false, error: e?.message || String(e) }), { status: 500, headers: { 'content-type': 'application/json; charset=utf-8' } })
   }

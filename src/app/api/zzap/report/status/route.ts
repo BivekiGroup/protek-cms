@@ -7,19 +7,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id') || ''
   if (!id) return new Response(JSON.stringify({ ok: false, error: 'id required' }), { status: 400, headers: { 'content-type': 'application/json; charset=utf-8' } })
-  // Try Prisma model first
-  try {
-    const anyPrisma: any = prisma as any
-    if (anyPrisma.zzapReportJob?.findUnique) {
-      const job = await anyPrisma.zzapReportJob.findUnique({ where: { id } })
-      if (!job) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8' } })
-      return new Response(JSON.stringify({ ok: true, status: job.status, processed: job.processed, total: job.total, resultFile: job.resultFile, error: job.error }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
-    }
-  } catch {}
-
-  // Fallback: raw SQL
-  const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "zzap_report_jobs" WHERE id = '${id.replace(/'/g, "''")}' LIMIT 1`)
-  const job = rows?.[0]
+  const job = await (prisma as any).zzapReportJob.findUnique({ where: { id } })
   if (!job) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8' } })
   return new Response(JSON.stringify({ ok: true, status: job.status, processed: job.processed, total: job.total, resultFile: job.resultFile, error: job.error }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
 }

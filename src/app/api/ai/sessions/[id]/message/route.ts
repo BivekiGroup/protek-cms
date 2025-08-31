@@ -65,35 +65,34 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        assistantText += chunk
-        controller.enqueue(encoder.encode(chunk))
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          const chunk = decoder.decode(value, { stream: true })
+          assistantText += chunk
+          controller.enqueue(encoder.encode(chunk))
+        }
+      } finally {
+        controller.close()
+        // Persist assistant message after stream finishes
+        try {
+          const anyPrisma: any = prisma as any
+          if (assistantText) {
+            if (anyPrisma.chatMessage?.create && anyPrisma.chatSession?.update) {
+              await anyPrisma.chatMessage.create({ data: { sessionId: id, role: 'assistant', content: assistantText } })
+              await anyPrisma.chatSession.update({ where: { id }, data: { updatedAt: new Date(), ...(model ? { model } : {}) } })
+            } else {
+              const uid2 = randomUUID()
+              await prisma.$executeRawUnsafe(`INSERT INTO "chat_messages" (id, "sessionId", role, content) VALUES ('${uid2}', '${id.replace(/'/g, "''")}', 'assistant', '${assistantText.replace(/'/g, "''")}')`)
+              await prisma.$executeRawUnsafe(`UPDATE "chat_sessions" SET "updatedAt"=now()${model ? `, model='${model.replace(/'/g, "''")}'` : ''} WHERE id='${id.replace(/'/g, "''")}'`)
+            }
+          }
+        } catch {}
       }
-      controller.close()
     },
     async cancel() { try { await reader.cancel() } catch {} }
   })
-
-  // After stream finishes, persist assistant message and update session updatedAt
-  stream.getReader().read().catch(() => {})
-  ;(async () => {
-    try {
-      // Wait a tick to ensure assistantText has full content
-      await new Promise(r => setTimeout(r, 10))
-      const anyPrisma: any = prisma as any
-      if (anyPrisma.chatMessage?.create && anyPrisma.chatSession?.update) {
-        await anyPrisma.chatMessage.create({ data: { sessionId: id, role: 'assistant', content: assistantText } })
-        await anyPrisma.chatSession.update({ where: { id }, data: { updatedAt: new Date() } })
-      } else {
-        const uid2 = randomUUID()
-        await prisma.$executeRawUnsafe(`INSERT INTO "chat_messages" (id, "sessionId", role, content) VALUES ('${uid2}', '${id.replace(/'/g, "''")}', 'assistant', '${assistantText.replace(/'/g, "''")}')`)
-        await prisma.$executeRawUnsafe(`UPDATE "chat_sessions" SET "updatedAt"=now() WHERE id='${id.replace(/'/g, "''")}'`)
-      }
-    } catch {}
-  })()
 
   return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' } })
 }

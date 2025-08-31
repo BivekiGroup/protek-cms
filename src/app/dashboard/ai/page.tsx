@@ -7,12 +7,14 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Bot, Send, User } from 'lucide-react';
+import { Bot, Send, User, Pencil, Trash2 } from 'lucide-react';
 import ModelPicker from '@/components/ai/ModelPicker'
 
 export default function AIChat() {
   const [sessionId, setSessionId] = useState<string>('');
   const [sessions, setSessions] = useState<{ id: string; title: string; model: string; createdAt: string; updatedAt: string }[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState<string>('');
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -131,6 +133,8 @@ export default function AIChat() {
       });
     } finally {
       setIsLoading(false);
+      // refresh sessions to update last-used model and ordering
+      refreshSessions()
     }
   }
 
@@ -154,12 +158,55 @@ export default function AIChat() {
               <Separator />
               <ScrollArea className="h-full">
                 <div className="p-2 space-y-1">
-                  {sessions.map(s => (
-                    <button key={s.id} className={`w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted ${s.id === sessionId ? 'bg-muted' : ''}`} onClick={() => selectSession(s.id)}>
-                      <div className="truncate font-medium">{s.title || 'Диалог'}</div>
-                      <div className="text-xs text-muted-foreground truncate">{s.model}</div>
-                    </button>
-                  ))}
+                  {sessions.map(s => {
+                    const isActive = s.id === sessionId
+                    const isEditing = editingId === s.id
+                    return (
+                      <div key={s.id} className={`group w-full px-3 py-2 rounded-md text-sm hover:bg-muted ${isActive ? 'bg-muted' : ''}`}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          {isEditing ? (
+                            <input
+                              autoFocus
+                              className="w-full bg-background border rounded px-2 py-1 text-sm"
+                              value={editingTitle}
+                              onChange={(e) => setEditingTitle(e.target.value)}
+                              onBlur={async () => {
+                                const title = editingTitle.trim() || 'Диалог'
+                                setEditingId(null)
+                                setEditingTitle('')
+                                await fetch(`/api/ai/sessions/${s.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) })
+                                refreshSessions()
+                              }}
+                              onKeyDown={async (e) => {
+                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                                if (e.key === 'Escape') { setEditingId(null); setEditingTitle('') }
+                              }}
+                            />
+                          ) : (
+                            <button className="flex-1 min-w-0 text-left truncate font-medium" onClick={() => selectSession(s.id)} title={s.title || 'Диалог'}>
+                              {s.title || 'Диалог'}
+                            </button>
+                          )}
+                          {!isEditing && (
+                            <div className="flex flex-none items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                              <button title="Переименовать" onClick={() => { setEditingId(s.id); setEditingTitle(s.title || '') }} className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-background/50">
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button title="Удалить" onClick={async () => {
+                                if (!confirm('Удалить диалог?')) return
+                                await fetch(`/api/ai/sessions/${s.id}`, { method: 'DELETE' })
+                                if (sessionId === s.id) { setSessionId(''); setMessages([]) }
+                                refreshSessions()
+                              }} className="text-muted-foreground hover:text-destructive p-1 rounded hover:bg-background/50">
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {/* Убрали вывод модели у чата по требованию */}
+                      </div>
+                    )
+                  })}
                   {sessions.length === 0 && (
                     <div className="p-3 text-sm text-muted-foreground">Нет диалогов</div>
                   )}
@@ -178,9 +225,9 @@ export default function AIChat() {
             Чат с ИИ
           </CardTitle>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-muted-foreground">Задайте любой вопрос искусственному интеллекту</p>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Модель:</span>
+            <p className="text-sm text-muted-foreground min-w-0">Задайте любой вопрос искусственному интеллекту</p>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Модель:</span>
               <ModelPicker value={selectedModel} onChange={(id) => setSelectedModel(id)} />
             </div>
           </div>

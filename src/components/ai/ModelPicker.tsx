@@ -112,11 +112,27 @@ export default function ModelPicker({ value, onChange }: { value?: string; onCha
 
   const current = models.find((m) => m.id === value)
   const currentLabel = current?.name || value || 'Выбрать модель'
+  const currentProvider = useMemo(() => (value ? String(value).split('/')[0] : undefined), [value])
+  const displayLabel = useMemo(() => {
+    const raw = (value || '') as string
+    const tail = raw.includes('/') ? raw.split('/').slice(1).join('/') : raw
+    const s = (current?.name || tail || '').trim()
+    if (!s) return 'Выбрать модель'
+    return s.length > 28 ? s.slice(0, 27) + '…' : s
+  }, [value, current])
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">{currentLabel}</Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="inline-flex items-center gap-2 max-w-[16rem] sm:max-w-[22rem] overflow-hidden"
+          title={currentLabel}
+        >
+          {currentProvider && <Badge variant="outline" className="text-xs flex-none">{currentProvider}</Badge>}
+          <span className="truncate text-left">{displayLabel}</span>
+        </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl p-0">
         <DialogHeader>
@@ -168,26 +184,22 @@ export default function ModelPicker({ value, onChange }: { value?: string; onCha
                 {filtered.map((m) => {
                   const prov = m.id.split('/')[0]
                   const isFav = favorites.includes(m.id)
+                  const isSelected = value === m.id
                   return (
-                    <div key={m.id} className="border rounded-md p-3 hover:bg-muted/50 flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <button className="text-left font-medium truncate" title={m.id} onClick={() => pick(m.id)}>{m.name || m.id}</button>
-                          <Badge variant="outline" className="text-xs">{prov}</Badge>
-                          {m.architecture?.input_modalities?.includes('image') && <Badge variant="secondary" className="text-xs">vision</Badge>}
-                          {m.supported_parameters?.includes('tools') && <Badge variant="secondary" className="text-xs">tools</Badge>}
-                          {(m.supported_parameters?.includes('reasoning') || m.supported_parameters?.includes('include_reasoning')) && <Badge variant="secondary" className="text-xs">reasoning</Badge>}
+                    <div key={m.id} className={`border rounded-md p-3 hover:bg-muted/60 flex items-center justify-between gap-3 ${isSelected ? 'bg-muted/60 border-primary/40' : ''}`}>
+                      <button className="min-w-0 text-left flex-1" title={m.id} onClick={() => pick(m.id)}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Badge variant="outline" className="text-xs flex-none">{prov}</Badge>
+                          <span className="font-medium truncate">{m.name || m.id}</span>
                         </div>
                         <div className="text-xs text-muted-foreground mt-1 truncate">{m.id}</div>
-                        <div className="text-xs mt-1 flex items-center gap-3">
-                          {!!m.context_length && <span>ctx: {m.context_length.toLocaleString('ru-RU')}</span>}
-                          {!!m.pricing?.prompt && <span>in: {m.pricing.prompt}</span>}
-                          {!!m.pricing?.completion && <span>out: {m.pricing.completion}</span>}
-                        </div>
-                      </div>
-                      <button className={`p-1 rounded hover:bg-muted ${isFav ? 'text-yellow-500' : 'text-muted-foreground'}`} onClick={() => toggleFavorite(m.id)} title={isFav ? 'Убрать из избранного' : 'В избранное'}>
-                        <Star className="h-4 w-4" fill={isFav ? 'currentColor' : 'none'} />
                       </button>
+                      <div className="flex items-center gap-2 flex-none">
+                        {isSelected && <span className="text-xs text-primary">выбрано</span>}
+                        <button className={`p-1 rounded hover:bg-muted ${isFav ? 'text-yellow-500' : 'text-muted-foreground'}`} onClick={() => toggleFavorite(m.id)} title={isFav ? 'Убрать из избранного' : 'В избранное'}>
+                          <Star className="h-4 w-4" fill={isFav ? 'currentColor' : 'none'} />
+                        </button>
+                      </div>
                     </div>
                   )
                 })}

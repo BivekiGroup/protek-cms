@@ -17,6 +17,7 @@ import {
   Star,
   Image,
   BarChart3,
+  Mail,
   Shield,
   Bot,
   Store,
@@ -63,6 +64,7 @@ const navigationGroups: NavGroup[] = [
     title: 'Инструменты',
     items: [
       { title: 'Чат с ИИ', href: '/dashboard/ai', icon: Bot },
+      { title: 'Рассылки', href: '/dashboard/newsletter', icon: Mail },
       { title: 'Тест стилей', href: '/dashboard/test-styles', icon: Palette },
       { title: 'Ozon', href: '/dashboard/ozon', icon: Store },
       { title: 'ZZAP статистика', href: '/dashboard/zzap', icon: BarChart3 },

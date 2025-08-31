@@ -101,26 +101,18 @@ async function persistHistorySafely(
   log: (m: string) => void
 ) {
   try {
-    if ((prisma as any).zzapRequest?.create) {
-      await (prisma as any).zzapRequest.create({
-        data: {
-          provider: 'zzap',
-          article: data.article,
-          statsUrl: data.statsUrl || undefined,
-          imageUrl: data.imageUrl || undefined,
-          ok: data.ok,
-          selector: data.selector || undefined,
-          logs: data.logs ?? undefined
-        }
-      })
-      log('DB: request persisted')
-    } else {
-      const esc = (v: any) => (v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`)
-      const logsJson = data.logs ? `'${JSON.stringify(data.logs).replace(/'/g, "''")}'::jsonb` : 'NULL'
-      const sql = `INSERT INTO "zzap_requests" ("provider","article","statsUrl","imageUrl","ok","selector","logs") VALUES ('zzap', ${esc(data.article)}, ${esc(data.statsUrl)}, ${esc(data.imageUrl)}, ${data.ok ? 'true' : 'false'}, ${esc(data.selector)}, ${logsJson})`
-      await prisma.$executeRawUnsafe(sql)
-      log('DB: request persisted (raw)')
-    }
+    await (prisma as any).zzapRequest.create({
+      data: {
+        provider: 'zzap',
+        article: data.article,
+        statsUrl: data.statsUrl || undefined,
+        imageUrl: data.imageUrl || undefined,
+        ok: data.ok,
+        selector: data.selector || undefined,
+        logs: data.logs ?? undefined
+      }
+    })
+    log('DB: request persisted')
   } catch (e: any) {
     log(`DB error: ${e?.message || e}`)
   }
@@ -157,8 +149,11 @@ async function saveSession(page: Page, log: (m: string) => void) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const article = searchParams.get('article')?.trim()
+  const brandParam = searchParams.get('brand')?.trim()
+  const brandUpper = brandParam ? brandParam.toUpperCase() : null
   const explicitSelector = searchParams.get('selector')?.trim()
   const debug = searchParams.get('debug') === '1'
+  const redirectOnly = searchParams.get('redirect') === '1' || searchParams.get('open') === '1'
   if (!article) {
     return new Response(JSON.stringify({ error: 'Не передан артикул ?article=' }), { status: 400, headers: { 'content-type': 'application/json; charset=utf-8' } })
   }
@@ -173,6 +168,13 @@ export async function GET(req: NextRequest) {
   const log = (m: string) => { logs.push(m) }
 
   try {
+    // If user asked to open direct link only — return 302 to ZZAP URL without any automation
+    if (redirectOnly) {
+      const direct = brandParam
+        ? `${ZZAP_BASE}/public/search.aspx#rawdata=${encodeURIComponent(article)}&class_man=${encodeURIComponent(brandParam)}&partnumber=${encodeURIComponent(article)}`
+        : `${ZZAP_BASE}/public/search.aspx#rawdata=${encodeURIComponent(article)}`
+      return new Response(null, { status: 302, headers: { Location: direct } })
+    }
     const browser = await puppeteer.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -382,6 +384,10 @@ export async function GET(req: NextRequest) {
     // 4) Navigate to search by article (try a few patterns)
     const searchUrls = [
       `${ZZAP_BASE}/public/search.aspx#rawdata=${encodeURIComponent(article)}`,
+      // If brand is known, try direct hash params used by DevExpress: class_man (brand) + partnumber
+      ...(brandParam ? [
+        `${ZZAP_BASE}/public/search.aspx#rawdata=${encodeURIComponent(article)}&class_man=${encodeURIComponent(brandParam)}&partnumber=${encodeURIComponent(article)}`
+      ] : []),
       `${ZZAP_BASE}/search/?article=${encodeURIComponent(article)}`,
       `${ZZAP_BASE}/search?article=${encodeURIComponent(article)}`,
       `${ZZAP_BASE}/search?txt=${encodeURIComponent(article)}`,
@@ -390,13 +396,25 @@ export async function GET(req: NextRequest) {
     ]
 
     let reached = false
-    for (const url of searchUrls) {
+    // If brand known, try direct brand+partnumber URL FIRST as requested
+    if (brandParam && !reached) {
+      const directFirst = `${ZZAP_BASE}/public/search.aspx#rawdata=${encodeURIComponent(article)}&class_man=${encodeURIComponent(brandParam)}&partnumber=${encodeURIComponent(article)}`
       try {
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: Math.min(15000, ZZAP_TIMEOUT_MS) })
-        log(`Search try: ${url} -> ${page.url()}`)
+        await page.goto(directFirst, { waitUntil: 'domcontentloaded', timeout: Math.min(15000, ZZAP_TIMEOUT_MS) })
+        log(`Brand-direct first: ${directFirst} -> ${page.url()}`)
         reached = true
-        break
       } catch {}
+    }
+    // Only continue trying other search URLs if we did not reach the page yet
+    if (!reached) {
+      for (const url of searchUrls) {
+        try {
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: Math.min(15000, ZZAP_TIMEOUT_MS) })
+          log(`Search try: ${url} -> ${page.url()}`)
+          reached = true
+          break
+        } catch {}
+      }
     }
 
     if (!reached) {
@@ -406,13 +424,147 @@ export async function GET(req: NextRequest) {
       let searchInput: ElementHandle<Element> | null = null
       for (const sel of inputCandidates) { searchInput = await page.$(sel); if (searchInput) break }
       if (!searchInput) throw new Error('Не найдено поле поиска')
+      await searchInput.click({ clickCount: 3 }).catch(() => {})
       await searchInput.type(article, { delay: 30 })
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: Math.min(15000, ZZAP_TIMEOUT_MS) }).catch(() => {}),
-        page.keyboard.press('Enter')
-      ])
+
+      // If suggest popup appears, choose row by brand if provided
+      let clickedSuggest = false
+      if (brandUpper) {
+        try {
+          // Wait briefly for popup grid to render
+          await page.waitForSelector('table[id*="SearchSuggestGridView_DXMainTable"]', { timeout: 3000 })
+          const sel = await page.evaluate((brandU: string) => {
+            const table = document.querySelector('table[id*="SearchSuggestGridView_DXMainTable"]') as HTMLTableElement | null
+            if (!table) return false
+            const rows = Array.from(table.querySelectorAll('tr')).filter(r => r.id && /DXDataRow/i.test(r.id)) as HTMLTableRowElement[]
+            for (const tr of rows) {
+              const tds = tr.querySelectorAll('td')
+              const brandCell = tds?.[0]
+              const brandText = (brandCell?.textContent || '').trim().toUpperCase()
+              if (brandText.includes(brandU)) {
+                const idxStr = tr.id.match(/DXDataRow(\d+)/)?.[1] || null
+                return { sel: '#' + tr.id, brandSel: '#' + tr.id + ' td:nth-child(1) span', numberSel: '#' + tr.id + ' td:nth-child(2) span.f-sel', index: idxStr ? parseInt(idxStr, 10) : -1 }
+              }
+            }
+            return null
+          }, brandUpper)
+          if (sel) {
+            const row = await page.$((sel as any).sel || (sel as any)).catch(() => null as any)
+            if (row) {
+              await row.evaluate((el: any) => el.scrollIntoView({ behavior: 'instant', block: 'center' })).catch(() => {})
+              // try clicking the brand cell span specifically, then the number span
+              let clickTarget = await page.$((sel as any).brandSel).catch(()=>null as any)
+              if (!clickTarget) clickTarget = await page.$((sel as any).numberSel).catch(()=>null as any)
+              if (!clickTarget) clickTarget = row
+              const box = await clickTarget.boundingBox()
+              if (box) {
+                const cx = Math.round(box.x + box.width / 2)
+                const cy = Math.round(box.y + box.height / 2)
+                await page.mouse.move(cx, cy)
+                await page.mouse.down()
+                await page.mouse.up()
+                await page.mouse.click(cx, cy, { clickCount: 2, delay: 40 })
+              } else {
+                await clickTarget.click({ clickCount: 2 }).catch(() => {})
+              }
+              // small enter as fallback trigger
+              try { await page.keyboard.press('Enter') } catch {}
+              // devexpress client API fallback
+              try {
+                await page.evaluate((info: any) => {
+                  const coll = (window as any).ASPx?.GetControlCollection?.();
+                  const grid = coll?.Get?.('ctl00_TopPanel_HeaderPlace_GridLayoutSearchControl_SearchSuggestPopupControl_SearchSuggestGridView');
+                  if (grid && typeof grid.SetFocusedRowIndex === 'function') {
+                    grid.SetFocusedRowIndex(info.index);
+                    // try call row click handler if exists
+                    const fn = (window as any).SearchSuggestGridViewRowClick;
+                    if (typeof fn === 'function') {
+                      try { fn(grid, { visibleIndex: info.index }); } catch {}
+                    }
+                  }
+                }, sel)
+              } catch {}
+            }
+            clickedSuggest = true
+            // Wait for navigation or content change
+            await Promise.race([
+              page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {}),
+              (async () => { await new Promise(r => setTimeout(r, 1200)) })()
+            ])
+          }
+        } catch {}
+      }
+
+      if (!clickedSuggest) {
+        await Promise.all([
+          page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: Math.min(15000, ZZAP_TIMEOUT_MS) }).catch(() => {}),
+          page.keyboard.press('Enter')
+        ])
+      }
     }
     log(`Search results: ${page.url()}`)
+
+    // 3b) If suggest popup is present on results and brand provided, choose brand
+    if (brandUpper) {
+      try {
+        // short settle
+        await sleep(400)
+        const sel = await page.evaluate(async (brandU: string) => {
+          const table = document.querySelector('table[id*="SearchSuggestGridView_DXMainTable"]') as HTMLTableElement | null
+          if (!table) return false
+          const rows = Array.from(table.querySelectorAll('tr')).filter(r => r.id && /DXDataRow/i.test(r.id)) as HTMLTableRowElement[]
+          for (const tr of rows) {
+            const tds = tr.querySelectorAll('td')
+            const brandCell = tds?.[0]
+            const brandText = (brandCell?.textContent || '').trim().toUpperCase()
+            if (brandText.includes(brandU)) {
+              const idxStr = tr.id.match(/DXDataRow(\d+)/)?.[1] || null
+              return { sel: '#' + tr.id, brandSel: '#' + tr.id + ' td:nth-child(1) span', numberSel: '#' + tr.id + ' td:nth-child(2) span.f-sel', index: idxStr ? parseInt(idxStr, 10) : -1 }
+            }
+          }
+          return null
+        }, brandUpper)
+        if (sel) {
+          const row = await page.$((sel as any).sel || (sel as any)).catch(() => null as any)
+          if (row) {
+            await row.evaluate((el: any) => el.scrollIntoView({ behavior: 'instant', block: 'center' })).catch(() => {})
+            let clickTarget = await page.$((sel as any).brandSel).catch(()=>null as any)
+            if (!clickTarget) clickTarget = await page.$((sel as any).numberSel).catch(()=>null as any)
+            if (!clickTarget) clickTarget = row
+            const box = await clickTarget.boundingBox()
+            if (box) {
+              const cx = Math.round(box.x + box.width / 2)
+              const cy = Math.round(box.y + box.height / 2)
+              await page.mouse.move(cx, cy)
+              await page.mouse.down()
+              await page.mouse.up()
+              await page.mouse.click(cx, cy, { clickCount: 2, delay: 40 })
+            } else {
+              await clickTarget.click({ clickCount: 2 }).catch(() => {})
+            }
+            try { await page.keyboard.press('Enter') } catch {}
+            try {
+              await page.evaluate((info: any) => {
+                const coll = (window as any).ASPx?.GetControlCollection?.();
+                const grid = coll?.Get?.('ctl00_TopPanel_HeaderPlace_GridLayoutSearchControl_SearchSuggestPopupControl_SearchSuggestGridView');
+                if (grid && typeof grid.SetFocusedRowIndex === 'function') {
+                  grid.SetFocusedRowIndex(info.index);
+                  const fn = (window as any).SearchSuggestGridViewRowClick;
+                  if (typeof fn === 'function') {
+                    try { fn(grid, { visibleIndex: info.index }); } catch {}
+                  }
+                }
+              }, sel)
+            } catch {}
+          }
+          await Promise.race([
+            page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {}),
+            (async () => { await sleep(1200) })()
+          ])
+          log('Suggest brand picked from popup on results page')
+        }
+      } catch {}
+    }
 
     // 4b) Try to open stats via explicit anchor present in the grid
     try {
@@ -569,29 +721,43 @@ export async function GET(req: NextRequest) {
     }
     log(`Stats page: ${workPage.url?.() || page.url()}`)
 
-    // Early bailout: if we couldn't navigate away from search page quickly, return its screenshot
+    // Early bailout: if we couldn't navigate away from search page quickly, try direct brand URL, then fallback to screenshot
     try {
       const urlNow = workPage.url?.() || page.url()
       if (/\/public\/search\.aspx/i.test(urlNow)) {
-        log('Bailout: still on search page, returning current page screenshot')
-        const buf = (await page.screenshot({ fullPage: true, type: 'png' })) as Buffer
-        // Save to S3 + DB history
-        try {
-          const key = `zzap/${encodeURIComponent(article)}/${Date.now()}-search.png`
-          const up = await uploadBuffer(buf, key, 'image/png')
-          logs.push(`Uploaded to S3: ${up.url}`)
-          await persistHistorySafely({ article, statsUrl: urlNow, imageUrl: up.url, ok: false, selector: null, logs }, log)
-        } catch (e: any) {
-          logs.push(`Persist error (bailout): ${e?.message || e}`)
+        // If brand is known, attempt direct URL with brand + partnumber to force selection
+        if (brandParam) {
+          const direct = `${ZZAP_BASE}/public/search.aspx#rawdata=${encodeURIComponent(article)}&class_man=${encodeURIComponent(brandParam)}&partnumber=${encodeURIComponent(article)}`
+          try {
+            await workPage.goto(direct, { waitUntil: 'domcontentloaded', timeout: Math.min(12000, ZZAP_TIMEOUT_MS) })
+            log(`Tried direct hash with brand: ${direct} -> ${workPage.url?.()}`)
+          } catch {}
         }
-        await browser.close().catch(() => {})
-        if (debug) {
-          return new Response(JSON.stringify({ ok: true, url: urlNow, foundSelector: null, logs }), {
-            status: 200,
-            headers: { 'content-type': 'application/json; charset=utf-8' }
-          })
+        // re-check after direct attempt
+        const urlNow2 = workPage.url?.() || page.url()
+        if (!/\/public\/search\.aspx/i.test(urlNow2)) {
+          // continue normal flow if we left search page
+        } else {
+          log('Bailout: still on search page, returning current page screenshot')
+          const buf = (await page.screenshot({ fullPage: true, type: 'png' })) as Buffer
+          // Save to S3 + DB history
+          try {
+            const key = `zzap/${encodeURIComponent(article)}/${Date.now()}-search.png`
+            const up = await uploadBuffer(buf, key, 'image/png')
+            logs.push(`Uploaded to S3: ${up.url}`)
+            await persistHistorySafely({ article, statsUrl: urlNow, imageUrl: up.url, ok: false, selector: null, logs }, log)
+          } catch (e: any) {
+            logs.push(`Persist error (bailout): ${e?.message || e}`)
+          }
+          await browser.close().catch(() => {})
+          if (debug) {
+            return new Response(JSON.stringify({ ok: true, url: urlNow, foundSelector: null, logs }), {
+              status: 200,
+              headers: { 'content-type': 'application/json; charset=utf-8' }
+            })
+          }
+          return new Response(buf, { status: 200, headers: { 'content-type': 'image/png', 'cache-control': 'no-store' } })
         }
-        return new Response(buf, { status: 200, headers: { 'content-type': 'image/png', 'cache-control': 'no-store' } })
       }
     } catch {}
 
