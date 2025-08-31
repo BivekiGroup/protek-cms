@@ -23,6 +23,14 @@ export default function ZzapStatsPage() {
   const [historyPageSize] = useState(20)
   const [historyTotal, setHistoryTotal] = useState(0)
   const [query, setQuery] = useState('')
+  
+  // Новые состояния для второй карточки
+  const [top3Article, setTop3Article] = useState('')
+  const [top3Selector, setTop3Selector] = useState('')
+  const [top3Loading, setTop3Loading] = useState(false)
+  const [top3Prices, setTop3Prices] = useState<any[]>([])
+  const [top3Error, setTop3Error] = useState<string | null>(null)
+  const [top3Brand, setTop3Brand] = useState('')
 
   const loadHistory = useCallback(async () => {
     try {
@@ -79,50 +87,142 @@ export default function ZzapStatsPage() {
     }
   }, [article, selector, debug])
 
+  const onTop3Submit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault()
+    setTop3Loading(true)
+    setTop3Error(null)
+    setTop3Prices([])
+    try {
+      const params = new URLSearchParams({ article: top3Article })
+      if (top3Selector) params.set('selector', top3Selector)
+      if (top3Brand) params.set('brand', top3Brand)
+      const res = await fetch(`/api/zzap/top3?${params.toString()}`)
+      const data = await res.json()
+      if (res.ok) {
+        setTop3Prices(data.prices || [])
+      } else {
+        throw new Error(data?.error || `Ошибка ${res.status}`)
+      }
+    } catch (err: any) {
+      setTop3Error(err.message || 'Не удалось получить топ-3 цен')
+    } finally {
+      setTop3Loading(false)
+    }
+  }, [top3Article, top3Selector, top3Brand])
+
   return (
     <div className="p-6">
-      <Card className="max-w-3xl">
-        <CardHeader>
-          <CardTitle>ZZAP: скриншот графика статистики</CardTitle>
-          <CardDescription>
-            Введите артикул, сервис авторизуется на zzap.ru и вернёт PNG скриншот графика.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2 sm:col-span-1">
-              <Label htmlFor="article">Артикул</Label>
-              <Input id="article" value={article} onChange={(e) => setArticle(e.target.value)} placeholder="например, 06A145710P" required />
-            </div>
-            <div className="grid gap-2 sm:col-span-1">
-              <Label htmlFor="selector">CSS селектор (опционально)</Label>
-              <Input id="selector" value={selector} onChange={(e) => setSelector(e.target.value)} placeholder="например, .chart-container" />
-            </div>
-            <div className="flex items-center gap-2 sm:col-span-2">
-              <input id="debug" type="checkbox" checked={debug} onChange={(e) => setDebug(e.target.checked)} />
-              <Label htmlFor="debug">Режим отладки (вернуть детали вместо PNG)</Label>
-            </div>
-            <div className="sm:col-span-2">
-              <Button type="submit" disabled={loading || !article}>
-                {loading ? 'Получаю…' : 'Получить скрин графика'}
-              </Button>
-            </div>
-          </form>
+      <div className="flex gap-6">
+        <Card className="max-w-3xl">
+          <CardHeader>
+            <CardTitle>ZZAP: скриншот графика статистики</CardTitle>
+            <CardDescription>
+              Введите артикул, сервис авторизуется на zzap.ru и вернёт PNG скриншот графика.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2 sm:col-span-1">
+                <Label htmlFor="article">Артикул</Label>
+                <Input id="article" value={article} onChange={(e) => setArticle(e.target.value)} placeholder="например, 06A145710P" required />
+              </div>
+              <div className="grid gap-2 sm:col-span-1">
+                <Label htmlFor="selector">CSS селектор (опционально)</Label>
+                <Input id="selector" value={selector} onChange={(e) => setSelector(e.target.value)} placeholder="например, .chart-container" />
+              </div>
+              <div className="flex items-center gap-2 sm:col-span-2">
+                <input id="debug" type="checkbox" checked={debug} onChange={(e) => setDebug(e.target.checked)} />
+                <Label htmlFor="debug">Режим отладки (вернуть детали вместо PNG)</Label>
+              </div>
+              <div className="sm:col-span-2">
+                <Button type="submit" disabled={loading || !article}>
+                  {loading ? 'Получаю…' : 'Получить скрин графика'}
+                </Button>
+              </div>
+            </form>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          {imgSrc && (
-            <div className="mt-2">
-              <h3 className="mb-2 font-medium">Результат</h3>
-              <img src={imgSrc} alt="Скриншот графика ZZAP" className="max-w-full border rounded-md" />
-            </div>
-          )}
-          {debugInfo && (
-            <pre className="mt-2 whitespace-pre-wrap text-xs bg-muted p-3 rounded-md overflow-auto max-h-[50vh]">
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            {imgSrc && (
+              <div className="mt-2">
+                <h3 className="mb-2 font-medium">Результат</h3>
+                <img src={imgSrc} alt="Скриншот графика ZZAP" className="max-w-full border rounded-md" />
+              </div>
+            )}
+            {debugInfo && (
+              <pre className="mt-2 whitespace-pre-wrap text-xs bg-muted p-3 rounded-md overflow-auto max-h-[50vh]">
 {JSON.stringify(debugInfo, null, 2)}
-            </pre>
-          )}
-        </CardContent>
-      </Card>
+              </pre>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="max-w-3xl">
+          <CardHeader>
+            <CardTitle>ZZAP: топ-3 детали</CardTitle>
+            <CardDescription>
+              Получите топ-3 детали по популярности или другим критериям.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <form onSubmit={onTop3Submit} className="grid gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="top3-article">Артикул</Label>
+                <Input 
+                  id="top3-article" 
+                  value={top3Article} 
+                  onChange={(e) => setTop3Article(e.target.value)} 
+                  placeholder="например, 06A145710P" 
+                  required 
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="top3-brand">Бренд (опционально)</Label>
+                <Input 
+                  id="top3-brand" 
+                  value={top3Brand} 
+                  onChange={(e) => setTop3Brand(e.target.value)} 
+                  placeholder="например, SACHS" 
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="top3-selector">CSS селектор (опционально)</Label>
+                <Input 
+                  id="top3-selector" 
+                  value={top3Selector} 
+                  onChange={(e) => setTop3Selector(e.target.value)} 
+                  placeholder=".right.dx-wrap.dxgv.pricewhitecell" 
+                />
+              </div>
+              <div>
+                <Button 
+                  type="submit"
+                  className="w-full" 
+                  disabled={top3Loading || !top3Article}
+                >
+                  {top3Loading ? 'Получаю…' : 'Получить топ-3'}
+                </Button>
+              </div>
+            </form>
+            
+            {top3Error && <p className="text-sm text-red-600">{top3Error}</p>}
+            
+            {top3Prices.length > 0 && (
+              <div className="mt-4">
+                <h3 className="mb-2 font-medium">Топ-3 цены</h3>
+                <div className="space-y-2">
+                  {top3Prices.map((price, index) => (
+                    <div key={index} className="flex justify-between items-center p-3 bg-muted rounded-md">
+                      <span className="font-medium">#{price.position}</span>
+                      <span className="text-lg font-bold text-green-600">{price.price} ₽</span>
+                      <span className="text-sm text-muted-foreground">{price.priceText}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <Card className="mt-6">
         <CardHeader>
