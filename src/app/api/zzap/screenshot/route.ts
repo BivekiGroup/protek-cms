@@ -153,7 +153,6 @@ export async function GET(req: NextRequest) {
   const brandUpper = brandParam ? brandParam.toUpperCase() : null
   const explicitSelector = searchParams.get('selector')?.trim()
   const debug = searchParams.get('debug') === '1'
-  const withStats = searchParams.get('withStats') === '1' || searchParams.get('withstats') === '1' || searchParams.get('json') === '1'
   const redirectOnly = searchParams.get('redirect') === '1' || searchParams.get('open') === '1'
   if (!article) {
     return new Response(JSON.stringify({ error: 'Не передан артикул ?article=' }), { status: 400, headers: { 'content-type': 'application/json; charset=utf-8' } })
@@ -167,7 +166,6 @@ export async function GET(req: NextRequest) {
 
   const logs: string[] = []
   const log = (m: string) => { logs.push(m) }
-  let postRequests: Array<{ url: string; method: string; headers: Record<string, string>; body: string; timestamp: number; status?: number }> = []
 
   try {
     // If user asked to open direct link only — return 302 to ZZAP URL without any automation
@@ -763,85 +761,6 @@ export async function GET(req: NextRequest) {
       }
     } catch {}
 
-    // Attach network listeners to capture statistics API calls
-    const observedAll: { url: string; len: number; contentType: string | null; variant: 'image' | 'data' | 'unknown' }[] = []
-    const candidates: { url: string; body: string; contentType: string | null }[] = []
-    const baseHost = (() => { try { return new URL(ZZAP_BASE).hostname } catch { return 'zzap.ru' } })()
-    const isWanted = (rawUrl: string) => {
-      const url = rawUrl || ''
-      if (!/\/user\/statpartpricehistory\.aspx/i.test(url)) return false
-      if (/[?&](DXCache|DXRefresh)=/i.test(url)) return false
-      try {
-        const u = new URL(url, ZZAP_BASE)
-        return u.searchParams.has('code_cat') && u.searchParams.has('params_hash')
-      } catch { return true }
-    }
-    const onRequest = async (req: any) => {
-      try {
-        const url = req.url?.() || req.url || ''
-        const method = req.method?.() || req.method || ''
-        if (!url || method !== 'POST') return
-        
-        // Логируем все POST запросы
-        try {
-          const h = new URL(url, ZZAP_BASE).hostname
-          if (h && h.includes(baseHost)) {
-            const headers = (typeof req.headers === 'function' ? req.headers() : (req.headers || {})) as Record<string, string>
-            let body = ''
-            try {
-              const postData = req.postData?.() || req.postData
-              body = postData || ''
-            } catch {}
-            
-            postRequests.push({
-              url,
-              method,
-              headers,
-              body,
-              timestamp: Date.now()
-            })
-            log(`POST REQUEST: ${method} ${url} (body: ${body.length} bytes)`)
-          }
-        } catch {}
-      } catch {}
-    }
-
-    const onResponse = async (resp: any) => {
-      try {
-        const url = resp.url?.() || resp.url || ''
-        if (!url) return
-        
-        // Обновляем статус ответа для POST запросов
-        const req = resp.request?.() || resp.request
-        const method = req?.method?.() || req?.method || ''
-        if (method === 'POST') {
-          const matchingPost = postRequests.find(p => p.url === url && !p.status)
-          if (matchingPost) {
-            matchingPost.status = (typeof resp.status === 'function' ? resp.status() : resp.status) || 0
-          }
-        }
-        
-        const headers = (typeof resp.headers === 'function' ? resp.headers() : (resp.headers || {})) as Record<string, string>
-        const ct = (headers['content-type'] || headers['Content-Type'] || '') || ''
-        if (/\/user\/statpartpricehistory\.aspx/i.test(url)) {
-          const isImg = /[?&](DXCache|DXRefresh)=/i.test(url) || /image\//i.test(ct)
-          const len = Number(headers['content-length'] || headers['Content-Length'] || 0) || 0
-          try { const h = new URL(url, ZZAP_BASE).hostname; if (h && h.includes(baseHost)) observedAll.push({ url, len, contentType: ct || null, variant: isImg ? 'image' : 'data' }) } catch {}
-        }
-        if (!isWanted(url)) return
-        let body = ''
-        try { body = await resp.text() } catch {}
-        if (!body || body.length < 5) {
-          try { const buf = await resp.buffer(); body = buf?.toString('utf8') || '' } catch {}
-        }
-        if (body) candidates.push({ url, body, contentType: ct || null })
-      } catch {}
-    }
-    page.on('request', onRequest)
-    page.on('response', onResponse)
-    ;(workPage as any).on?.('request', onRequest)
-    ;(workPage as any).on?.('response', onResponse)
-
     // 6) Wait a bit for charts to render (short)
     if (onStatsPage()) {
       try { await (workPage.waitForSelector?.('.highcharts-container', { timeout: Math.min(3000, ZZAP_TIMEOUT_MS) })) } catch {}
@@ -886,71 +805,12 @@ export async function GET(req: NextRequest) {
     } catch (e: any) {
       logs.push(`S3 upload error: ${e?.message || e}`)
     }
-    // If withStats requested, choose and parse chart data
-    let points: Array<{ year: number; month: number; value: number }> = []
-    if (withStats) {
-      // Wait briefly for network candidates (similar to /api/zzap/chart)
-      const startedAt = Date.now()
-      while (Date.now() - startedAt < 15000) {
-        if (candidates.length >= 1) break
-        await sleep(300)
-      }
-      if (candidates.length === 1) await sleep(800)
-      if (candidates.length === 2) await sleep(800)
-      const pick = candidates
-        .map((c, idx) => ({ c, idx, score: (/json|javascript/i.test(c.contentType || '') ? 10 : 0) + (/[\[{]/.test(c.body) ? 5 : 0) + Math.min(5, Math.floor((c.body.length || 0) / 1000)) }))
-        .sort((a, b) => (b.score - a.score) || (b.idx - a.idx))[0]?.c
-      const chosen = pick || candidates[0]
-      const raw = chosen?.body || ''
-      const parseChartData = (rawText: string) => {
-        const out: { year: number; month: number; value: number }[] = []
-        const months: Record<string, number> = { 'янв':1,'фев':2,'мар':3,'апр':4,'май':5,'мая':5,'июн':6,'июл':7,'авг':8,'сен':9,'сент':9,'окт':10,'ноя':11,'дек':12,'jan':1,'feb':2,'mar':3,'apr':4,'may':5,'jun':6,'jul':7,'aug':8,'sep':9,'sept':9,'oct':10,'nov':11,'dec':12 }
-        const tryPush = (label: string, v: any) => {
-          const value = Number(v); if (!Number.isFinite(value)) return
-          const s = String(label).trim().toLowerCase()
-          let m = s.match(/\b(\d{1,2})[./-](\d{2,4})\b/)
-          if (m) { const mm = parseInt(m[1],10), yy = parseInt(m[2],10); const year = yy<100?2000+yy:yy; if (mm>=1&&mm<=12) { out.push({ year, month: mm, value }); return } }
-          m = s.match(/([а-яa-z]+)/i); if (m) { const key = (m[1]||'').replace(/[^а-яa-z]/gi,'').slice(0,4).toLowerCase(); const mm = (months as any)[key]; const yM = s.match(/(20\d{2}|\d{2})/); const yy = yM?parseInt(yM[1],10):NaN; const year = Number.isFinite(yy)?(yy<100?2000+yy:yy):NaN; if (mm && Number.isFinite(year)) { out.push({ year, month: mm, value }); return } }
-          m = s.match(/\b(20\d{2})(\d{2})\b/); if (m) { const year = parseInt(m[1],10); const mm = parseInt(m[2],10); if (mm>=1&&mm<=12) out.push({ year, month: mm, value }) }
-        }
-        const tryJSON = (txt: string) => {
-          try { const j = JSON.parse(txt)
-            if (j && typeof j === 'object') {
-              const cats = (j.categories || j.Categories || j.xAxis?.categories) as any[] | undefined
-              const series = (j.series || j.Series) as any[] | undefined
-              if (Array.isArray(cats) && Array.isArray(series) && series.length) {
-                let s = series.find((x: any) => /запрос|поиск|просмотр/i.test(String(x?.name || ''))) || series[0]
-                const data = Array.isArray(s?.data) ? s.data : []
-                for (let i=0;i<Math.min(cats.length, data.length);i++) tryPush(String(cats[i]), data[i])
-                return true
-              }
-              if (Array.isArray(j)) {
-                for (const it of j) {
-                  if (it && typeof it==='object') {
-                    if (typeof it.year==='number' && typeof it.month==='number') { const val = Number((it as any).value ?? (it as any).count ?? (it as any).y); if (Number.isFinite(val)) out.push({ year: it.year, month: it.month, value: val }) }
-                    else if (typeof (it as any).label==='string') { const val = Number((it as any).value ?? (it as any).count ?? (it as any).y); tryPush((it as any).label, val) }
-                  }
-                }
-                return out.length>0
-              }
-            }
-          } catch {}
-          return false
-        }
-        if (tryJSON(rawText)) return out
-        const jsonLike = rawText.match(/[\[{][\s\S]*[\]}]/); if (jsonLike && tryJSON(jsonLike[0])) return out
-        try { const catsM = rawText.match(/categories\s*:\s*\[(.*?)\]/i); const dataM = rawText.match(/series\s*:\s*\[\s*\{.*?data\s*:\s*\[(.*?)\]/i); if (catsM && dataM) { const cats = catsM[1].split(',').map(s=>s.replace(/["'`]/g,'').trim()); const vals = dataM[1].split(',').map(s=>Number(s.replace(/[^0-9.-]/g,''))); for (let i=0;i<Math.min(cats.length, vals.length);i++) tryPush(cats[i], vals[i]) } } catch {}
-        return out
-      }
-      points = raw ? parseChartData(raw) : []
-      logs.push(`withStats: candidates=${candidates.length}, points=${points.length}`)
-    }
-    await persistHistorySafely({ article, statsUrl: workPage.url?.() || page.url(), imageUrl: uploadedUrl, ok: true, selector: foundSelector, logs: withStats ? { logs, observedAll, points, postRequests } : logs }, log)
+    await persistHistorySafely({ article, statsUrl: workPage.url?.() || page.url(), imageUrl: uploadedUrl, ok: true, selector: foundSelector, logs }, log)
 
     await browser.close().catch(() => {})
 
-    if (debug || withStats) {
-      return new Response(JSON.stringify({ ok: true, url: workPage.url?.() || page.url(), foundSelector, imageUrl: uploadedUrl, logs, points, observed: observedAll, postRequests }), {
+    if (debug) {
+      return new Response(JSON.stringify({ ok: true, url: workPage.url?.() || page.url(), foundSelector, imageUrl: uploadedUrl, logs }), {
         status: 200,
         headers: { 'content-type': 'application/json; charset=utf-8' }
       })
@@ -965,11 +825,6 @@ export async function GET(req: NextRequest) {
     })
   } catch (err: any) {
     const errorBody = { error: String(err?.message || err || 'Unknown error'), logs }
-    try {
-      if (typeof postRequests !== 'undefined') {
-        (errorBody as any).postRequests = postRequests
-      }
-    } catch {}
     return new Response(JSON.stringify(errorBody), {
       status: 500,
       headers: { 'content-type': 'application/json; charset=utf-8' }

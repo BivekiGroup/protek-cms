@@ -20,17 +20,6 @@ export default function ZzapStatsPage() {
   const [debug, setDebug] = useState(false)
   const [openDirect, setOpenDirect] = useState(true)
   const [debugInfo, setDebugInfo] = useState<any>(null)
-  const [offers, setOffers] = useState<Array<{ price?: number; currency?: string; raw?: string }>>([])
-  const [offersLoading, setOffersLoading] = useState(false)
-  const [offersError, setOffersError] = useState<string | null>(null)
-  const [chartPoints, setChartPoints] = useState<Array<{ year: number; month: number; value: number }>>([])
-  const [chartLoading, setChartLoading] = useState(false)
-  const [chartError, setChartError] = useState<string | null>(null)
-  const [chartReason, setChartReason] = useState<string | null>(null)
-  const [chartLogs, setChartLogs] = useState<string[]>([])
-  const [chartObserved, setChartObserved] = useState<Array<{ url: string; len?: number; ct?: string; variant?: string }>>([])
-  const [chartObservedNet, setChartObservedNet] = useState<Array<{ url: string; method?: string; status?: number; type?: string; ct?: string; len?: number }>>([])
-  const [postRequests, setPostRequests] = useState<Array<{ url: string; method: string; headers: Record<string, string>; body: string; timestamp: number; status?: number }>>([])
   const [history, setHistory] = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
@@ -149,75 +138,31 @@ export default function ZzapStatsPage() {
     setLoading(true)
     setError(null)
     setImgSrc(null)
-    setOffers([])
-    setOffersError(null)
     try {
       const params = new URLSearchParams({ article })
       if (brand.trim()) params.set('brand', brand.trim())
       if (selector) params.set('selector', selector)
       if (debug) params.set('debug', '1')
-
-      // Fire screenshot, price extraction and chart data capture in parallel
-      setOffersLoading(true)
-      setChartLoading(true)
-      setChartReason(null)
-      setChartLogs([])
-      setChartObserved([])
-      setChartObservedNet([])
-      setPostRequests([])
-      const withStatsParams = new URLSearchParams(params)
-      withStatsParams.set('withStats', '1')
-      const [shotRes, pricesRes] = await Promise.all([
-        fetch(`/api/zzap/screenshot?${withStatsParams.toString()}`),
-        fetch(`/api/zzap/prices?${new URLSearchParams({ article, ...(brand.trim() ? { brand: brand.trim() } : {}), ...(debug ? { debug: '1' } : {}) }).toString()}`)
-      ])
-
-      // Handle screenshot
-      const shotCT = shotRes.headers.get('content-type') || ''
-      if (shotRes.ok && shotCT.includes('application/json')) {
-        const data = await shotRes.json().catch(() => ({}))
-        if (data?.ok) {
-          if (data?.imageUrl) setImgSrc(String(data.imageUrl))
-          if (Array.isArray(data?.points)) setChartPoints(data.points)
-          if (Array.isArray(data?.logs)) setChartLogs(data.logs.map((x: any) => String(x)))
-          if (Array.isArray(data?.observed)) setChartObserved(data.observed.map((o: any) => ({ url: String(o.url), len: Number(o.len)||0, ct: o.contentType ? String(o.contentType) : undefined, variant: o.variant ? String(o.variant) : undefined })))
-          if (Array.isArray(data?.postRequests)) setPostRequests(data.postRequests)
-          loadHistory()
-        } else {
-          throw new Error(data?.error || `Ошибка ${shotRes.status}`)
-        }
-      } else if (shotRes.ok && shotCT.includes('image/png')) {
-        const blob = await shotRes.blob()
+      const res = await fetch(`/api/zzap/screenshot?${params.toString()}`)
+      const ct = res.headers.get('content-type') || ''
+      if (res.ok && ct.includes('image/png')) {
+        const blob = await res.blob()
         const url = URL.createObjectURL(blob)
         setImgSrc(url)
         setDebugInfo(null)
         loadHistory()
       } else {
-        const data = await shotRes.json().catch(() => ({}))
+        const data = await res.json().catch(() => ({}))
         if (debug) {
           setDebugInfo(data)
-          if (!shotRes.ok || data?.ok === false) throw new Error(data?.error || `Ошибка ${shotRes.status}`)
+          // В режиме отладки не считаем 200 ошибкой
+          if (!res.ok || data?.ok === false) {
+            throw new Error(data?.error || `Ошибка ${res.status}`)
+          }
         } else {
-          throw new Error(data?.error || `Ошибка ${shotRes.status}`)
+          throw new Error(data?.error || `Ошибка ${res.status}`)
         }
       }
-
-      // Handle offers
-      try {
-        const j = await pricesRes.json().catch(() => null)
-        if (pricesRes.ok && j?.ok && Array.isArray(j.offers)) {
-          setOffers(j.offers.slice(0, 3))
-        } else {
-          setOffersError(j?.error || `Ошибка получения цен ${pricesRes.status}`)
-        }
-      } catch (e: any) {
-        setOffersError(e?.message || 'Ошибка получения цен')
-      } finally {
-        setOffersLoading(false)
-      }
-
-      // Chart data already comes via screenshot withStats
-      setChartLoading(false)
     } catch (err: any) {
       setError(err.message || 'Не удалось получить скриншот')
     } finally {
@@ -424,112 +369,10 @@ export default function ZzapStatsPage() {
           </form>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
-          {(imgSrc || offersLoading || offers.length > 0 || offersError || chartLoading || chartPoints.length > 0 || chartError) && (
-            <div className="mt-2 grid gap-4 sm:grid-cols-3">
-              <div className="sm:col-span-2">
-                {imgSrc && (
-                  <div>
-                    <h3 className="mb-2 font-medium">Результат</h3>
-                    <img src={imgSrc} alt="Скриншот графика ZZAP" className="max-w-full border rounded-md" />
-                  </div>
-                )}
-              </div>
-              <div className="sm:col-span-1">
-                <h3 className="mb-2 font-medium">Первые 3 предложения</h3>
-                {offersLoading && <div className="text-sm text-muted-foreground">Загружаю цены…</div>}
-                {offersError && <div className="text-sm text-red-600">{offersError}</div>}
-                {!offersLoading && !offersError && offers.length === 0 && (
-                  <div className="text-sm text-muted-foreground">Нет данных</div>
-                )}
-                <ul className="space-y-2">
-                  {offers.slice(0,3).map((o, i) => (
-                    <li key={i} className="text-sm">
-                      <span className="font-medium">#{i+1}:</span>{' '}
-                      {typeof o.price === 'number' ? o.price.toLocaleString('ru-RU') : (o.raw || '—')}{' '}
-                      {o.currency ? o.currency : ''}
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="mt-4">
-                  <h3 className="mb-2 font-medium">Ежемесячная статистика</h3>
-                  {chartLoading && <div className="text-sm text-muted-foreground">Загружаю…</div>}
-                  {chartError && <div className="text-sm text-red-600">{chartError}</div>}
-                  {!chartLoading && !chartError && chartPoints.length === 0 && (
-                    <div className="text-sm text-muted-foreground">Нет данных{chartReason ? ` — причина: ${chartReason}` : ''}</div>
-                  )}
-                  {chartPoints.length > 0 && (
-                    <ul className="space-y-1 text-sm">
-                      {chartPoints.map((p, idx) => (
-                        <li key={`${p.year}-${p.month}-${idx}`}>
-                          {String(p.month).padStart(2, '0')}.{p.year}: {p.value}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {(!chartLoading) && (chartError || chartReason || chartLogs.length > 0 || chartObserved.length > 0 || postRequests.length > 0) && (
-                    <details className="mt-2 text-xs">
-                      <summary className="cursor-pointer select-none">Логи статистики</summary>
-                      <div className="mt-1 space-y-2">
-                        <pre className="whitespace-pre-wrap bg-muted p-2 rounded-md overflow-auto max-h-[30vh]">{[chartError ? `error: ${chartError}` : null, chartReason ? `reason: ${chartReason}` : null, ...(chartLogs || [])].filter(Boolean).join('\n')}</pre>
-                        {postRequests.length > 0 && (
-                          <div>
-                            <div className="mb-1 font-medium text-orange-600">POST-запросы (логируются сразу)</div>
-                            <ul className="space-y-1">
-                              {postRequests.map((req, i) => (
-                                <li key={`post-${i}`} className="break-all border-l-2 border-orange-200 pl-2">
-                                  <div className="font-mono text-xs">
-                                    <span className="text-orange-600 font-semibold">{req.method}</span> <a className="text-blue-600 underline" href={req.url} target="_blank" rel="noreferrer">{req.url}</a>
-                                    {req.status && <span className="text-green-600 ml-2">(→ {req.status})</span>}
-                                  </div>
-                                  <div className="text-muted-foreground text-xs">
-                                    Body: {req.body ? `${req.body.length} bytes` : 'empty'} | 
-                                    Headers: {Object.keys(req.headers || {}).length} | 
-                                    Time: {new Date(req.timestamp).toLocaleTimeString('ru-RU')}
-                                  </div>
-                                  {req.body && req.body.length > 0 && req.body.length < 500 && (
-                                    <details className="mt-1">
-                                      <summary className="cursor-pointer text-muted-foreground text-xs">Показать тело запроса</summary>
-                                      <pre className="mt-1 bg-gray-50 p-1 rounded text-xs overflow-auto max-h-20">{req.body}</pre>
-                                    </details>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {chartObserved.length > 0 && (
-                          <div>
-                            <div className="mb-1 font-medium">Найденные API вызовы</div>
-                            <ul className="space-y-1">
-                              {chartObserved.map((o, i) => (
-                                <li key={i} className="break-all">
-                                  <a className="text-blue-600 underline" href={o.url} target="_blank" rel="noreferrer">{o.url}</a>
-                                  <span className="text-muted-foreground"> {o.variant ? `(${o.variant})` : ''} {o.ct ? `— ${o.ct}` : ''} {o.len ? `— ${o.len} bytes` : ''}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {chartObservedNet.length > 0 && (
-                          <div>
-                            <div className="mt-2 mb-1 font-medium">Все сетевые вызовы (zzap.ru)</div>
-                            <ul className="space-y-1">
-                              {chartObservedNet.map((o, i) => (
-                                <li key={`net-${i}`} className="break-all">
-                                  <span className="text-muted-foreground">[{o.method || 'GET'} {o.status || ''} {o.type || ''}] </span>
-                                  <a className="text-blue-600 underline" href={o.url} target="_blank" rel="noreferrer">{o.url}</a>
-                                  <span className="text-muted-foreground"> {o.ct ? `— ${o.ct}` : ''} {typeof o.len === 'number' ? `— ${o.len} bytes` : ''}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              </div>
+          {imgSrc && (
+            <div className="mt-2">
+              <h3 className="mb-2 font-medium">Результат</h3>
+              <img src={imgSrc} alt="Скриншот графика ZZAP" className="max-w-full border rounded-md" />
             </div>
           )}
           {debugInfo && (
