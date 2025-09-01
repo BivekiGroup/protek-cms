@@ -46,8 +46,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
   } catch {}
 
-  // Call existing chat endpoint with streaming
-  const backend = await fetch(new URL('/api/ai/chat', req.url).toString(), {
+  // Call existing chat endpoint with streaming (use internal origin to avoid proxy/TLS issues)
+  const internalOrigin = process.env.INTERNAL_ORIGIN || 'http://127.0.0.1:3000'
+  const backend = await fetch(`${internalOrigin}/api/ai/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'text/plain' },
     body: JSON.stringify({ messages, model }),
