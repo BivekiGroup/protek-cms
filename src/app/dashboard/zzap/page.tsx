@@ -20,6 +20,9 @@ export default function ZzapStatsPage() {
   const [debug, setDebug] = useState(false)
   const [openDirect, setOpenDirect] = useState(true)
   const [debugInfo, setDebugInfo] = useState<any>(null)
+  const [offers, setOffers] = useState<Array<{ price?: number; currency?: string; raw?: string }>>([])
+  const [offersLoading, setOffersLoading] = useState(false)
+  const [offersError, setOffersError] = useState<string | null>(null)
   const [history, setHistory] = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
@@ -138,30 +141,51 @@ export default function ZzapStatsPage() {
     setLoading(true)
     setError(null)
     setImgSrc(null)
+    setOffers([])
+    setOffersError(null)
     try {
       const params = new URLSearchParams({ article })
       if (brand.trim()) params.set('brand', brand.trim())
       if (selector) params.set('selector', selector)
       if (debug) params.set('debug', '1')
-      const res = await fetch(`/api/zzap/screenshot?${params.toString()}`)
-      const ct = res.headers.get('content-type') || ''
-      if (res.ok && ct.includes('image/png')) {
-        const blob = await res.blob()
+
+      // Fire both screenshot and price extraction in parallel
+      setOffersLoading(true)
+      const [shotRes, pricesRes] = await Promise.all([
+        fetch(`/api/zzap/screenshot?${params.toString()}`),
+        fetch(`/api/zzap/prices?${new URLSearchParams({ article, ...(brand.trim() ? { brand: brand.trim() } : {}), ...(debug ? { debug: '1' } : {}) }).toString()}`)
+      ])
+
+      // Handle screenshot
+      const shotCT = shotRes.headers.get('content-type') || ''
+      if (shotRes.ok && shotCT.includes('image/png')) {
+        const blob = await shotRes.blob()
         const url = URL.createObjectURL(blob)
         setImgSrc(url)
         setDebugInfo(null)
         loadHistory()
       } else {
-        const data = await res.json().catch(() => ({}))
+        const data = await shotRes.json().catch(() => ({}))
         if (debug) {
           setDebugInfo(data)
-          // В режиме отладки не считаем 200 ошибкой
-          if (!res.ok || data?.ok === false) {
-            throw new Error(data?.error || `Ошибка ${res.status}`)
-          }
+          if (!shotRes.ok || data?.ok === false) throw new Error(data?.error || `Ошибка ${shotRes.status}`)
         } else {
-          throw new Error(data?.error || `Ошибка ${res.status}`)
+          throw new Error(data?.error || `Ошибка ${shotRes.status}`)
         }
+      }
+
+      // Handle offers
+      try {
+        const j = await pricesRes.json().catch(() => null)
+        if (pricesRes.ok && j?.ok && Array.isArray(j.offers)) {
+          setOffers(j.offers.slice(0, 3))
+        } else {
+          setOffersError(j?.error || `Ошибка получения цен ${pricesRes.status}`)
+        }
+      } catch (e: any) {
+        setOffersError(e?.message || 'Ошибка получения цен')
+      } finally {
+        setOffersLoading(false)
       }
     } catch (err: any) {
       setError(err.message || 'Не удалось получить скриншот')
@@ -369,10 +393,33 @@ export default function ZzapStatsPage() {
           </form>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
-          {imgSrc && (
-            <div className="mt-2">
-              <h3 className="mb-2 font-medium">Результат</h3>
-              <img src={imgSrc} alt="Скриншот графика ZZAP" className="max-w-full border rounded-md" />
+          {(imgSrc || offersLoading || offers.length > 0 || offersError) && (
+            <div className="mt-2 grid gap-4 sm:grid-cols-3">
+              <div className="sm:col-span-2">
+                {imgSrc && (
+                  <div>
+                    <h3 className="mb-2 font-medium">Результат</h3>
+                    <img src={imgSrc} alt="Скриншот графика ZZAP" className="max-w-full border rounded-md" />
+                  </div>
+                )}
+              </div>
+              <div className="sm:col-span-1">
+                <h3 className="mb-2 font-medium">Первые 3 предложения</h3>
+                {offersLoading && <div className="text-sm text-muted-foreground">Загружаю цены…</div>}
+                {offersError && <div className="text-sm text-red-600">{offersError}</div>}
+                {!offersLoading && !offersError && offers.length === 0 && (
+                  <div className="text-sm text-muted-foreground">Нет данных</div>
+                )}
+                <ul className="space-y-2">
+                  {offers.slice(0,3).map((o, i) => (
+                    <li key={i} className="text-sm">
+                      <span className="font-medium">#{i+1}:</span>{' '}
+                      {typeof o.price === 'number' ? o.price.toLocaleString('ru-RU') : (o.raw || '—')}{' '}
+                      {o.currency ? o.currency : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           )}
           {debugInfo && (
