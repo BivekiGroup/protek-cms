@@ -299,7 +299,7 @@ export default function OneCCatalogDocs() {
               <li><b>Категория</b>: передаётся код <span className="font-mono">category_code</span> (обяз.), справочник заполняется отдельным запросом.</li>
               <li><b>Изображения</b>: синхронизация полного набора (удаление отсутствующих, порядок по индексу).</li>
               <li><b>Характеристики</b>: создаются ключи; upsert по паре (productId, characteristicId).</li>
-              <li><b>Нормализация</b>: brand → UPPERCASE; article → без пробелов/дефисов, UPPERCASE; <b>externalId</b> по умолчанию = <span className="font-mono">article+"_"+brand</span> в нижнем регистре.</li>
+              <li><b>Нормализация</b>: brand → UPPERCASE; article → без пробелов/дефисов, UPPERCASE; <b>externalId</b> по умолчанию = <span className="font-mono">article+&quot;_&quot;+brand</span> в нижнем регистре.</li>
             </ul>
             <div className="mt-3 flex items-center text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 text-sm">
               <TriangleAlert className="h-4 w-4 mr-2"/> При дублях <span className="font-mono">(article, brand)</span> в БД — сначала почистите данные для успешного применения уникального индекса.

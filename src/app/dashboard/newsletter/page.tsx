@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -50,7 +50,7 @@ export default function NewsletterDashboard() {
   const [subsQuery, setSubsQuery] = useState('')
   const [testEmail, setTestEmail] = useState('')
 
-  const htmlContent = useMemo(() => editorRef.current?.innerHTML || '', [editorRef.current?.innerHTML])
+  // const htmlContent = useMemo(() => editorRef.current?.innerHTML || '', [editorRef.current?.innerHTML])
   const activeSubs = useMemo(() => subs.filter(s => !s.unsubscribedAt), [subs])
   const filteredSubs = useMemo(() => {
     const q = subsQuery.trim().toLowerCase()
@@ -114,7 +114,7 @@ export default function NewsletterDashboard() {
         editorRef.current.innerHTML = defaultTemplate(cleaned)
       }
       toast.success('Сгенерировано', { id: tId })
-    } catch (e) {
+    } catch {
       toast.error('Не удалось сгенерировать письмо')
     } finally { setGenerating(false) }
   }
@@ -146,7 +146,7 @@ export default function NewsletterDashboard() {
     setSending(true)
     const tId = toast.loading(testEmail?.trim() ? `Отправка теста на ${testEmail.trim()}…` : `Отправка (${activeSubs.length}) получателям…`)
     try {
-      const body: any = {}
+      const body: { testEmail?: string } = {}
       if (testEmail.trim()) body.testEmail = testEmail.trim()
       const res = await fetch(`/api/newsletter/campaigns/${campaignId}/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const j = await res.json()
@@ -160,8 +160,9 @@ export default function NewsletterDashboard() {
       }
       setTestEmail('')
       refresh()
-    } catch (e: any) {
-      toast.error(`Ошибка отправки: ${String(e?.message || e)}`, { id: tId })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      toast.error(`Ошибка отправки: ${msg}`, { id: tId })
     } finally { setSending(false) }
   }
 
@@ -191,7 +192,7 @@ export default function NewsletterDashboard() {
                 <Button variant="secondary" size="sm" onClick={() => exec('underline')}>Подчерк</Button>
                 <Separator orientation="vertical" />
                 <Button variant="secondary" size="sm" onClick={() => exec('insertUnorderedList')}>Список</Button>
-                <Button variant="secondary" size="sm" onClick={() => exec('formatBlock') && document.execCommand('formatBlock', false, 'h2')}>Заголовок</Button>
+                <Button variant="secondary" size="sm" onClick={() => document.execCommand('formatBlock', false, 'h2')}>Заголовок</Button>
                 <Button variant="secondary" size="sm" onClick={() => exec('removeFormat')}>Очистить</Button>
               </div>
               <div ref={editorRef} contentEditable className="min-h-[260px] border rounded-md p-3 focus:outline-none prose prose-sm max-w-none" suppressContentEditableWarning />

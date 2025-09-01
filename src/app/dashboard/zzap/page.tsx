@@ -1,13 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
+// import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
 
 export default function ZzapStatsPage() {
@@ -42,8 +42,8 @@ export default function ZzapStatsPage() {
   const [stopping, setStopping] = useState(false)
   const [reportHistory, setReportHistory] = useState<any[]>([])
   const [stoppingId, setStoppingId] = useState<string>('')
-  const sseRef = (typeof window !== 'undefined') ? (require('react').useRef as typeof useRef)<EventSource | null>(null) : ({ current: null } as any)
-  const sseJobRef = (typeof window !== 'undefined') ? (require('react').useRef as typeof useRef)<string>('') : ({ current: '' } as any)
+  const sseRef = useRef<EventSource | null>(null)
+  const sseJobRef = useRef<string>('')
 
   const statusRu = useCallback((s?: string) => {
     switch ((s || '').toLowerCase()) {
@@ -122,7 +122,7 @@ export default function ZzapStatsPage() {
     }
     es.addEventListener('error', () => {})
     return () => { try { es.close() } catch {}; sseRef.current = null }
-  }, [jobId, loadReportHistory])
+  }, [jobId, loadReportHistory, sseRef, sseJobRef])
 
   const onSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -168,7 +168,7 @@ export default function ZzapStatsPage() {
     } finally {
       setLoading(false)
     }
-  }, [article, selector, debug, brand, openDirect])
+  }, [article, selector, debug, brand, openDirect, loadHistory])
 
   return (
     <div className="p-6">
