@@ -57,8 +57,6 @@ services:
   protekauto-cms:
     env_file:
       - stack.env
-      - stack.env.local
-      - .env
     build:
       context: .
       dockerfile: Dockerfile
