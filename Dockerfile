@@ -1,33 +1,29 @@
-# Используем Node.js LTS Alpine для минимального размера
-FROM node:18-alpine
+# Переходим на Debian Slim ради стабильных пакетов Chromium/шрифтов
+FROM node:20-bookworm-slim
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Устанавливаем зависимости для Puppeteer
-RUN apk update && apk add --no-cache \
-    # Chromium и зависимости
+## Устанавливаем зависимости для Puppeteer (Debian/apt)
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     chromium \
-    nss \
-    freetype \
-    harfbuzz \
+    libnss3 \
     ca-certificates \
-    ttf-freefont \
-    # Дополнительные шрифты для русского языка
-    ttf-dejavu \
-    ttf-liberation \
-    # Инструменты для сборки нативных модулей (node-gyp)
+    fonts-freefont-ttf \
+    fonts-dejavu-core \
+    fonts-liberation \
+    git \
+    bash \
     python3 \
     make \
     g++ \
-    # Совместимость и утилиты
-    libc6-compat \
-    git \
-    bash
+    dumb-init \
+ && rm -rf /var/lib/apt/lists/*
 
 # Устанавливаем переменные окружения для Puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV APP_WRITE_DIR=/tmp/appdata
 ENV NPM_CONFIG_FUND=false
 ENV NPM_CONFIG_AUDIT=false
@@ -90,9 +86,9 @@ ENV YANDEX_DELIVERY_SOURCE_STATION_ID=${YANDEX_DELIVERY_SOURCE_STATION_ID}
 # Копируем package.json и package-lock.json
 COPY package*.json ./
 
-# Устанавливаем все зависимости (включая dev для сборки)
-# Обновляем npm до версии, совместимой с lockfile, и ставим зависимости
-RUN npm i -g npm@10 && npm ci --no-audit --no-fund
+# Устанавливаем зависимости c допуском legacy peer deps
+RUN npm i -g npm@10 \
+ && npm i --legacy-peer-deps --no-audit --no-fund
 
 # Копируем остальные файлы
 COPY . .
@@ -113,13 +109,11 @@ RUN ls -la .next/static/css/ || echo "CSS files not found, but continuing..."
 # Удаляем dev-зависимости без переустановки (быстрее и надёжнее в CI)
 RUN npm prune --omit=dev && npm cache clean --force
 
-# Создаем пользователя для безопасности (важно для Puppeteer)
-RUN addgroup -S pptruser || true \
-    && adduser -S -G pptruser -h /home/pptruser -s /bin/sh pptruser || true \
-    && mkdir -p /home/pptruser/Downloads \
-    && chown -R pptruser:pptruser /home/pptruser \
-    && mkdir -p /tmp/appdata \
-    && chmod 777 /tmp/appdata
+## Создаем пользователя и директорию для записи
+RUN useradd -ms /bin/bash pptruser || true \
+ && mkdir -p /home/pptruser/Downloads \
+ && mkdir -p /tmp/appdata \
+ && chmod 777 /tmp/appdata
 
 # Переключаемся на непривилегированного пользователя
 USER pptruser
@@ -127,5 +121,6 @@ USER pptruser
 # Открываем порт
 EXPOSE 3000
 
-# Запускаем standalone-сервер Next.js (см. предупреждение next start)
-CMD ["node", ".next/standalone/server.js"] 
+# Запускаем standalone-сервер Next.js через dumb-init
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+CMD ["node", ".next/standalone/server.js"]
