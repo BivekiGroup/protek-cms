@@ -1644,6 +1644,7 @@ export async function POST(req: NextRequest) {
             }]: ${preview}`
           );
         } catch {}
+        // Guard against index drift: ensure we write into correct slot
         results[realIndex] = {
           article,
           brand,
@@ -1651,6 +1652,9 @@ export async function POST(req: NextRequest) {
           stats: counts,
           imageUrl,
         };
+        if (results[realIndex] && (results[realIndex] as any).article !== article) {
+          appendJobLog(id, `WARN: index drift at ${realIndex}: got ${(results[realIndex] as any).article} expected ${article}`)
+        }
       } catch (e: any) {
         appendJobLog(id, `ERROR ${article}: ${String(e?.message || e)}`);
         results[realIndex] = {
@@ -1713,19 +1717,26 @@ export async function POST(req: NextRequest) {
         "Цена 3",
         ...monthLabels,
       ];
+      // Build fast lookup map by article|brand to avoid index drift
+      const norm = (s: string) => (s || '').toString().trim().toUpperCase().replace(/\s+/g, '');
+      const keyOf = (a: string, b: string) => `${norm(a)}|${norm(b)}`;
+      const byKey = new Map<string, any>();
+      for (const r of results || []) {
+        if (!r || typeof r !== 'object') continue;
+        const k = keyOf((r as any).article || '', (r as any).brand || '');
+        if (k !== '|') byKey.set(k, r);
+      }
       const aoa: any[][] = [title, header];
       for (let i = 0; i < rows.length; i++) {
-        const r = results[i] || {
-          article: rows[i].article,
-          brand: rows[i].brand,
-          prices: [],
-          stats: {},
-        };
-        const row = [r.article, r.brand];
-        const p = (r.prices || []) as number[];
+        const rowDef = rows[i];
+        const k = keyOf(rowDef.article, rowDef.brand);
+        let r = byKey.get(k) || results[i] || null;
+        if (!r) r = { article: rowDef.article, brand: rowDef.brand, prices: [], stats: {} };
+        const row = [rowDef.article, rowDef.brand];
+        const p = ((r as any).prices || []) as number[];
         row.push(p[0] ?? "", p[1] ?? "", p[2] ?? "");
         for (const ml of monthLabels) {
-          const v = (r.stats && (r.stats as any)[ml]) ?? "";
+          const v = ((r as any).stats && (r as any).stats[ml]) ?? "";
           row.push(v);
         }
         aoa.push(row);
