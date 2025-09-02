@@ -250,7 +250,7 @@ export default function ZzapStatsPage() {
                   setReportRunning(true)
                   try {
                     // Пинаем процесс один раз — фоновой воркер продолжит
-                    await fetch(`/api/zzap/report/process?id=${jobId}&batch=5`, { method: 'POST' })
+                    await fetch(`/api/zzap/report/process?id=${jobId}`, { method: 'POST' })
                   } catch (e: any) {
                     setJobError(e?.message || String(e))
                   } finally {

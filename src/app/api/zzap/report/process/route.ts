@@ -1254,11 +1254,11 @@ async function debugShot(page: Page, jobId: string, tag: string) {
 export async function POST(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id") || "";
-  // Respect optional batch size to avoid long-running jobs and races
+  // If 'batch' specified, process that many; otherwise process all remaining (full batch)
   const batchSize = (() => {
     const b = parseInt(searchParams.get('batch') || '', 10)
-    if (Number.isFinite(b) && b > 0) return Math.min(50, b)
-    return 5
+    if (Number.isFinite(b) && b > 0) return Math.min(1000, b)
+    return Number.MAX_SAFE_INTEGER
   })();
   if (!id)
     return new Response(JSON.stringify({ ok: false, error: "id required" }), {
