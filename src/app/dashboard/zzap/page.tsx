@@ -338,6 +338,63 @@ export default function ZzapStatsPage() {
         </CardContent>
       </Card>
 
+      {/* Report history */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>История отчётов</CardTitle>
+          <CardDescription>Последние 20 задач. Можно продолжить обработку или открыть результат.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2 mb-3">
+            <Button variant="outline" size="sm" onClick={() => loadReportHistory()}>Обновить</Button>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Создан</TableHead>
+                <TableHead>ID</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead>Прогресс</TableHead>
+                <TableHead>Файл</TableHead>
+                <TableHead>Действия</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {reportHistory.length === 0 && (
+                <TableRow><TableCell colSpan={6}>Пусто</TableCell></TableRow>
+              )}
+              {reportHistory.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>{r.createdAt ? format(new Date(r.createdAt), 'dd.MM.yyyy HH:mm') : '—'}</TableCell>
+                  <TableCell className="font-mono text-xs max-w-[220px] truncate" title={r.id}>{r.id}</TableCell>
+                  <TableCell>{statusRu(r.status)}</TableCell>
+                  <TableCell>{r.processed}/{r.total}</TableCell>
+                  <TableCell>
+                    {r.resultFile ? (
+                      <a className="text-blue-600 underline" href={r.resultFile} target="_blank" rel="noreferrer">Скачать</a>
+                    ) : '—'}
+                  </TableCell>
+                  <TableCell className="space-x-2">
+                    {(!r.resultFile && ['pending','running'].includes(String(r.status).toLowerCase())) && (
+                      <Button size="sm" variant="secondary" onClick={async () => {
+                        try { await fetch(`/api/zzap/report/process?id=${encodeURIComponent(r.id)}`, { method: 'POST' }) } catch {}
+                        await loadReportHistory()
+                      }}>Продолжить</Button>
+                    )}
+                    {['running'].includes(String(r.status).toLowerCase()) && (
+                      <Button size="sm" variant="destructive" onClick={async () => {
+                        try { await fetch(`/api/zzap/report/stop?id=${encodeURIComponent(r.id)}`, { method: 'POST' }) } catch {}
+                        await loadReportHistory()
+                      }}>Остановить</Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
       <Card className="max-w-3xl">
         <CardHeader>
           <CardTitle>ZZAP: скриншот графика статистики</CardTitle>
