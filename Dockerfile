@@ -22,6 +22,7 @@ RUN apk update && apk add --no-cache \
 # Устанавливаем переменные окружения для Puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV APP_WRITE_DIR=/tmp/appdata
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -104,10 +105,12 @@ RUN ls -la .next/static/css/ || echo "CSS files not found, but continuing..."
 RUN npm prune --omit=dev && npm cache clean --force
 
 # Создаем пользователя для безопасности (важно для Puppeteer)
-RUN addgroup -S pptruser && adduser -S -G pptruser pptruser \
-    && mkdir -p /home/pptruser/Downloads /app \
+RUN addgroup -S pptruser || true \
+    && adduser -S -G pptruser -h /home/pptruser -s /bin/sh pptruser || true \
+    && mkdir -p /home/pptruser/Downloads \
     && chown -R pptruser:pptruser /home/pptruser \
-    && chown -R pptruser:pptruser /app
+    && mkdir -p /tmp/appdata \
+    && chmod 777 /tmp/appdata
 
 # Переключаемся на непривилегированного пользователя
 USER pptruser

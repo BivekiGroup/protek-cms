@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import fs from 'fs'
 import path from 'path'
+const RUNTIME_DIR = process.env.APP_WRITE_DIR || process.cwd()
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
       let lastUpdated: string | null = null
       let running = true
       // Tail logs file incrementally
-      const logPath = path.join(process.cwd(), `.zzap-report-${id}.log`)
+      const logPath = path.join(RUNTIME_DIR, `.zzap-report-${id}.log`)
       let lastSize = 0
       try { if (fs.existsSync(logPath)) { const st = fs.statSync(logPath); lastSize = st.size } } catch {}
       const interval = setInterval(async () => {

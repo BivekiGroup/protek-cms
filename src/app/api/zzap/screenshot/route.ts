@@ -5,13 +5,14 @@ import { uploadBuffer } from '@/lib/s3'
 import { prisma } from '@/lib/prisma'
 import fs from 'fs'
 import path from 'path'
+const RUNTIME_DIR = process.env.APP_WRITE_DIR || process.cwd()
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const ZZAP_BASE = process.env.ZZAP_BASE || 'https://www.zzap.ru'
 const ZZAP_TIMEOUT_MS = Number(process.env.ZZAP_TIMEOUT_MS || 30000)
-const COOKIE_FILE = process.env.ZZAP_COOKIE_FILE || path.join(process.cwd(), '.zzap-session.json')
+const COOKIE_FILE = process.env.ZZAP_COOKIE_FILE || path.join(RUNTIME_DIR, '.zzap-session.json')
 const COOKIE_TTL_MIN = Number(process.env.ZZAP_SESSION_TTL_MINUTES || 180)
 const ZZAP_STATS_RENDER_WAIT_MS = Number(process.env.ZZAP_STATS_RENDER_WAIT_MS || 1500)
 

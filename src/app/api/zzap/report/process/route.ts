@@ -11,9 +11,10 @@ export const dynamic = "force-dynamic";
 
 const ZZAP_BASE = process.env.ZZAP_BASE || "https://www.zzap.ru";
 const ZZAP_TIMEOUT_MS = Number(process.env.ZZAP_TIMEOUT_MS || 30000);
+const RUNTIME_DIR = process.env.APP_WRITE_DIR || process.cwd();
 const COOKIE_FILE =
   process.env.ZZAP_COOKIE_FILE ||
-  path.join(process.cwd(), ".zzap-session.json");
+  path.join(RUNTIME_DIR, ".zzap-session.json");
 const COOKIE_TTL_MIN = Number(process.env.ZZAP_SESSION_TTL_MINUTES || 180);
 // Gentle-mode delays: keep zero by default to avoid env coupling
 const ZZAP_DELAY_MS = Number(process.env.ZZAP_BETWEEN_ITEMS_DELAY_MS || 0);
@@ -1227,7 +1228,7 @@ function toLabelFromCompact(s: string): string | null {
 }
 
 function getJobLogPath(id: string) {
-  return path.join(process.cwd(), `.zzap-report-${id}.log`);
+  return path.join(RUNTIME_DIR, `.zzap-report-${id}.log`);
 }
 
 function appendJobLog(id: string, line: string) {
