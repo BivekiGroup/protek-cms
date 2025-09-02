@@ -2,7 +2,6 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import puppeteer, { Page } from "puppeteer";
 import fs from 'fs'
-import fs from "fs";
 import path from "path";
 import * as XLSX from "xlsx";
 import { uploadBuffer } from "@/lib/s3";
