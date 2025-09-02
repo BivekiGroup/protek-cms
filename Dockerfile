@@ -100,8 +100,8 @@ RUN npm run build
 # Проверяем, что стили собрались
 RUN ls -la .next/static/css/ || echo "CSS files not found, but continuing..."
 
-# Удаляем dev зависимости для уменьшения размера образа
-RUN npm ci --only=production && npm cache clean --force
+# Удаляем dev-зависимости без переустановки (быстрее и надёжнее в CI)
+RUN npm prune --omit=dev && npm cache clean --force
 
 # Создаем пользователя для безопасности (важно для Puppeteer)
 RUN addgroup -S pptruser && adduser -S -G pptruser pptruser \
