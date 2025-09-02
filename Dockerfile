@@ -16,13 +16,21 @@ RUN apk update && apk add --no-cache \
     # Дополнительные шрифты для русского языка
     ttf-dejavu \
     ttf-liberation \
-    # Системные зависимости
+    # Инструменты для сборки нативных модулей (node-gyp)
+    python3 \
+    make \
+    g++ \
+    # Совместимость и утилиты
+    libc6-compat \
+    git \
     bash
 
 # Устанавливаем переменные окружения для Puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 ENV APP_WRITE_DIR=/tmp/appdata
+ENV NPM_CONFIG_FUND=false
+ENV NPM_CONFIG_AUDIT=false
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -83,7 +91,8 @@ ENV YANDEX_DELIVERY_SOURCE_STATION_ID=${YANDEX_DELIVERY_SOURCE_STATION_ID}
 COPY package*.json ./
 
 # Устанавливаем все зависимости (включая dev для сборки)
-RUN npm ci
+# Обновляем npm до версии, совместимой с lockfile, и ставим зависимости
+RUN npm i -g npm@10 && npm ci --no-audit --no-fund
 
 # Копируем остальные файлы
 COPY . .
