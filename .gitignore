@@ -43,6 +43,8 @@ next-env.d.ts
 
 /src/generated
 .zzap-session.json
+# report job logs
+.zzap-report-*
 
 # local secret copy
 stack.env.local

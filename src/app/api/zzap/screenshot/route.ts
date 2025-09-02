@@ -13,6 +13,7 @@ const ZZAP_BASE = process.env.ZZAP_BASE || 'https://www.zzap.ru'
 const ZZAP_TIMEOUT_MS = Number(process.env.ZZAP_TIMEOUT_MS || 30000)
 const COOKIE_FILE = process.env.ZZAP_COOKIE_FILE || path.join(process.cwd(), '.zzap-session.json')
 const COOKIE_TTL_MIN = Number(process.env.ZZAP_SESSION_TTL_MINUTES || 180)
+const ZZAP_STATS_RENDER_WAIT_MS = Number(process.env.ZZAP_STATS_RENDER_WAIT_MS || 1500)
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
@@ -220,7 +221,16 @@ export async function GET(req: NextRequest) {
       // Prefer known DevExpress IDs first, then legacy ASP.NET, then generic
       const userSelPriority = [devxEmailFull, devxEmail, devxEmailName, '#ctl00_ContentPlaceHolder1_Login1_UserName', '#ctl00_ContentPlaceHolder1_tbLogin', 'input[name*="login" i]', 'input[type="email"]', 'input[name*="email" i]']
       const passSelPriority = [devxPassFull, devxPass, devxPassName, '#ctl00_ContentPlaceHolder1_Login1_Password', '#ctl00_ContentPlaceHolder1_tbPass', 'input[type="password"]', 'input[name*="pass" i]']
-      const submitSelPriority = ['#ctl00_ContentPlaceHolder1_Login1_LoginButton', '#ctl00_ContentPlaceHolder1_btnLogin', 'button[type="submit" i]', 'input[type="submit" i]']
+      const submitSelPriority = [
+        // DevExpress button ids (guesses based on control names)
+        '#ctl00_BodyPlace_LogonFormCallbackPanel_LogonFormLayout_LoginButton',
+        '#ctl00_BodyPlace_LogonFormCallbackPanel_LogonFormLayout_LogonButton',
+        '#ctl00_BodyPlace_LogonFormCallbackPanel_LogonFormLayout_btnLogin',
+        // Legacy ASP.NET ids
+        '#ctl00_ContentPlaceHolder1_Login1_LoginButton',
+        '#ctl00_ContentPlaceHolder1_btnLogin',
+        // Generic fallbacks
+        'button[type="submit" i]', 'input[type="submit" i]']
 
       // Wait a moment for anti-bot/DevExpress to initialize
       if (!loggedInEarly) await sleep(2000)
@@ -308,6 +318,31 @@ export async function GET(req: NextRequest) {
           loggedIn = await waitStep('After form.submit()')
         }
 
+        // 5) DevExpress client API: set values and DoClick on LoginButton
+        if (!loggedIn) {
+          try {
+            const result = await page.evaluate(() => {
+              const w: any = window as any
+              const coll = w.ASPx?.GetControlCollection?.()
+              if (!coll) return 'no-coll'
+              const base = 'ctl00_BodyPlace_LogonFormCallbackPanel_LogonFormLayout_'
+              const emailCtrl = coll.Get?.(base + 'AddrEmail1TextBox')
+              const passCtrl = coll.Get?.(base + 'PasswordTextBox')
+              // values are already typed by DOM; try to sync client objects if present
+              try { emailCtrl?.SetValue?.((document.querySelector('#' + base + 'AddrEmail1TextBox_I') as any)?.value || '') } catch {}
+              try { passCtrl?.SetValue?.((document.querySelector('#' + base + 'PasswordTextBox_I') as any)?.value || '') } catch {}
+              const btn = coll.Get?.(base + 'LoginButton') || coll.Get?.(base + 'LogonButton') || coll.Get?.(base + 'btnLogin')
+              if (btn?.DoClick) { try { btn.DoClick() } catch {} ; return 'clicked' }
+              // as a fallback, try raise postback
+              try { w.__doPostBack && w.__doPostBack(base + 'LoginButton', '') ; return 'postback' } catch {}
+              return 'no-btn'
+            })
+            // allow callback navigation/partial update
+            await sleep(2000)
+            loggedIn = await waitStep(`After DevExpress API (${String(result)})`)
+          } catch {}
+        }
+
         log(`Login success=${loggedIn}`)
         if (loggedIn) { await saveSession(page, log) }
       } else {
@@ -320,7 +355,7 @@ export async function GET(req: NextRequest) {
       log(`Login step error: ${e?.message || e}`)
     }
 
-    // 1) Open homepage
+    // 1) Open homepage (re-check auth)
     await page.goto(ZZAP_BASE, { waitUntil: 'domcontentloaded', timeout: Math.min(15000, ZZAP_TIMEOUT_MS) })
     log(`Open: ${page.url()}`)
 
@@ -380,6 +415,15 @@ export async function GET(req: NextRequest) {
       }
     }
     log(`After login: ${page.url()}`)
+    // Final explicit auth check on top-level page
+    try {
+      const byDom = await page.evaluate(() => {
+        const byId = !!document.querySelector('#ctl00_lnkLogout')
+        const byText = Array.from(document.querySelectorAll('a')).some(a => /выход|выйти|logout|logoff/i.test((a.textContent||'').trim()))
+        return byId || byText
+      }).catch(() => false)
+      log(`Auth indicator after login: ${byDom}`)
+    } catch {}
 
     // 4) Navigate to search by article (try a few patterns)
     const searchUrls = [
@@ -763,8 +807,9 @@ export async function GET(req: NextRequest) {
 
     // 6) Wait a bit for charts to render (short)
     if (onStatsPage()) {
-      try { await (workPage.waitForSelector?.('.highcharts-container', { timeout: Math.min(3000, ZZAP_TIMEOUT_MS) })) } catch {}
-      await sleep(300)
+      try { await (workPage.waitForSelector?.('.highcharts-container', { timeout: Math.min(5000, ZZAP_TIMEOUT_MS) })) } catch {}
+      try { await (workPage as any).waitForFunction?.("document.querySelectorAll('.highcharts-container').length > 0", { timeout: Math.min(6000, ZZAP_TIMEOUT_MS) }) } catch {}
+      await sleep(Math.min(ZZAP_STATS_RENDER_WAIT_MS, ZZAP_TIMEOUT_MS))
     }
 
     // 7) Capture element screenshot
