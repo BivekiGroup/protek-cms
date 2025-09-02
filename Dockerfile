@@ -86,6 +86,12 @@ ENV NODE_ENV=production \
     APP_WRITE_DIR=/tmp/appdata \
     NEXT_TELEMETRY_DISABLED=1
 
+# Preinstall Chrome for Testing into Puppeteer cache for the runtime user
+ENV PUPPETEER_CACHE_DIR=/home/pptruser/.cache/puppeteer
+RUN mkdir -p "$PUPPETEER_CACHE_DIR" \
+ && npx --yes puppeteer@24.10.2 browsers install chrome \
+ && chown -R pptruser:pptruser /home/pptruser/.cache
+
 # Копируем результат standalone
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
