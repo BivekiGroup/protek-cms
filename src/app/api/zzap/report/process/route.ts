@@ -1254,15 +1254,19 @@ async function debugShot(page: Page, jobId: string, tag: string) {
 export async function POST(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id") || "";
-  // Process all remaining items in a single pass (sequentially)
-  const batchSize = Number.MAX_SAFE_INTEGER;
+  // Respect optional batch size to avoid long-running jobs and races
+  const batchSize = (() => {
+    const b = parseInt(searchParams.get('batch') || '', 10)
+    if (Number.isFinite(b) && b > 0) return Math.min(50, b)
+    return 5
+  })();
   if (!id)
     return new Response(JSON.stringify({ ok: false, error: "id required" }), {
       status: 400,
       headers: { "content-type": "application/json; charset=utf-8" },
     });
   // Load job via Prisma only
-  const job: any = await (prisma as any).zzapReportJob.findUnique({
+  let job: any = await (prisma as any).zzapReportJob.findUnique({
     where: { id },
   });
   if (!job)
@@ -1284,11 +1288,7 @@ export async function POST(req: NextRequest) {
         headers: { "content-type": "application/json; charset=utf-8" },
       }
     );
-  if (
-    job.status === "canceled" ||
-    job.status === "failed" ||
-    job.status === "error"
-  ) {
+  if (job.status === "canceled" || job.status === "failed" || job.status === "error") {
     return new Response(
       JSON.stringify({
         ok: true,
@@ -1305,6 +1305,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Concurrency guard: allow only one active processor
+  // Try to atomically set status to 'running' if it isn't running yet
+  try {
+    if (job.status !== 'running') {
+      const upd = await (prisma as any).zzapReportJob.updateMany({ where: { id, status: 'pending' }, data: { status: 'running' } })
+      if (upd?.count > 0) {
+        job.status = 'running'
+      } else {
+        // Someone else already running; reload to confirm
+        const j2 = await (prisma as any).zzapReportJob.findUnique({ where: { id }, select: { status: true, processed: true, total: true, resultFile: true } })
+        if (j2?.status === 'running') {
+          return new Response(JSON.stringify({ ok: true, status: 'running', processed: j2.processed, total: j2.total, resultFile: j2.resultFile }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
+        }
+      }
+    }
+  } catch {}
+
   const rows = job.inputRows as any[] as { article: string; brand: string }[];
   const processed = job.processed;
   const toProcess = rows.slice(processed, processed + batchSize);
@@ -1312,10 +1329,8 @@ export async function POST(req: NextRequest) {
   if (results.length !== rows.length)
     results = Array.from({ length: rows.length }).fill(null);
 
-  await (prisma as any).zzapReportJob.update({
-    where: { id },
-    data: { status: "running" },
-  });
+  // Ensure status is running (idempotent)
+  try { await (prisma as any).zzapReportJob.update({ where: { id }, data: { status: 'running' } }) } catch {}
 
   // Helper to call internal endpoints (AI, screenshot)
   const origin = (() => {
@@ -1687,7 +1702,9 @@ export async function POST(req: NextRequest) {
       const to = new Date(job.periodTo);
       const monthLabels: string[] = [];
       for (const dt of eachMonth(from, to)) monthLabels.push(labelFor(dt));
-      const title = ["Отчёт ZZAP на 30 августа"];
+      const title = [
+        `Отчёт ZZAP на ${new Date().toLocaleDateString('ru-RU')}`
+      ];
       const header = [
         "Артикул",
         "Бренд",
