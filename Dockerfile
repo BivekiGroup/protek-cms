@@ -85,7 +85,6 @@ WORKDIR /app
 ENV NODE_ENV=production \
     APP_WRITE_DIR=/tmp/appdata \
     NEXT_TELEMETRY_DISABLED=1
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
 
 # Копируем результат standalone
 COPY --from=builder /app/.next/standalone ./
