@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { POST as processJob } from '../process/route'
 import { prisma } from '@/lib/prisma'
 import * as XLSX from 'xlsx'
 
@@ -144,16 +145,22 @@ export async function POST(req: NextRequest) {
         results: Array.from({ length: rows.length }).fill(null)
       }
     })
-    // Trigger processing asynchronously: try external origin, then fallback to localhost
+    // Trigger processing asynchronously: external URL, localhost, and direct in-process call
     ;(async () => {
       try {
         const url = `${origin}/api/zzap/report/process?id=${job.id}`
         await fetch(url, { method: 'POST' })
       } catch {}
       try {
-        // Fallback inside container (Docker): call localhost directly
         const localUrl = `http://127.0.0.1:3000/api/zzap/report/process?id=${job.id}`
         await fetch(localUrl, { method: 'POST' })
+      } catch {}
+      try {
+        // Last resort: call the handler directly to avoid networking issues
+        const u = new URL(`/api/zzap/report/process?id=${job.id}`, 'http://localhost')
+        const req2 = new NextRequest(u.toString(), { method: 'POST' } as any)
+        // Do not await; run detached
+        setTimeout(() => { processJob(req2).catch(() => {}) }, 0)
       } catch {}
     })().catch(() => null as any)
     return new Response(JSON.stringify({ ok: true, jobId: job.id, total: rows.length }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
