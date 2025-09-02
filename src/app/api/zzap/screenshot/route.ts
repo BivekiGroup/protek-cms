@@ -804,7 +804,9 @@ export async function GET(req: NextRequest) {
               headers: { 'content-type': 'application/json; charset=utf-8' }
             })
           }
-          return new Response(buf, { status: 200, headers: { 'content-type': 'image/png', 'cache-control': 'no-store' } })
+          // Wrap Buffer to Blob to satisfy TS in Web Response typing
+          const body = new Blob([buf], { type: 'image/png' })
+          return new Response(body, { status: 200, headers: { 'content-type': 'image/png', 'cache-control': 'no-store' } })
         }
       }
     } catch {}

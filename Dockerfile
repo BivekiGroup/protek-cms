@@ -1,33 +1,9 @@
-# Переходим на Debian Slim ради стабильных пакетов Chromium/шрифтов
-FROM node:20-bookworm-slim
+### Stage 1: build Next.js standalone
+FROM node:20-bookworm-slim AS builder
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-## Устанавливаем зависимости для Puppeteer (Debian/apt)
-RUN apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    chromium \
-    libnss3 \
-    ca-certificates \
-    fonts-freefont-ttf \
-    fonts-dejavu-core \
-    fonts-liberation \
-    git \
-    bash \
-    python3 \
-    make \
-    g++ \
-    dumb-init \
- && rm -rf /var/lib/apt/lists/*
-
-# Устанавливаем переменные окружения для Puppeteer
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV APP_WRITE_DIR=/tmp/appdata
-ENV NPM_CONFIG_FUND=false
-ENV NPM_CONFIG_AUDIT=false
-ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # ARG переменные для передачи секретов во время сборки (опционально)
@@ -96,31 +72,25 @@ COPY . .
 # Генерируем Prisma Client
 RUN npx prisma generate
 
-# Устанавливаем флаги для Docker сборки
 ENV DOCKER_BUILD=true
-ENV NEXT_TELEMETRY_DISABLED=1
 
-# Собираем приложение с правильной обработкой CSS
+# Собираем приложение
 RUN npm run build
-
-# Проверяем, что стили собрались
-RUN ls -la .next/static/css/ || echo "CSS files not found, but continuing..."
-
-# Удаляем dev-зависимости без переустановки (быстрее и надёжнее в CI)
 RUN npm prune --omit=dev && npm cache clean --force
 
-## Создаем пользователя и директорию для записи
-RUN useradd -ms /bin/bash pptruser || true \
- && mkdir -p /home/pptruser/Downloads \
- && mkdir -p /tmp/appdata \
- && chmod 777 /tmp/appdata
+### Stage 2: runtime with official Puppeteer image (Chrome preinstalled)
+FROM ghcr.io/puppeteer/puppeteer:latest
+WORKDIR /app
 
-# Переключаемся на непривилегированного пользователя
-USER pptruser
+ENV NODE_ENV=production \
+    APP_WRITE_DIR=/tmp/appdata \
+    NEXT_TELEMETRY_DISABLED=1
 
-# Открываем порт
+# Копируем результат standalone
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
 EXPOSE 3000
-
-# Запускаем standalone-сервер Next.js через dumb-init
-ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["node", ".next/standalone/server.js"]
+# ENTRYPOINT от официального образа уже включает init
+CMD ["node", "server.js"]
