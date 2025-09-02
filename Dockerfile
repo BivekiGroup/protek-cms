@@ -79,7 +79,7 @@ RUN npm run build
 RUN npm prune --omit=dev && npm cache clean --force
 
 ### Stage 2: runtime with official Puppeteer image (Chrome preinstalled)
-FROM ghcr.io/puppeteer/puppeteer:latest
+FROM ghcr.io/puppeteer/puppeteer:24.10.2
 WORKDIR /app
 
 ENV NODE_ENV=production \
