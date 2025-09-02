@@ -115,5 +115,5 @@ USER pptruser
 # Открываем порт
 EXPOSE 3000
 
-# Запускаем приложение
-CMD ["npm", "start"] 
+# Запускаем standalone-сервер Next.js (см. предупреждение next start)
+CMD ["node", ".next/standalone/server.js"] 
