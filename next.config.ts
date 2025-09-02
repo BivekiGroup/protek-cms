@@ -1,3 +1,5 @@
+import path from 'path'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Оптимизация для Docker
@@ -48,7 +50,12 @@ const nextConfig = {
         crypto: false,
       };
     }
-    
+    // Ensure TS paths alias '@' -> src works even in CI
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      '@': path.resolve(__dirname, 'src'),
+    }
+
     // Make pg external for all environments
     config.externals = config.externals || [];
     if (isServer) {
