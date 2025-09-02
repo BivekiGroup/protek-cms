@@ -7,7 +7,6 @@ import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-// import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
 
 export default function ZzapStatsPage() {
@@ -42,6 +41,7 @@ export default function ZzapStatsPage() {
   const [stopping, setStopping] = useState(false)
   const [reportHistory, setReportHistory] = useState<any[]>([])
   const [stoppingId, setStoppingId] = useState<string>('')
+  const [jobLogs, setJobLogs] = useState<string[]>([])
   const sseRef = useRef<EventSource | null>(null)
   const sseJobRef = useRef<string>('')
 
@@ -104,6 +104,7 @@ export default function ZzapStatsPage() {
     sseRef.current = es
     sseJobRef.current = jobId
     setReportRunning(true)
+    setJobLogs([])
     es.onmessage = (ev) => {
       try {
         const j = JSON.parse(ev.data || '{}')
@@ -112,14 +113,25 @@ export default function ZzapStatsPage() {
         if (typeof j.status === 'string') setJobStatus(j.status)
         if (typeof j.resultFile === 'string' && j.resultFile) setJobResultUrl(j.resultFile)
         if (['done','failed','error','canceled'].includes((j.status || '').toLowerCase())) {
-          setReportRunning(false)
           loadReportHistory()
+          setReportRunning(false)
           try { es.close() } catch {}
           sseRef.current = null
           sseJobRef.current = ''
         }
+        if (typeof j.line === 'string' && j.line) {
+          setJobLogs((prev) => (prev.length > 400 ? [...prev.slice(-400), j.line] : [...prev, j.line]))
+        }
       } catch {}
     }
+    es.addEventListener('log', (ev: MessageEvent) => {
+      try {
+        const j = JSON.parse((ev as any).data || '{}')
+        if (typeof j.line === 'string' && j.line) {
+          setJobLogs((prev) => (prev.length > 400 ? [...prev.slice(-400), j.line] : [...prev, j.line]))
+        }
+      } catch {}
+    })
     es.addEventListener('error', () => {})
     return () => { try { es.close() } catch {}; sseRef.current = null }
   }, [jobId, loadReportHistory, sseRef, sseJobRef])
@@ -287,6 +299,11 @@ export default function ZzapStatsPage() {
                       {Math.round(jobTotal ? (jobProcessed / jobTotal) * 100 : 0)}%
                     </span>
                   </div>
+                  {jobLogs.length > 0 && (
+                    <div className="mt-2 p-2 bg-muted rounded border text-xs max-h-48 overflow-auto font-mono whitespace-pre-wrap">
+                      {jobLogs.map((l, i) => (<div key={i}>{l}</div>))}
+                    </div>
+                  )}
                   {jobResultUrl && (
                     <div>
                       <a className="text-blue-600 underline" href={jobResultUrl} target="_blank" rel="noreferrer">Скачать результат (XLSX)</a>
@@ -329,137 +346,53 @@ export default function ZzapStatsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2 sm:col-span-1">
-              <Label htmlFor="article">Артикул</Label>
-              <Input id="article" value={article} onChange={(e) => setArticle(e.target.value)} placeholder="например, 06A145710P" required />
+          <form onSubmit={
+            onSubmit
+          } className="space-y-3">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="grid gap-1">
+                <Label>Артикул</Label>
+                <Input value={article} onChange={(e) => setArticle(e.target.value)} placeholder="например, 314125" required />
+              </div>
+              <div className="grid gap-1">
+                <Label>Бренд (по желанию)</Label>
+                <Input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="например, SACHS" />
+              </div>
             </div>
-            <div className="grid gap-2 sm:col-span-1">
-              <Label htmlFor="brand">Бренд (опционально)</Label>
-              <Input id="brand" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="например, SACHS" />
+            <div className="grid gap-1">
+              <Label>CSS-селектор графика (опционально)</Label>
+              <Input value={selector} onChange={(e) => setSelector(e.target.value)} placeholder="например, .highcharts-container" />
             </div>
-            <div className="grid gap-2 sm:col-span-1">
-              <Label htmlFor="selector">CSS селектор (опционально)</Label>
-              <Input id="selector" value={selector} onChange={(e) => setSelector(e.target.value)} placeholder="например, .chart-container" />
-            </div>
-            <div className="flex items-center gap-4 sm:col-span-2">
+            <div className="flex items-center gap-2">
               <label className="flex items-center gap-2 text-sm">
-                <input id="openDirect" type="checkbox" checked={openDirect} onChange={(e) => setOpenDirect(e.target.checked)} />
-                Открывать напрямую (без скрина)
+                <input type="checkbox" checked={debug} onChange={(e) => setDebug(e.target.checked)} /> Отладка
               </label>
               <label className="flex items-center gap-2 text-sm">
-                <input id="debug" type="checkbox" checked={debug} onChange={(e) => setDebug(e.target.checked)} />
-                Отладочный JSON вместо PNG
+                <input type="checkbox" checked={openDirect} onChange={(e) => setOpenDirect(e.target.checked)} /> Открывать ZZAP напрямую (вместо скриншота)
               </label>
-              <Button type="button" variant="outline" size="sm" onClick={() => {
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="submit" disabled={loading}>{loading ? 'Загрузка…' : 'Получить скриншот'}</Button>
+              <Button type="button" variant="outline" onClick={() => {
+                if (!article.trim()) return
                 const base = 'https://www.zzap.ru'
-                const url = brand.trim()
-                  ? `${base}/public/search.aspx#rawdata=${encodeURIComponent(article)}&class_man=${encodeURIComponent(brand.trim())}&partnumber=${encodeURIComponent(article)}`
+                const b = brand.trim()
+                const url = b
+                  ? `${base}/public/search.aspx#rawdata=${encodeURIComponent(article)}&class_man=${encodeURIComponent(b)}&partnumber=${encodeURIComponent(article)}`
                   : `${base}/public/search.aspx#rawdata=${encodeURIComponent(article)}`
-                window.location.assign(url)
-              }} disabled={!article.trim()}>
-                Открыть ссылку ZZAP
-              </Button>
-            </div>
-            <div className="sm:col-span-2">
-              <Button type="submit" disabled={loading || !article}>
-                {loading ? 'Получаю…' : 'Получить скрин графика'}
-              </Button>
+                window.open(url, '_blank')
+              }}>Открыть ссылку ZZAP</Button>
             </div>
           </form>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <div className="text-red-600 text-sm">{error}</div>}
           {imgSrc && (
             <div className="mt-2">
-              <h3 className="mb-2 font-medium">Результат</h3>
               <img src={imgSrc} alt="Скриншот графика ZZAP" className="max-w-full border rounded-md" />
             </div>
           )}
-          {debugInfo && (
-            <pre className="mt-2 whitespace-pre-wrap text-xs bg-muted p-3 rounded-md overflow-auto max-h-[50vh]">
-{JSON.stringify(debugInfo, null, 2)}
-            </pre>
+          {debug && debugInfo && (
+            <pre className="text-xs bg-muted p-3 rounded border overflow-auto max-h-80">{JSON.stringify(debugInfo, null, 2)}</pre>
           )}
-        </CardContent>
-      </Card>
-
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>История отчётов</CardTitle>
-          <CardDescription>Последние задачи формирования XLSX. Ссылки ведут в S3.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Дата</TableHead>
-                <TableHead>Статус</TableHead>
-                <TableHead>Прогресс</TableHead>
-                <TableHead>Файл</TableHead>
-                <TableHead>Действие</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {reportHistory.length === 0 && (
-                <TableRow><TableCell colSpan={5}>Пока нет задач</TableCell></TableRow>
-              )}
-              {reportHistory.map((j) => (
-                <TableRow key={j.id}>
-                  <TableCell>{j.createdAt ? format(new Date(j.createdAt), 'dd.MM.yyyy HH:mm') : '—'}</TableCell>
-                  <TableCell>{statusRu(j.status)}</TableCell>
-                  <TableCell>{j.processed}/{j.total}</TableCell>
-                  <TableCell>{j.resultFile ? <a className="text-blue-600 underline" href={j.resultFile} target="_blank" rel="noreferrer">Скачать</a> : '—'}</TableCell>
-                  <TableCell>
-                    {(['pending','running'].includes(j.status)) ? (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={stoppingId === j.id}
-                        onClick={async () => {
-                          try {
-                            setStoppingId(j.id)
-                            await fetch(`/api/zzap/report/stop?id=${j.id}`, { method: 'POST' })
-                            await loadReportHistory()
-                            // sync the active job status if it is the same
-                            if (jobId === j.id) {
-                              const st = await fetch(`/api/zzap/report/status?id=${j.id}`).then(r=>r.json()).catch(()=>null)
-                              if (st?.ok) {
-                                setJobStatus(st.status)
-                                setJobProcessed(st.processed || 0)
-                              }
-                              setReportRunning(false)
-                            }
-                          } finally {
-                            setStoppingId('')
-                          }
-                        }}
-                      >
-                        Остановить
-                      </Button>
-                    ) : (!j.resultFile && j.processed > 0 && j.processed === j.total && ['error','failed'].includes((j.status||'').toLowerCase())) ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={async () => {
-                          try {
-                            const res = await fetch(`/api/zzap/report/finalize?id=${j.id}`, { method: 'POST' })
-                            const x = await res.json().catch(()=>({}))
-                            if (!res.ok || x?.ok === false) throw new Error(x?.error || 'Не удалось сформировать XLSX')
-                            await loadReportHistory()
-                            if (jobId === j.id && x?.resultFile) { setJobResultUrl(x.resultFile); setJobStatus('done') }
-                          } catch {}
-                        }}
-                      >
-                        Сформировать XLSX
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
         </CardContent>
       </Card>
 

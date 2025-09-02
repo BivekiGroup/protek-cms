@@ -10,3 +10,4 @@ export async function POST(req: NextRequest) {
   const job = await (prisma as any).zzapReportJob.update({ where: { id }, data: { status: 'canceled', error: 'stopped by user', resultFile: null } })
   return new Response(JSON.stringify({ ok: true, status: job.status }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
 }
+

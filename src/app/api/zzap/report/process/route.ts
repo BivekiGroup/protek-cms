@@ -1728,11 +1728,12 @@ export async function POST(req: NextRequest) {
         bookType: "xlsx",
       }) as Buffer;
       const key = `reports/zzap/${id}.xlsx`;
-      const url = await uploadBuffer(
+      const uploaded = await uploadBuffer(
         buf,
         key,
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      ).catch(() => null);
+      ).catch(() => null as any);
+      const url = typeof uploaded === 'string' ? uploaded : uploaded?.url || null
       const safeResults = results.map((v: any) => (v === undefined ? null : v));
       await (prisma as any).zzapReportJob.update({
         where: { id },

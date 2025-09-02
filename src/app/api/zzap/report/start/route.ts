@@ -1,115 +1,155 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import * as XLSX from 'xlsx'
-import { randomUUID } from 'crypto'
 
-export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-function normalizeArticle(s?: string | null) {
-  if (!s) return ''
-  return s.replace(/\s+/g, '').replace(/[-–—]+/g, '').trim().toUpperCase()
-}
-function normalizeBrand(s?: string | null) {
-  return (s || '').trim().toUpperCase()
+function parseRows(buf: Buffer, filename?: string): { article: string; brand: string }[] {
+  try {
+    const ext = (filename || '').toLowerCase()
+    // Common header synonyms (Unicode-friendly: avoid \b which doesn't work with Cyrillic in JS)
+    const norm = (s: string) => (s || '').toString().trim().toLowerCase()
+    const isHeaderArticle = (s: string) => /(артикул|номер|article|part|number)/i.test(norm(s))
+    const isHeaderBrand = (s: string) => /(бренд|марка|производитель|brand|manufacturer)/i.test(norm(s))
+
+    if (ext.endsWith('.csv')) {
+      const textRaw = buf.toString('utf-8')
+      const text = textRaw.replace(/^\uFEFF/, '') // strip BOM
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0)
+      const out: { article: string; brand: string }[] = []
+      if (!lines.length) return out
+
+      // Detect delimiter (prefer ; then , then tab)
+      const detectDelim = (s: string) => {
+        if (s.includes(';')) return ';'
+        if (s.includes('\t')) return '\t'
+        return ','
+      }
+      const first = lines[0]
+      const delim = detectDelim(first)
+      const firstParts = first.split(new RegExp(delim === '\t' ? '\\t' : delim))
+
+      // Decide columns mapping using header if present
+      let hasHeader = false
+      let artIdx = 0
+      let brandIdx = 1
+      if (firstParts.length >= 2) {
+        const c0 = (firstParts[0] || '').trim()
+        const c1 = (firstParts[1] || '').trim()
+        if ((isHeaderArticle(c0) && isHeaderBrand(c1)) || (isHeaderBrand(c0) && isHeaderArticle(c1))) {
+          hasHeader = true
+          artIdx = isHeaderArticle(c0) ? 0 : 1
+          brandIdx = isHeaderBrand(c0) ? 0 : 1
+        }
+      }
+
+      // If more than 2 columns and explicit headers present, locate precise indices
+      if (!hasHeader && firstParts.length > 2) {
+        const lower = firstParts.map((v) => (v || '').toString().trim())
+        const ai = lower.findIndex(isHeaderArticle)
+        const bi = lower.findIndex(isHeaderBrand)
+        if (ai >= 0 || bi >= 0) {
+          hasHeader = true
+          if (ai >= 0) artIdx = ai
+          if (bi >= 0) brandIdx = bi
+        }
+      }
+
+      const startIdx = hasHeader ? 1 : 0
+      for (let i = startIdx; i < lines.length; i++) {
+        const parts = lines[i].split(new RegExp(delim === '\t' ? '\\t' : delim))
+        if (!parts.length) continue
+        // Heuristic mapping if header unknown or indexes out of bounds
+        const col0 = (parts[0] || '').trim()
+        const col1 = (parts[1] || '').trim()
+        let article = ''
+        let brand = ''
+        if (artIdx < parts.length || brandIdx < parts.length) {
+          const a = (parts[artIdx] || '').trim()
+          const b = (parts[brandIdx] || '').trim()
+          article = a
+          brand = b
+        } else {
+          // Fallback classify
+          const isArt = (s: string) => /[0-9]/.test(s) && s.replace(/\s+/g,'').length >= 3
+          const isBrandGuess = (s: string) => /[A-Za-zА-Яа-я]/.test(s) && !(isArt(s) && s.length > 6)
+          if (isBrandGuess(col0) && isArt(col1)) { article = col1; brand = col0 }
+          else { article = col0; brand = col1 }
+        }
+        if (article) out.push({ article, brand })
+      }
+      return out
+    }
+    const wb = XLSX.read(buf, { type: 'buffer' })
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const aoa = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1 }) as any[][]
+    const out: { article: string; brand: string }[] = []
+    const header = (aoa?.[0] || []).map((v: any) => String(v || '').trim())
+    const hasHeaders = header.some(h => isHeaderArticle(h)) || header.some(h => isHeaderBrand(h))
+    // Try to find specific column indices by header
+    let artIdx = 0
+    let brandIdx = 1
+    if (hasHeaders) {
+      const idxA = header.findIndex(isHeaderArticle)
+      const idxB = header.findIndex(isHeaderBrand)
+      if (idxA >= 0) artIdx = idxA
+      if (idxB >= 0) brandIdx = idxB
+    }
+    // Helper: decide which column is article/brand by heuristics
+    const classify = (a: string, b: string) => {
+      const A = (a || '').trim()
+      const B = (b || '').trim()
+      const isArt = (s: string) => /[0-9]/.test(s) && s.replace(/\s+/g,'').length >= 3
+      const isBrand = (s: string) => /[A-Za-zА-Яа-я]/.test(s) && !(isArt(s) && s.length > 6)
+      if (hasHeaders) return { article: A, brand: B } // order will be applied via indices
+      if (isBrand(A) && isArt(B)) return { article: B, brand: A }
+      return { article: A, brand: B }
+    }
+    for (let i = hasHeaders ? 1 : 0; i < aoa.length; i++) {
+      const row = aoa[i]
+      // Use detected column indices if headers present; else default to first two
+      const a0 = String(row?.[hasHeaders ? artIdx : 0] ?? '').trim()
+      const b1 = String(row?.[hasHeaders ? brandIdx : 1] ?? '').trim()
+      if (!a0 && !b1) continue
+      const { article, brand } = classify(a0, b1)
+      if (article) out.push({ article, brand })
+    }
+    return out
+  } catch { return [] }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const contentType = req.headers.get('content-type') || ''
-    if (!contentType.includes('multipart/form-data')) {
-      return new Response(JSON.stringify({ ok: false, error: 'Ожидается multipart/form-data' }), { status: 400, headers: { 'content-type': 'application/json; charset=utf-8' } })
-    }
+    const origin = (() => { try { const u = new URL(req.url); return `${u.protocol}//${u.host}` } catch { return '' } })()
     const form = await req.formData()
-    const file = form.get('file')
+    const file = form.get('file') as File | null
     const periodFrom = form.get('periodFrom') as string | null
     const periodTo = form.get('periodTo') as string | null
-    if (!file || !(file instanceof File)) {
-      return new Response(JSON.stringify({ ok: false, error: 'Не передан файл' }), { status: 400, headers: { 'content-type': 'application/json; charset=utf-8' } })
+    if (!file) {
+      return new Response(JSON.stringify({ ok: false, error: 'file required' }), { status: 400, headers: { 'content-type': 'application/json; charset=utf-8' } })
     }
     if (!periodFrom || !periodTo) {
-      return new Response(JSON.stringify({ ok: false, error: 'Не передан период (periodFrom, periodTo)' }), { status: 400, headers: { 'content-type': 'application/json; charset=utf-8' } })
+      return new Response(JSON.stringify({ ok: false, error: 'periodFrom/periodTo required' }), { status: 400, headers: { 'content-type': 'application/json; charset=utf-8' } })
     }
-
-    const from = new Date(periodFrom)
-    const to = new Date(periodTo)
-    if (isNaN(+from) || isNaN(+to) || from > to) {
-      return new Response(JSON.stringify({ ok: false, error: 'Некорректный период' }), { status: 400, headers: { 'content-type': 'application/json; charset=utf-8' } })
-    }
-
     const buf = Buffer.from(await file.arrayBuffer())
-    // detect excel vs csv
-    let rows: { article: string; brand: string }[] = []
-    try {
-      const workbook = XLSX.read(buf, { type: 'buffer' })
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const table = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 }) as any[][]
-      if (!table || table.length < 2) throw new Error('Пустой файл')
-      const headers = (table[0] || []).map((h) => String(h || '').trim().toLowerCase())
-      // allow variations
-      const artAliases = ['артикул','article','sku','номер','код','каталожный номер','oem','арт','part number','partnumber','номер детали']
-      const brandAliases = ['бренд','brand','марка','производитель','производитель/бренд','фирма','vendor','manufacturer','maker']
-      const artIdx = headers.findIndex((h) => artAliases.includes(h))
-      const brandIdx = headers.findIndex((h) => brandAliases.includes(h))
-      if (artIdx < 0 || brandIdx < 0) {
-        return new Response(JSON.stringify({ ok: false, error: 'Файл должен содержать столбцы: Артикул, Бренд (или эквиваленты: Номер/Производитель)' }), { status: 422, headers: { 'content-type': 'application/json; charset=utf-8' } })
-      }
-      const dataRows = table.slice(1).filter((r) => r && r.some((c) => String(c || '').trim()))
-      rows = dataRows.map((r) => ({ article: normalizeArticle(String(r[artIdx] || '')), brand: normalizeBrand(String(r[brandIdx] || '')) }))
-    } catch (e) {
-      // try CSV
-      const text = buf.toString('utf-8')
-      const lines = text.split(/\r?\n/).filter((l) => l.trim())
-      if (lines.length < 2) throw e
-      const headers = lines[0].split(',').map((h) => h.replace(/"/g, '').trim().toLowerCase())
-      const artAliases = ['артикул','article','sku','номер','код','каталожный номер','oem','арт','part number','partnumber','номер детали']
-      const brandAliases = ['бренд','brand','марка','производитель','производитель/бренд','фирма','vendor','manufacturer','maker']
-      const artIdx = headers.findIndex((h) => artAliases.includes(h))
-      const brandIdx = headers.findIndex((h) => brandAliases.includes(h))
-      if (artIdx < 0 || brandIdx < 0) {
-        return new Response(JSON.stringify({ ok: false, error: 'CSV: нужны столбцы Артикул, Бренд (или Номер/Производитель)' }), { status: 422, headers: { 'content-type': 'application/json; charset=utf-8' } })
-      }
-      rows = lines.slice(1).map((line) => {
-        const cols = line.split(',').map((v) => v.replace(/"/g, '').trim())
-        return { article: normalizeArticle(cols[artIdx] || ''), brand: normalizeBrand(cols[brandIdx] || '') }
-      })
-    }
-
-    // sanitize
-    rows = rows.filter((r) => r.article && r.brand)
-    if (rows.length === 0) {
-      return new Response(JSON.stringify({ ok: false, error: 'Не найдено валидных строк' }), { status: 422, headers: { 'content-type': 'application/json; charset=utf-8' } })
-    }
-    // limit
-    if (rows.length > 500) rows = rows.slice(0, 500)
-
-    // Persist job via Prisma only
+    const rows = parseRows(buf, file.name)
     const job = await (prisma as any).zzapReportJob.create({
       data: {
         status: 'pending',
-        periodFrom: from,
-        periodTo: to,
+        periodFrom: new Date(periodFrom),
+        periodTo: new Date(periodTo),
         total: rows.length,
         processed: 0,
         inputRows: rows,
+        results: Array.from({ length: rows.length }).fill(null)
       }
     })
-    // Fire-and-forget background processing
-    ;(async () => {
-      const origin = (() => { try { const u = new URL(req.url); return `${u.protocol}//${u.host}` } catch { return '' } })()
-      try {
-        let done = false
-        while (!done) {
-          const proc = await fetch(`${origin}/api/zzap/report/process?id=${job.id}&batch=5`, { method: 'POST' }).catch(() => null as any)
-          if (!proc) break
-          const st = await fetch(`${origin}/api/zzap/report/status?id=${job.id}`).then(r => r.json()).catch(() => null as any)
-          if (st?.status === 'done' || st?.status === 'error' || st?.status === 'failed' || st?.status === 'canceled') done = true
-          if (!done) await new Promise(r => setTimeout(r, 800))
-        }
-      } catch {}
-    })()
-    return new Response(JSON.stringify({ ok: true, jobId: job.id, total: job.total, background: true }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
+    // Trigger processing asynchronously
+    try {
+      fetch(`${origin}/api/zzap/report/process?id=${job.id}`, { method: 'POST' }).catch(() => null as any)
+    } catch {}
+    return new Response(JSON.stringify({ ok: true, jobId: job.id, total: rows.length }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
   } catch (e: any) {
-    return new Response(JSON.stringify({ ok: false, error: e?.message || String(e) }), { status: 500, headers: { 'content-type': 'application/json; charset=utf-8' } })
+    return new Response(JSON.stringify({ ok: false, error: String(e?.message || e) }), { status: 500, headers: { 'content-type': 'application/json; charset=utf-8' } })
   }
 }

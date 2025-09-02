@@ -1,77 +1,69 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import fs from 'fs'
+import path from 'path'
 
 export const dynamic = 'force-dynamic'
-
-type JobRow = {
-  id: string
-  status: string
-  processed: number
-  total: number
-  resultFile?: string | null
-  error?: string | null
-  updatedAt?: Date | string
-}
-
-async function loadJob(id: string): Promise<JobRow | null> {
-  const j = await (prisma as any).zzapReportJob.findUnique({ where: { id }, select: { id: true, status: true, processed: true, total: true, resultFile: true, error: true, updatedAt: true } })
-  return j || null
-}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id') || ''
   if (!id) return new Response('id required', { status: 400 })
 
-  const stream = new ReadableStream<Uint8Array>({
+  const stream = new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder()
-      let closed = false
-      let timer: any = null
-
-      const closeStream = () => {
-        if (closed) return
-        closed = true
-        try { clearInterval(keepAlive) } catch {}
-        try { if (timer) clearTimeout(timer) } catch {}
-        try { controller.close() } catch {}
-      }
-
-      const send = (data: any) => { if (!closed) { try { controller.enqueue(enc.encode(`data: ${JSON.stringify(data)}\n\n`)) } catch {} } }
-      const sendEvent = (event: string, data: any) => { if (!closed) { try { controller.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)) } catch {} } }
-
-      async function tick() {
-        if (closed) return
+      const send = (obj: any) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`))
+      const sendLog = (line: string) => controller.enqueue(enc.encode(`event: log\ndata: ${JSON.stringify({ line })}\n\n`))
+      controller.enqueue(enc.encode('retry: 1000\n\n'))
+      let lastUpdated: string | null = null
+      let running = true
+      // Tail logs file incrementally
+      const logPath = path.join(process.cwd(), `.zzap-report-${id}.log`)
+      let lastSize = 0
+      try { if (fs.existsSync(logPath)) { const st = fs.statSync(logPath); lastSize = st.size } } catch {}
+      const interval = setInterval(async () => {
         try {
-          const job = await loadJob(id)
-          if (!job) { sendEvent('error', { error: 'not_found' }); return closeStream() }
-          const payload = { status: job.status, processed: job.processed || 0, total: job.total || 0, resultFile: job.resultFile || null, error: job.error || null }
-          send(payload)
-          if (['done', 'canceled', 'failed', 'error'].includes((job.status || '').toLowerCase())) return closeStream()
-        } catch (e) {
-          // swallow transient errors; next tick may succeed
-        }
-        if (!closed) timer = setTimeout(tick, 1000)
-      }
-      // Keep-alive comment every 20s in case no changes
-      const keepAlive = setInterval(() => { if (!closed) { try { controller.enqueue(enc.encode(`:\n\n`)) } catch {} } }, 20000)
-      // Kick off
-      tick()
-      // Try to bind to request abort
-      try { (req as any).signal?.addEventListener?.('abort', closeStream) } catch {}
-    },
-    cancel() {
-      // Reader cancelled from client
-      // Nothing to do here: start() registered abort handler and self-closes
+          const j = await (prisma as any).zzapReportJob.findUnique({ where: { id }, select: { id: true, status: true, processed: true, total: true, resultFile: true, error: true, updatedAt: true } })
+          if (!j) { send({ error: 'not found' }); return }
+          const upd = j.updatedAt?.toISOString?.() || ''
+          if (upd !== lastUpdated) {
+            lastUpdated = upd
+            send(j)
+          }
+          // Emit any new log lines appended since last tick
+          try {
+            if (fs.existsSync(logPath)) {
+              const st = fs.statSync(logPath)
+              if (st.size > lastSize) {
+                const fd = fs.openSync(logPath, 'r')
+                const buf = Buffer.alloc(st.size - lastSize)
+                fs.readSync(fd, buf, 0, buf.length, lastSize)
+                fs.closeSync(fd)
+                lastSize = st.size
+                const chunk = buf.toString('utf-8')
+                const lines = chunk.split(/\r?\n/).filter(Boolean)
+                for (const line of lines) sendLog(line)
+              }
+            }
+          } catch {}
+          const done = ['done','error','failed','canceled'].includes((j.status || '').toLowerCase())
+          if (done) {
+            clearInterval(interval)
+            running = false
+            try { controller.close() } catch {}
+          }
+        } catch {}
+      }, 1000)
+      req.signal.addEventListener('abort', () => { if (running) clearInterval(interval) })
     }
   })
-
   return new Response(stream, {
+    status: 200,
     headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no'
+      'Connection': 'keep-alive'
     }
   })
 }
