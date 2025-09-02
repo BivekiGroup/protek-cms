@@ -144,10 +144,18 @@ export async function POST(req: NextRequest) {
         results: Array.from({ length: rows.length }).fill(null)
       }
     })
-    // Trigger processing asynchronously
-    try {
-      fetch(`${origin}/api/zzap/report/process?id=${job.id}`, { method: 'POST' }).catch(() => null as any)
-    } catch {}
+    // Trigger processing asynchronously: try external origin, then fallback to localhost
+    ;(async () => {
+      try {
+        const url = `${origin}/api/zzap/report/process?id=${job.id}`
+        await fetch(url, { method: 'POST' })
+      } catch {}
+      try {
+        // Fallback inside container (Docker): call localhost directly
+        const localUrl = `http://127.0.0.1:3000/api/zzap/report/process?id=${job.id}`
+        await fetch(localUrl, { method: 'POST' })
+      } catch {}
+    })().catch(() => null as any)
     return new Response(JSON.stringify({ ok: true, jobId: job.id, total: rows.length }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
   } catch (e: any) {
     return new Response(JSON.stringify({ ok: false, error: String(e?.message || e) }), { status: 500, headers: { 'content-type': 'application/json; charset=utf-8' } })

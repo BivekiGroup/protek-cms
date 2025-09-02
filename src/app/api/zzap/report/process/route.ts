@@ -1333,6 +1333,7 @@ export async function POST(req: NextRequest) {
 
   // Ensure status is running (idempotent)
   try { await (prisma as any).zzapReportJob.update({ where: { id }, data: { status: 'running' } }) } catch {}
+  try { appendJobLog(id, `processor: start batchSize=${batchSize}, processed=${processed}/${rows.length}`) } catch {}
 
   // Helper to call internal endpoints (AI, screenshot)
   const origin = (() => {
