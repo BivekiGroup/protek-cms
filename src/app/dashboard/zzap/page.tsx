@@ -45,6 +45,18 @@ export default function ZzapStatsPage() {
   const [jobLogs, setJobLogs] = useState<string[]>([])
   const sseRef = useRef<EventSource | null>(null)
   const sseJobRef = useRef<string>('')
+  const calcEtaText = useCallback((items: number) => {
+    const perItemMs = 12000 + 2000 + 1500
+    const total = Math.max(0, Math.ceil((items || 0) * perItemMs))
+    const s = Math.round(total / 1000)
+    const mm = Math.floor(s / 60)
+    const ss = s % 60
+    if (mm <= 0) return `~${s} сек`
+    if (mm < 60) return `~${mm} мин ${ss} сек`
+    const hh = Math.floor(mm / 60)
+    const m2 = mm % 60
+    return `~${hh} ч ${m2} мин`
+  }, [])
 
   const statusRu = useCallback((s?: string) => {
     switch ((s || '').toLowerCase()) {
@@ -111,6 +123,7 @@ export default function ZzapStatsPage() {
         const j = JSON.parse(ev.data || '{}')
         if (typeof j.processed === 'number') setJobProcessed(j.processed)
         if (typeof j.total === 'number') setJobTotal(j.total)
+        if (typeof j.total === 'number') setJobEtaText((prev) => prev || calcEtaText(Number(j.total)))
         if (typeof j.status === 'string') setJobStatus(j.status)
         if (typeof j.resultFile === 'string' && j.resultFile) setJobResultUrl(j.resultFile)
         if (['done','failed','error','canceled'].includes((j.status || '').toLowerCase())) {
@@ -135,7 +148,7 @@ export default function ZzapStatsPage() {
     })
     es.addEventListener('error', () => {})
     return () => { try { es.close() } catch {}; sseRef.current = null }
-  }, [jobId, loadReportHistory, sseRef, sseJobRef])
+  }, [jobId, loadReportHistory, sseRef, sseJobRef, calcEtaText])
 
   const onSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -232,7 +245,8 @@ export default function ZzapStatsPage() {
                   if (!res.ok || !data?.ok) throw new Error(data?.error || `Ошибка ${res.status}`)
                   setJobId(data.jobId)
                   setJobTotal(data.total || 0)
-                  if (typeof data.etaText === 'string') setJobEtaText(data.etaText)
+                  if (typeof data.etaText === 'string' && data.etaText) setJobEtaText(data.etaText)
+                  else if (typeof data.total === 'number') setJobEtaText(calcEtaText(Number(data.total)))
                   // ensure new job appears immediately in the list
                   loadReportHistory()
                   // SSE subscription will pick it up and update progress

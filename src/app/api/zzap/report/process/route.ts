@@ -36,6 +36,46 @@ function jitter(base: number, jitter: number) {
   return base + j;
 }
 
+async function pageContainsArticleBrand(
+  page: Page,
+  article: string,
+  brand?: string
+): Promise<boolean> {
+  try {
+    const ok = await page.evaluate((art: string, br?: string) => {
+      const normalize = (s: string) => (s || '').replace(/[^0-9a-zA-Zа-яА-Я]+/g, '').toUpperCase();
+      const wantArt = normalize(art);
+      const wantBr = br ? normalize(br) : '';
+      const collectDocs = (): Document[] => {
+        const docs: Document[] = [document];
+        const ifr = Array.from(document.querySelectorAll('iframe')) as HTMLIFrameElement[];
+        for (const f of ifr) { try { const d = f.contentDocument as Document | null; if (d) docs.push(d) } catch {} }
+        return docs;
+      };
+      const docs = collectDocs();
+      for (const d of docs) {
+        // Prefer grid rows text to reduce noise
+        const rows = Array.from(d.querySelectorAll('tr[id*="SearchGridView_DXDataRow"], tr[id*="GridView_DXDataRow"]')) as HTMLTableRowElement[];
+        const hasInRows = rows.some(tr => {
+          const t = (tr.innerText || '').toUpperCase();
+          const n = t.replace(/[^0-9a-zA-Zа-яА-Я]+/g, '');
+          if (wantBr && !t.includes((br || '').toUpperCase())) return false;
+          return n.includes(wantArt);
+        });
+        if (hasInRows) return true;
+        // Fallback: full text if rows not present
+        const full = (d.body?.innerText || '').toUpperCase();
+        const norm = full.replace(/[^0-9a-zA-Zа-яА-Я]+/g, '');
+        if ((!wantBr || full.includes((br || '').toUpperCase())) && norm.includes(wantArt)) return true;
+      }
+      return false;
+    }, article, brand);
+    return !!ok;
+  } catch {
+    return false;
+  }
+}
+
 function normalizePrice(text: string): number | null {
   const cleaned = text
     .replace(/[^0-9.,]/g, "")
@@ -1540,8 +1580,24 @@ export async function POST(req: NextRequest) {
         } catch {}
         // let client JS finalize rendering
         await sleep(1800);
+        // Sanity check: ensure target article/brand is present, otherwise retry openSearch once
+        let hasTarget = await pageContainsArticleBrand(page, article, brand)
+        if (!hasTarget) {
+          appendJobLog(id, `sanity: article/brand not found on page, retry openSearch`)
+          await openSearch(page, article, brand)
+          await sleep(1200)
+          hasTarget = await pageContainsArticleBrand(page, article, brand)
+        }
         await debugShot(page, id, `search-before-scrape-${encodeURIComponent(article)}`)
-        const prices = await scrapeTop3Prices(page, brand, article);
+        let prices = await scrapeTop3Prices(page, brand, article);
+        // If prices look identical to previous item (rare but possible due to page reuse), retry once
+        const prev = results[realIndex - 1] as any
+        const sig = (arr?: number[]) => (arr || []).slice(0, 3).join('|')
+        if (prev && Array.isArray(prev.prices) && sig(prev.prices) && sig(prev.prices) === sig(prices)) {
+          appendJobLog(id, `warn: duplicate price signature with previous, retry scrape`)
+          await sleep(500 + Math.floor(Math.random()*700))
+          prices = await scrapeTop3Prices(page, brand, article);
+        }
         appendJobLog(
           id,
           `prices: ${prices.map((p) => String(p)).join(", ") || "—"}`
