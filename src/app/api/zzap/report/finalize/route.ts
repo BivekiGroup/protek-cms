@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id') || ''
     if (!id) return new Response(JSON.stringify({ ok: false, error: 'id required' }), { status: 400, headers: { 'content-type': 'application/json; charset=utf-8' } })
-    let job = await (prisma as any).zzapReportJob.findUnique({ where: { id } })
+    const job = await (prisma as any).zzapReportJob.findUnique({ where: { id } })
     if (!job) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8' } })
     const rows = (job.inputRows as any[]) as { article: string; brand: string }[]
     const results = (job.results as any[]) || []
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       const k = keyOf(def.article, def.brand)
       let r = byKey.get(k) || results[i] || null
       if (!r) r = { article: def.article, brand: def.brand, prices: [], stats: {} }
-      const row = [def.article, def.brand]
+      const row: (string | number)[] = [def.article, def.brand]
       const p = ((r as any).prices || []) as number[]
       row.push(p[0] ?? '', p[1] ?? '', p[2] ?? '')
       for (const ml of monthLabels) {

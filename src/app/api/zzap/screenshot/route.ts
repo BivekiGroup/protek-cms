@@ -334,7 +334,10 @@ export async function GET(req: NextRequest) {
               const btn = coll.Get?.(base + 'LoginButton') || coll.Get?.(base + 'LogonButton') || coll.Get?.(base + 'btnLogin')
               if (btn?.DoClick) { try { btn.DoClick() } catch {} ; return 'clicked' }
               // as a fallback, try raise postback
-              try { w.__doPostBack && w.__doPostBack(base + 'LoginButton', '') ; return 'postback' } catch {}
+              try {
+                if (w.__doPostBack) { w.__doPostBack(base + 'LoginButton', '') }
+                return 'postback'
+              } catch {}
               return 'no-btn'
             })
             // allow callback navigation/partial update

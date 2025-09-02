@@ -183,8 +183,9 @@ async function ensureAuthenticated(
             } catch {}
           } else {
             try {
-              w.__doPostBack &&
+              if (w.__doPostBack) {
                 w.__doPostBack((base + "LoginButton").replace(/_/g, "$"), "");
+              }
             } catch {}
           }
         } catch {}
@@ -313,8 +314,9 @@ async function loginAndGetPage(): Promise<Page> {
               } catch {}
             } else {
               try {
-                w.__doPostBack &&
+                if (w.__doPostBack) {
                   w.__doPostBack((base + "LoginButton").replace(/_/g, "$"), "");
+                }
               } catch {}
             }
           } catch {}
@@ -544,7 +546,7 @@ async function scrapeTop3Prices(
         }
 
         // 3) Any first rows as fallback
-        let fallbackRows = allRows;
+        const fallbackRows = allRows;
         out = pickFromRows(fallbackRows);
         if (out.length >= 3) return out.slice(0, 3);
 
@@ -867,7 +869,7 @@ async function fetchDxMonthly(
         try { await (restoreSession as any)(statsPage) } catch {}
         await statsPage.goto(statsUrl, { waitUntil: 'domcontentloaded', timeout: 12000 }).catch(()=>{})
         // Give redirects time to settle
-        await statsPage.waitForTimeout?.(400)
+        await new Promise((r) => setTimeout(r, 400))
       } catch {}
     }
     // Ensure we are authenticated in this tab
@@ -924,7 +926,7 @@ async function fetchDxMonthly(
             await statsPage
               .goto(target, { waitUntil: "domcontentloaded", timeout: 12000 })
               .catch(() => {});
-            await statsPage.waitForTimeout?.(400)
+            await new Promise((r) => setTimeout(r, 400))
             await debugShot(statsPage as any, jobId!, 'dx-after-login')
           }
         } catch {}
@@ -1266,7 +1268,7 @@ export async function POST(req: NextRequest) {
       headers: { "content-type": "application/json; charset=utf-8" },
     });
   // Load job via Prisma only
-  let job: any = await (prisma as any).zzapReportJob.findUnique({
+  const job: any = await (prisma as any).zzapReportJob.findUnique({
     where: { id },
   });
   if (!job)
@@ -1732,7 +1734,7 @@ export async function POST(req: NextRequest) {
         const k = keyOf(rowDef.article, rowDef.brand);
         let r = byKey.get(k) || results[i] || null;
         if (!r) r = { article: rowDef.article, brand: rowDef.brand, prices: [], stats: {} };
-        const row = [rowDef.article, rowDef.brand];
+        const row: (string | number)[] = [rowDef.article, rowDef.brand];
         const p = ((r as any).prices || []) as number[];
         row.push(p[0] ?? "", p[1] ?? "", p[2] ?? "");
         for (const ml of monthLabels) {
