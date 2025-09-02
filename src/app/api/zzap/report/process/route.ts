@@ -1702,6 +1702,52 @@ export async function POST(req: NextRequest) {
           ([, v]) => (v as number) > 0
         ).length;
         appendJobLog(id, `mapped months nonzero=${nonZero}`);
+        // If the entire row suspiciously matches previous row (prices + months), do one hard retry using a fresh tab
+        try {
+          const prev = results[realIndex - 1] as any
+          const priceSig = (arr?: number[]) => (arr || []).slice(0,3).join('|')
+          const monthSig = (obj?: Record<string, number>) => monthLabels.map(k => String((obj || {})[k] ?? 0)).join(',')
+          const samePrices = prev && Array.isArray(prev?.prices) && priceSig(prev.prices) === priceSig(prices)
+          const sameMonths = prev && typeof prev?.stats === 'object' && monthSig(prev.stats) === monthSig(counts)
+          const differentKey = prev && (String(prev.article||'').toUpperCase() + '|' + String(prev.brand||'').toUpperCase()) !== (String(article).toUpperCase() + '|' + String(brand||'').toUpperCase())
+          if (differentKey && samePrices && sameMonths) {
+            appendJobLog(id, 'suspicious duplicate with previous row: hard retry in new tab')
+            try {
+              const p2 = await page.browser().newPage()
+              try {
+                p2.setDefaultNavigationTimeout(ZZAP_TIMEOUT_MS)
+                p2.setDefaultTimeout(ZZAP_TIMEOUT_MS)
+                await p2.setViewport({ width: 1440, height: 900 })
+                await p2.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36')
+              } catch {}
+              try { await restoreSession(p2) } catch {}
+              try { await openSearch(p2, article, brand) } catch {}
+              try { await p2.waitForSelector('tr[id*="SearchGridView_DXDataRow"], table[id*="SearchGridView_DXMainTable"], #ctl00_BodyPlace_SearchGridView', { timeout: 20000 }) } catch {}
+              await sleep(1500)
+              const prices2 = await scrapeTop3Prices(p2, brand, article)
+              let monthly2: { label: string; count: number }[] | null = await captureDxFromSearch(p2 as any, id, article)
+              if (!monthly2 || monthly2.length === 0) {
+                const m2 = await scrapeMonthlyCounts(p2 as any, monthLabels)
+                if (m2 && m2.length) monthly2 = m2
+              }
+              const counts2: Record<string, number> = {}
+              for (const ml of monthLabels) counts2[ml] = 0
+              for (const r of monthly2 || []) {
+                const lbl = toLabelFromCompact(r.label) || r.label
+                if (lbl in counts2) counts2[lbl] = r.count
+              }
+              const better = priceSig(prices2) !== priceSig(prev?.prices) || monthSig(counts2) !== monthSig(prev?.stats)
+              if (better) {
+                prices = prices2
+                for (const k of monthLabels) counts[k] = counts2[k] ?? counts[k]
+                appendJobLog(id, 'hard retry: replaced row with fresh-tab result')
+              } else {
+                appendJobLog(id, 'hard retry: result still matches previous, keep original')
+              }
+              try { await p2.close() } catch {}
+            } catch {}
+          }
+        } catch {}
         // Log compact result preview: prices + first N month values
         try {
           const maxPreview = Math.min(12, monthLabels.length);
