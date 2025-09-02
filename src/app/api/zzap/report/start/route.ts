@@ -145,6 +145,23 @@ export async function POST(req: NextRequest) {
         results: Array.from({ length: rows.length }).fill(null)
       }
     })
+    // Rough ETA: base per-item processing + expected inter-item delay
+    const estItemMs = Number(process.env.ZZAP_ESTIMATE_ITEM_MS || 12000)
+    const delayBase = Number(process.env.ZZAP_BETWEEN_ITEMS_DELAY_MS || 2000)
+    const delayJitter = Number(process.env.ZZAP_BETWEEN_ITEMS_JITTER_MS || 3000)
+    const expectedInterDelay = delayBase + Math.max(0, delayJitter) / 2
+    const perItemMs = estItemMs + expectedInterDelay
+    const etaMs = Math.ceil((rows.length || 0) * Math.max(1000, perItemMs))
+    const etaText = (() => {
+      const s = Math.round(etaMs / 1000)
+      const mm = Math.floor(s / 60)
+      const ss = s % 60
+      if (mm <= 0) return `~${s} сек`
+      if (mm < 60) return `~${mm} мин ${ss} сек`
+      const hh = Math.floor(mm / 60)
+      const m2 = mm % 60
+      return `~${hh} ч ${m2} мин`
+    })()
     // Trigger processing asynchronously: external URL, localhost, and direct in-process call
     ;(async () => {
       try {
@@ -163,7 +180,7 @@ export async function POST(req: NextRequest) {
         setTimeout(() => { processJob(req2).catch(() => {}) }, 0)
       } catch {}
     })().catch(() => null as any)
-    return new Response(JSON.stringify({ ok: true, jobId: job.id, total: rows.length }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
+    return new Response(JSON.stringify({ ok: true, jobId: job.id, total: rows.length, etaMs, etaText }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
   } catch (e: any) {
     return new Response(JSON.stringify({ ok: false, error: String(e?.message || e) }), { status: 500, headers: { 'content-type': 'application/json; charset=utf-8' } })
   }

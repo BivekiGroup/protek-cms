@@ -16,10 +16,11 @@ const COOKIE_FILE =
   process.env.ZZAP_COOKIE_FILE ||
   path.join(RUNTIME_DIR, ".zzap-session.json");
 const COOKIE_TTL_MIN = Number(process.env.ZZAP_SESSION_TTL_MINUTES || 180);
-// Gentle-mode delays: keep zero by default to avoid env coupling
-const ZZAP_DELAY_MS = Number(process.env.ZZAP_BETWEEN_ITEMS_DELAY_MS || 0);
+// Gentle-mode delays: increase sane defaults to avoid anti-bot and duplication
+// Base delay 2000ms with up to +3000ms jitter (2s..5s) if envs are not set
+const ZZAP_DELAY_MS = Number(process.env.ZZAP_BETWEEN_ITEMS_DELAY_MS || 2000);
 const ZZAP_DELAY_JITTER_MS = Number(
-  process.env.ZZAP_BETWEEN_ITEMS_JITTER_MS || 0
+  process.env.ZZAP_BETWEEN_ITEMS_JITTER_MS || 3000
 );
 const ZZAP_DEBUG_SHOTS = String(process.env.ZZAP_DEBUG_SHOTS || '').trim() === '1'
 // DX debounce: how long to wait after last matching response

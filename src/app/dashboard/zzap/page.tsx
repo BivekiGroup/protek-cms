@@ -39,6 +39,7 @@ export default function ZzapStatsPage() {
   const [jobError, setJobError] = useState<string>('')
   const [reportRunning, setReportRunning] = useState(false)
   const [stopping, setStopping] = useState(false)
+  const [jobEtaText, setJobEtaText] = useState<string>('')
   const [reportHistory, setReportHistory] = useState<any[]>([])
   const [stoppingId, setStoppingId] = useState<string>('')
   const [jobLogs, setJobLogs] = useState<string[]>([])
@@ -214,6 +215,7 @@ export default function ZzapStatsPage() {
                     setJobError('')
                     setJobId('')
                     setJobResultUrl('')
+                    setJobEtaText('')
                     setJobProcessed(0)
                     setJobTotal(0)
                     if (!reportFile) return
@@ -230,6 +232,7 @@ export default function ZzapStatsPage() {
                   if (!res.ok || !data?.ok) throw new Error(data?.error || `Ошибка ${res.status}`)
                   setJobId(data.jobId)
                   setJobTotal(data.total || 0)
+                  if (typeof data.etaText === 'string') setJobEtaText(data.etaText)
                   // ensure new job appears immediately in the list
                   loadReportHistory()
                   // SSE subscription will pick it up and update progress
@@ -292,7 +295,7 @@ export default function ZzapStatsPage() {
               {jobId && (
                 <div className="space-y-1">
                   <div>Задача: <span className="font-mono">{jobId}</span></div>
-                  <div>Статус: {statusRu(jobStatus)}; Прогресс: {jobProcessed}/{jobTotal}</div>
+                  <div>Статус: {statusRu(jobStatus)}; Прогресс: {jobProcessed}/{jobTotal}{jobEtaText ? `; Оценка: ${jobEtaText}` : ''}</div>
                   <div className="flex items-center gap-3 max-w-md mt-1">
                     <Progress value={jobTotal ? (jobProcessed / jobTotal) * 100 : 0} />
                     <span className="text-xs text-muted-foreground">
