@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import puppeteer, { Page } from "puppeteer";
+import fs from 'fs'
 import fs from "fs";
 import path from "path";
 import * as XLSX from "xlsx";
@@ -210,9 +211,23 @@ async function ensureAuthenticated(
   }
 }
 
+function resolvePuppeteerExec(): string | undefined {
+  const fromEnv = (process.env.PUPPETEER_EXECUTABLE_PATH || '').trim()
+  if (fromEnv && fs.existsSync(fromEnv)) return fromEnv
+  const candidates = [
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable'
+  ]
+  for (const p of candidates) { try { if (fs.existsSync(p)) return p } catch {} }
+  return undefined
+}
+
 async function loginAndGetPage(): Promise<Page> {
   const browser = await puppeteer.launch({
     headless: true,
+    executablePath: resolvePuppeteerExec(),
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
   const page = await browser.newPage();
@@ -1462,6 +1477,7 @@ export async function POST(req: NextRequest) {
       );
       const browser = await puppeteer.launch({
         headless: true,
+        executablePath: resolvePuppeteerExec(),
         args: ["--no-sandbox", "--disable-setuid-sandbox"],
       });
       const p = await browser.newPage();

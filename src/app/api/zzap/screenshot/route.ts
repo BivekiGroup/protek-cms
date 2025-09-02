@@ -20,6 +20,14 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+function resolvePuppeteerExec(): string | undefined {
+  const fromEnv = (process.env.PUPPETEER_EXECUTABLE_PATH || '').trim()
+  if (fromEnv && fs.existsSync(fromEnv)) return fromEnv
+  const candidates = ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable']
+  for (const p of candidates) { try { if (fs.existsSync(p)) return p } catch {} }
+  return undefined
+}
+
 async function waitForAnySelector(page: Page, selectors: string[], timeoutMs = 10000) {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
@@ -179,6 +187,7 @@ export async function GET(req: NextRequest) {
     }
     const browser = await puppeteer.launch({
       headless: true,
+      executablePath: resolvePuppeteerExec(),
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     })
     const page = await browser.newPage()

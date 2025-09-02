@@ -1,5 +1,6 @@
 import QRCode from 'qrcode'
 import puppeteer from 'puppeteer'
+import fs from 'fs'
 
 interface InvoiceData {
   invoiceNumber: string
@@ -454,9 +455,17 @@ export class InvoiceService {
       console.log('🚀 Запускаем Puppeteer для генерации PDF...')
       
       // Настройки Puppeteer для Docker
+      const resolveExec = () => {
+        const env = (process.env.PUPPETEER_EXECUTABLE_PATH || '').trim()
+        if (env && fs.existsSync(env)) return env
+        const c = ['/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome','/usr/bin/google-chrome-stable']
+        for (const p of c) { try { if (fs.existsSync(p)) return p } catch {} }
+        return undefined
+      }
       const browser = await puppeteer.launch({
         headless: true,
         timeout: 60000,
+        executablePath: resolveExec(),
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
