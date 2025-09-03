@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
     for (const dt of eachMonth(from, to)) monthLabels.push(labelFor(dt))
     const title = [`Отчёт ZZAP на ${new Date().toLocaleDateString('ru-RU')}`]
     const header = ['Артикул', 'Бренд', 'Цена 1', 'Цена 2', 'Цена 3', ...monthLabels]
-    const norm = (s: string) => (s || '').toString().trim().toUpperCase().replace(/\s+/g, '')
+    // Ignore non-alphanumeric characters for robust matching; preserve original values in output
+    const norm = (s: string) => (s || '').toString().trim().toUpperCase().replace(/[^0-9A-ZА-Я]/g, '')
     const keyOf = (a: string, b: string) => `${norm(a)}|${norm(b)}`
     const byKey = new Map<string, any>()
     for (const r of results || []) {

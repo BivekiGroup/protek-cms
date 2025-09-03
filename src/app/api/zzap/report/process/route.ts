@@ -412,6 +412,36 @@ async function openSearch(page: Page, article: string, brand?: string) {
   await page.goto(ZZAP_BASE, { waitUntil: "domcontentloaded" });
 }
 
+async function waitForStableZzapGrid(page: Page, article: string, brand?: string) {
+  // Wait until ZZAP grid/price elements stabilize to avoid scraping half-rendered DOM
+  try {
+    const maxMs = 8000;
+    const stepMs = 400;
+    let lastSig = '';
+    let stableFor = 0;
+    const deadline = Date.now() + maxMs;
+    while (Date.now() < deadline) {
+      const met = await page.evaluate(() => {
+        const rows = Array.from(document.querySelectorAll('tr[id*="SearchGridView_DXDataRow"], tr[id*="GridView_DXDataRow"]')).length
+        const spans = Array.from(document.querySelectorAll('span[class*="dxeBase_ZZap" i].dx-nowrap')).length
+        const priceCells = Array.from(document.querySelectorAll('td.pricewhitecell, td[class*="price" i]')).length
+        return { rows, spans, priceCells }
+      }).catch(() => ({ rows: 0, spans: 0, priceCells: 0 }))
+      const sig = `${met.rows}|${met.spans}|${met.priceCells}`
+      if (sig === lastSig) {
+        stableFor += stepMs
+        if (stableFor >= 800) break
+      } else {
+        lastSig = sig
+        stableFor = 0
+      }
+      await sleep(stepMs)
+    }
+    // Final small settle
+    await sleep(200)
+  } catch {}
+}
+
 async function scrapeTop3Prices(
   page: Page,
   brand: string,
@@ -1580,6 +1610,8 @@ export async function POST(req: NextRequest) {
         } catch {}
         // let client JS finalize rendering
         await sleep(1800);
+        // Wait for DOM to stabilize before scraping
+        await waitForStableZzapGrid(page, article, brand).catch(() => {});
         // Sanity check: ensure target article/brand is present, otherwise retry openSearch once
         let hasTarget = await pageContainsArticleBrand(page, article, brand)
         if (!hasTarget) {
@@ -1590,6 +1622,12 @@ export async function POST(req: NextRequest) {
         }
         await debugShot(page, id, `search-before-scrape-${encodeURIComponent(article)}`)
         let prices = await scrapeTop3Prices(page, brand, article);
+        // If prices are empty, wait a bit more and retry once (late-rendering)
+        if (!prices || prices.length === 0) {
+          await sleep(1200)
+          await waitForStableZzapGrid(page, article, brand).catch(() => {})
+          prices = await scrapeTop3Prices(page, brand, article);
+        }
         // If prices look identical to previous item (rare but possible due to page reuse), retry once
         const prev = results[realIndex - 1] as any
         const sig = (arr?: number[]) => (arr || []).slice(0, 3).join('|')
@@ -1840,7 +1878,8 @@ export async function POST(req: NextRequest) {
         ...monthLabels,
       ];
       // Build fast lookup map by article|brand to avoid index drift
-      const norm = (s: string) => (s || '').toString().trim().toUpperCase().replace(/\s+/g, '');
+      // Match keys ignoring any non-alphanumeric characters and case, so hyphens etc. do not break mapping
+      const norm = (s: string) => (s || '').toString().trim().toUpperCase().replace(/[^0-9A-ZА-Я]/g, '');
       const keyOf = (a: string, b: string) => `${norm(a)}|${norm(b)}`;
       const byKey = new Map<string, any>();
       for (const r of results || []) {
