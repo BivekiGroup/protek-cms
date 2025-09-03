@@ -1628,14 +1628,28 @@ export async function POST(req: NextRequest) {
           await waitForStableZzapGrid(page, article, brand).catch(() => {})
           prices = await scrapeTop3Prices(page, brand, article);
         }
-        // If prices look identical to previous item (rare but possible due to page reuse), retry once
+        // If prices look identical to previous item (page reuse/late render), retry up to 3 times with waits
         const prev = results[realIndex - 1] as any
         const sig = (arr?: number[]) => (arr || []).slice(0, 3).join('|')
-        if (prev && Array.isArray(prev.prices) && sig(prev.prices) && sig(prev.prices) === sig(prices)) {
-          appendJobLog(id, `warn: duplicate price signature with previous, retry scrape`)
-          await sleep(500 + Math.floor(Math.random()*700))
-          prices = await scrapeTop3Prices(page, brand, article);
+        const prevSig = prev && Array.isArray(prev.prices) ? sig(prev.prices) : ''
+        let dupeAttempts = 0
+        while (prevSig && sig(prices) === prevSig && dupeAttempts < 3) {
+          appendJobLog(id, `warn: duplicate prices with previous (attempt ${dupeAttempts + 1}/3), wait & rescrape`)
+          await sleep(700 + Math.floor(Math.random() * 900))
+          await waitForStableZzapGrid(page, article, brand).catch(() => {})
+          prices = await scrapeTop3Prices(page, brand, article)
+          dupeAttempts++
         }
+        // Deduplicate prices preserving order (avoid duplicated ценники)
+        try {
+          const seen = new Set<number>()
+          prices = (prices || []).filter((n) => {
+            if (!Number.isFinite(n)) return false
+            if (seen.has(n)) return false
+            seen.add(n)
+            return true
+          }).slice(0, 3)
+        } catch {}
         appendJobLog(
           id,
           `prices: ${prices.map((p) => String(p)).join(", ") || "—"}`
