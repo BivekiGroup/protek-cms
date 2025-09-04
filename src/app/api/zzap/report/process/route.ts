@@ -402,7 +402,8 @@ async function openSearch(page: Page, article: string, brand?: string) {
   ];
   for (const url of urls) {
     try {
-      await page.goto(url, {
+      const u = url + (url.includes('?') ? `&` : `?`) + `_ts=${Date.now()}`;
+      await page.goto(u, {
         waitUntil: "domcontentloaded",
         timeout: ZZAP_TIMEOUT_MS,
       });
