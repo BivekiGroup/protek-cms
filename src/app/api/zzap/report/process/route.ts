@@ -413,35 +413,7 @@ async function openSearch(page: Page, article: string, brand?: string) {
   await page.goto(ZZAP_BASE, { waitUntil: "domcontentloaded" });
 }
 
-async function waitForStableZzapGrid(page: Page, article: string, brand?: string) {
-  // Wait until ZZAP grid/price elements stabilize to avoid scraping half-rendered DOM
-  try {
-    const maxMs = 8000;
-    const stepMs = 400;
-    let lastSig = '';
-    let stableFor = 0;
-    const deadline = Date.now() + maxMs;
-    while (Date.now() < deadline) {
-      const met = await page.evaluate(() => {
-        const rows = Array.from(document.querySelectorAll('tr[id*="SearchGridView_DXDataRow"], tr[id*="GridView_DXDataRow"]')).length
-        const spans = Array.from(document.querySelectorAll('span[class*="dxeBase_ZZap" i].dx-nowrap')).length
-        const priceCells = Array.from(document.querySelectorAll('td.pricewhitecell, td[class*="price" i]')).length
-        return { rows, spans, priceCells }
-      }).catch(() => ({ rows: 0, spans: 0, priceCells: 0 }))
-      const sig = `${met.rows}|${met.spans}|${met.priceCells}`
-      if (sig === lastSig) {
-        stableFor += stepMs
-        if (stableFor >= 800) break
-      } else {
-        lastSig = sig
-        stableFor = 0
-      }
-      await sleep(stepMs)
-    }
-    // Final small settle
-    await sleep(200)
-  } catch {}
-}
+// removed heavy DOM stabilization to avoid long stalls
 
 async function scrapeTop3Prices(
   page: Page,
@@ -1609,10 +1581,8 @@ export async function POST(req: NextRequest) {
             { timeout: 12000 }
           );
         } catch {}
-        // let client JS finalize rendering
-        await sleep(1800);
-        // Wait for DOM to stabilize before scraping
-        await waitForStableZzapGrid(page, article, brand).catch(() => {});
+        // let client JS finalize rendering (короткая пауза)
+        await sleep(500);
         // Sanity check: ensure target article/brand is present, otherwise retry openSearch once
         let hasTarget = await pageContainsArticleBrand(page, article, brand)
         if (!hasTarget) {
@@ -1625,21 +1595,17 @@ export async function POST(req: NextRequest) {
         let prices = await scrapeTop3Prices(page, brand, article);
         // If prices are empty, wait a bit more and retry once (late-rendering)
         if (!prices || prices.length === 0) {
-          await sleep(1200)
-          await waitForStableZzapGrid(page, article, brand).catch(() => {})
+          await sleep(600)
           prices = await scrapeTop3Prices(page, brand, article);
         }
-        // If prices look identical to previous item (page reuse/late render), retry up to 3 times with waits
+        // If prices look identical to previous item (page reuse/late render), do one quick retry only
         const prev = results[realIndex - 1] as any
         const sig = (arr?: number[]) => (arr || []).slice(0, 3).join('|')
         const prevSig = prev && Array.isArray(prev.prices) ? sig(prev.prices) : ''
-        let dupeAttempts = 0
-        while (prevSig && sig(prices) === prevSig && dupeAttempts < 3) {
-          appendJobLog(id, `warn: duplicate prices with previous (attempt ${dupeAttempts + 1}/3), wait & rescrape`)
-          await sleep(700 + Math.floor(Math.random() * 900))
-          await waitForStableZzapGrid(page, article, brand).catch(() => {})
+        if (prevSig && sig(prices) === prevSig) {
+          appendJobLog(id, 'warn: duplicate prices with previous, quick rescrape')
+          await sleep(400)
           prices = await scrapeTop3Prices(page, brand, article)
-          dupeAttempts++
         }
         // Deduplicate prices preserving order (avoid duplicated ценники)
         try {
