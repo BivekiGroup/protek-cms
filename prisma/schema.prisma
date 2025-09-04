@@ -487,6 +487,47 @@ model ZzapReportJob {
   @@map("zzap_report_jobs")
 }
 
+// Аналитика: события поиска на сайте (frontend)
+model SearchEvent {
+  id           String   @id @default(cuid())
+  clientId     String?
+  sessionId    String?
+  query        String
+  brand        String?
+  article      String?
+  filters      Json?
+  resultsCount Int      @default(0)
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+  client       Client?  @relation(fields: [clientId], references: [id])
+
+  @@index([createdAt])
+  @@index([clientId])
+  @@map("analytics_search_events")
+}
+
+// Аналитика: просмотры карточек/офферов
+model ProductViewEvent {
+  id        String   @id @default(cuid())
+  clientId  String?
+  sessionId String?
+  productId String?
+  offerKey  String?
+  article   String?
+  brand     String?
+  referrer  String?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  client    Client?  @relation(fields: [clientId], references: [id])
+  product   Product? @relation(fields: [productId], references: [id])
+
+  @@index([createdAt])
+  @@index([clientId])
+  @@map("analytics_product_views")
+}
+
 model ClientDeliveryAddress {
   id           String       @id @default(cuid())
   clientId     String
