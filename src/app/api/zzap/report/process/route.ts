@@ -402,8 +402,7 @@ async function openSearch(page: Page, article: string, brand?: string) {
   ];
   for (const url of urls) {
     try {
-      const u = url + (url.includes('?') ? `&` : `?`) + `_ts=${Date.now()}`;
-      await page.goto(u, {
+      await page.goto(url, {
         waitUntil: "domcontentloaded",
         timeout: ZZAP_TIMEOUT_MS,
       });
@@ -662,6 +661,104 @@ async function scrapeTop3Prices(
   } catch {
     return [];
   }
+}
+
+// Extract prices directly from DevExpress DX callback payloads captured from POST /public/search.aspx
+function parsePricesFromDxPayload(payload: string): number[] {
+  const out: number[] = []
+  const parseAny = (raw?: string | null) => {
+    const txt = (raw || '').trim()
+    const m = txt.match(/\d[\d\s.,]*/)
+    if (!m) return null
+    const cleaned = m[0].replace(/[^0-9.,]/g, '').replace(/\s+/g, '').replace(',', '.')
+    const n = parseFloat(cleaned)
+    return Number.isFinite(n) ? n : null
+  }
+  try {
+    // If wrapped as /*DX*/({...}) – unwrap
+    const m0 = payload.match(/\/\*DX\*\/\((\{[\s\S]*?\})\)/)
+    const src = m0 && m0[1] ? m0[1] : payload
+    // 1) Жёстко парсим целевые спаны ZZAP в порядке появления
+    const spanRe = /<span[^>]*class="[^"]*dxeBase_ZZap[^"]*dx-nowrap[^"]*"[^>]*>([\s\S]*?)<\/span>/gi
+    let m: RegExpExecArray | null
+    while ((m = spanRe.exec(src))) {
+      const n = parseAny(m[1])
+      if (n != null && n > 0) {
+        out.push(n)
+        if (out.length >= 3) return out.slice(0, 3)
+      }
+    }
+    // 2) Фолбэк: если нужных спанов мало — вытащим числа с валютой
+    if (out.length < 3) {
+      const withCur = Array.from(src.matchAll(/(?:руб|₽|\br\.|\bр\b)[^\d]*([\d\s.,]{3,})/gi)).map(x => x[1])
+      for (const raw of withCur) {
+        const n = parseAny(raw)
+        if (n != null && n > 0) {
+          out.push(n)
+          if (out.length >= 3) break
+        }
+      }
+    }
+  } catch {}
+  return out.slice(0, 3)
+}
+
+async function captureTop3PricesFromDX(page: Page, article: string, brand?: string): Promise<number[]> {
+  const captured: string[] = []
+  let lastAt = 0
+  const wantHost = new URL(ZZAP_BASE).host
+  const isTarget = (u: string) => {
+    try { const x = new URL(u); return x.host === wantHost && /\/public\/search\.aspx/i.test(x.pathname) } catch { return /public\/search\.aspx/i.test(u) }
+  }
+  const onResp = async (resp: any) => {
+    try {
+      const url = typeof resp.url === 'function' ? resp.url() : resp.url
+      if (!isTarget(url)) return
+      const ct = (await resp.headers?.())?.['content-type'] || resp.headers?.()['content-type'] || ''
+      if (ct && !/text\/plain/i.test(ct)) return
+      const txt = await resp.text().catch(() => '')
+      if (txt && /\/\*DX\*\//.test(txt)) { captured.push(txt); lastAt = Date.now() }
+    } catch {}
+  }
+  const onFinished = async (req: any) => {
+    try {
+      const url = typeof req.url === 'function' ? req.url() : req.url
+      if (!isTarget(url)) return
+      const r = await (req.response?.() || null)
+      if (!r) return
+      const ct = (await r.headers?.())?.['content-type'] || r.headers?.()['content-type'] || ''
+      if (ct && !/text\/plain/i.test(ct)) return
+      const txt = await r.text().catch(() => '')
+      if (txt && /\/\*DX\*\//.test(txt)) { captured.push(txt); lastAt = Date.now() }
+    } catch {}
+  }
+  page.on('response', onResp)
+  page.on('requestfinished', onFinished as any)
+  try {
+    // Give time for the page to issue callbacks after search open
+    const maxDeadline = Date.now() + Math.max(ZZAP_DX_MAX_WAIT_MS, 12000)
+    // initial settle
+    await sleep(800)
+    while (Date.now() < maxDeadline) {
+      // If we have something, wait for idle
+      if (captured.length > 0) {
+        const idle = Math.max(600, ZZAP_DX_IDLE_MS)
+        const start = lastAt
+        while (Date.now() - lastAt < idle && Date.now() < maxDeadline) {
+          await sleep(150)
+          if (lastAt !== start) continue
+        }
+        break
+      }
+      await sleep(200)
+    }
+  } catch {}
+  try { page.off?.('response', onResp); page.off?.('requestfinished', onFinished as any) } catch {}
+  // Merge and parse
+  const merged = captured.join('\n\n')
+  const prices = parsePricesFromDxPayload(merged)
+  // As a light brand/article filter: if brand provided, keep as-is (we can't map rows), else just return
+  return prices.slice(0, 3)
 }
 
 async function openStats(page: Page): Promise<Page> {
@@ -1554,69 +1651,57 @@ export async function POST(req: NextRequest) {
       const { article, brand } = toProcess[idx];
       try {
         appendJobLog(id, `→ ${article} / ${brand}: open search`);
+        // Стартуем ранний перехват DX до открытия страницы, чтобы не упустить первый POST
+        const dxEarly = captureTop3PricesFromDX(page, article, brand)
         await openSearch(page, article, brand);
         await debugShot(page, id, `search-after-open-${encodeURIComponent(article)}`)
-        // Debug: log basic DOM metrics for price scraping
-        try {
-          const dbg = await page.evaluate(() => {
-            const rows = Array.from(document.querySelectorAll('tr[id*="SearchGridView_DXDataRow"], tr[id*="GridView_DXDataRow"]')).length
-            const spans = Array.from(document.querySelectorAll('span[class*="dxeBase_ZZap" i].dx-nowrap')).length
-            const priceCells = Array.from(document.querySelectorAll('td.pricewhitecell, td[class*="price" i]')).length
-            const sampleNodes = Array.from(document.querySelectorAll('span[class*="dxeBase_ZZap" i].dx-nowrap')).slice(0, 6) as HTMLElement[]
-            const sample = sampleNodes.map(n => (n.innerText||n.textContent||'').trim()).filter(Boolean)
-            return { rows, spans, priceCells, sample }
-          });
-          appendJobLog(id, `dom: rows=${dbg.rows} spans=${dbg.spans} priceCells=${dbg.priceCells} sample=[${dbg.sample.join(' | ')}]`)
-        } catch {}
-        try {
-          await page.waitForSelector(
-            'tr[id*="SearchGridView_DXDataRow"], table[id*="SearchGridView_DXMainTable"], #ctl00_BodyPlace_SearchGridView',
-            { timeout: 20000 }
-          );
-        } catch {}
-        // Also wait for typical price elements that may render outside rows
-        try {
-          await page.waitForSelector(
-            'span[class*="dxeBase_ZZap" i].dx-nowrap, td.pricewhitecell, [class*="price" i], span[id^="ctl00_BodyPlace_SearchGridView_"][class*="dx-nowrap" i]',
-            { timeout: 12000 }
-          );
-        } catch {}
-        // let client JS finalize rendering (короткая пауза)
-        await sleep(500);
-        // Sanity check: ensure target article/brand is present, otherwise retry openSearch once
-        let hasTarget = await pageContainsArticleBrand(page, article, brand)
-        if (!hasTarget) {
-          appendJobLog(id, `sanity: article/brand not found on page, retry openSearch`)
-          await openSearch(page, article, brand)
-          await sleep(1200)
-          hasTarget = await pageContainsArticleBrand(page, article, brand)
-        }
-        await debugShot(page, id, `search-before-scrape-${encodeURIComponent(article)}`)
-        let prices = await scrapeTop3Prices(page, brand, article);
-        // If prices are empty, wait a bit more and retry once (late-rendering)
+        // 0) Попробовать перехватить цены из DX-пейлоада POST /public/search.aspx
+        let prices = await dxEarly
         if (!prices || prices.length === 0) {
-          await sleep(600)
+          // Вторая попытка перехвата, если ранний POST не поймали
+          prices = await captureTop3PricesFromDX(page, article, brand)
+        }
+        // Если DX-перехват дал цены — пропускаем DOM-метрики/ожидания и DOM-скрейпинг
+        if (!prices || prices.length === 0) {
+          // Debug: log basic DOM metrics for price scraping
+          try {
+            const dbg = await page.evaluate(() => {
+              const rows = Array.from(document.querySelectorAll('tr[id*="SearchGridView_DXDataRow"], tr[id*="GridView_DXDataRow"]')).length
+              const spans = Array.from(document.querySelectorAll('span[class*="dxeBase_ZZap" i].dx-nowrap')).length
+              const priceCells = Array.from(document.querySelectorAll('td.pricewhitecell, td[class*="price" i]')).length
+              const sampleNodes = Array.from(document.querySelectorAll('span[class*="dxeBase_ZZap" i].dx-nowrap')).slice(0, 6) as HTMLElement[]
+              const sample = sampleNodes.map(n => (n.innerText||n.textContent||'').trim()).filter(Boolean)
+              return { rows, spans, priceCells, sample }
+            });
+            appendJobLog(id, `dom: rows=${dbg.rows} spans=${dbg.spans} priceCells=${dbg.priceCells} sample=[${dbg.sample.join(' | ')}]`)
+          } catch {}
+          try {
+            await page.waitForSelector(
+              'tr[id*="SearchGridView_DXDataRow"], table[id*="SearchGridView_DXMainTable"], #ctl00_BodyPlace_SearchGridView',
+              { timeout: 20000 }
+            );
+          } catch {}
+          // Also wait for typical price elements that may render outside rows
+          try {
+            await page.waitForSelector(
+              'span[class*="dxeBase_ZZap" i].dx-nowrap, td.pricewhitecell, [class*="price" i], span[id^="ctl00_BodyPlace_SearchGridView_"][class*="dx-nowrap" i]',
+              { timeout: 12000 }
+            );
+          } catch {}
+          // let client JS finalize rendering
+          await sleep(1800);
+          // Sanity check: ensure target article/brand is present, otherwise retry openSearch once
+          let hasTarget = await pageContainsArticleBrand(page, article, brand)
+          if (!hasTarget) {
+            appendJobLog(id, `sanity: article/brand not found on page, retry openSearch`)
+            await openSearch(page, article, brand)
+            await sleep(1200)
+            hasTarget = await pageContainsArticleBrand(page, article, brand)
+          }
+          await debugShot(page, id, `search-before-scrape-${encodeURIComponent(article)}`)
           prices = await scrapeTop3Prices(page, brand, article);
         }
-        // If prices look identical to previous item (page reuse/late render), do one quick retry only
-        const prev = results[realIndex - 1] as any
-        const sig = (arr?: number[]) => (arr || []).slice(0, 3).join('|')
-        const prevSig = prev && Array.isArray(prev.prices) ? sig(prev.prices) : ''
-        if (prevSig && sig(prices) === prevSig) {
-          appendJobLog(id, 'warn: duplicate prices with previous, quick rescrape')
-          await sleep(400)
-          prices = await scrapeTop3Prices(page, brand, article)
-        }
-        // Deduplicate prices preserving order (avoid duplicated ценники)
-        try {
-          const seen = new Set<number>()
-          prices = (prices || []).filter((n) => {
-            if (!Number.isFinite(n)) return false
-            if (seen.has(n)) return false
-            seen.add(n)
-            return true
-          }).slice(0, 3)
-        } catch {}
+        // Keep original behavior: не трогаем цены пост-фильтрами здесь
         appendJobLog(
           id,
           `prices: ${prices.map((p) => String(p)).join(", ") || "—"}`
@@ -1755,7 +1840,14 @@ export async function POST(req: NextRequest) {
                 const lbl = toLabelFromCompact(r.label) || r.label
                 if (lbl in counts2) counts2[lbl] = r.count
               }
-              const better = priceSig(prices2) !== priceSig(prev?.prices) || monthSig(counts2) !== monthSig(prev?.stats)
+              const prevHasPrices = Array.isArray(prev?.prices) && prev.prices.some(n => Number.isFinite(n))
+              const nonZero2 = Object.values(counts2).some(v => (v as number) > 0)
+              const hasFreshPrices = Array.isArray(prices2) && prices2.some(n => Number.isFinite(n))
+              // Replace only if:
+              // - previous had prices: require fresh prices
+              // - previous had no prices: allow months improvement or fresh prices
+              const allowReplace = prevHasPrices ? hasFreshPrices : (hasFreshPrices || nonZero2)
+              const better = allowReplace && (priceSig(prices2) !== priceSig(prev?.prices) || monthSig(counts2) !== monthSig(prev?.stats))
               if (better) {
                 prices = prices2
                 for (const k of monthLabels) counts[k] = counts2[k] ?? counts[k]
@@ -1838,7 +1930,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // If finished, build XLSX and upload
+    // If finished, attempt quick post-pass fix for suspicious duplicates, then build XLSX and upload
     const done = processed + toProcess.length >= rows.length;
     if (done) {
       appendJobLog(id, "finalizing: building XLSX");
@@ -1847,6 +1939,76 @@ export async function POST(req: NextRequest) {
       const to = new Date(job.periodTo);
       const monthLabels: string[] = [];
       for (const dt of eachMonth(from, to)) monthLabels.push(labelFor(dt));
+      // Post-pass: detect suspicious duplicates (different key but same prices+months)
+      // and obviously empty rows (no prices AND all months == 0), then re-scrape a limited set in fresh tabs
+      try {
+        const priceSig = (arr?: number[]) => (arr || []).slice(0, 3).join('|')
+        const monthSig = (obj?: Record<string, number>) => monthLabels.map(k => String((obj || {})[k] ?? 0)).join(',')
+        const dupIdxs: number[] = []
+        const emptyIdxs: number[] = []
+        for (let i = 1; i < results.length; i++) {
+          const prev = results[i - 1] as any
+          const cur = results[i] as any
+          if (!prev || !cur) continue
+          const keyPrev = `${String(prev.article||'').toUpperCase()}|${String(prev.brand||'').toUpperCase()}`
+          const keyCur  = `${String(cur.article||'').toUpperCase()}|${String(cur.brand||'').toUpperCase()}`
+          if (keyPrev === keyCur) continue
+          const curAllZeroMonths = monthLabels.every(k => Number((cur?.stats||{})[k] ?? 0) === 0)
+          const curNoPrices = !Array.isArray(cur?.prices) || cur.prices.length === 0
+          if (curNoPrices && curAllZeroMonths) emptyIdxs.push(i)
+          if (priceSig(prev.prices) === priceSig(cur.prices) && monthSig(prev.stats) === monthSig(cur.stats)) {
+            dupIdxs.push(i)
+          }
+        }
+        const toFix = Array.from(new Set([...dupIdxs, ...emptyIdxs]))
+        if (toFix.length > 0) {
+          appendJobLog(id, `post-pass: found ${dupIdxs.length} dup + ${emptyIdxs.length} empty; re-scrape limited set`)
+          const limit = Math.min(toFix.length, 4)
+          for (let k = 0; k < limit; k++) {
+            const i = toFix[k]
+            const item = rows[i]
+            if (!item) continue
+            try {
+              const p2 = await page.browser().newPage()
+              try {
+                p2.setDefaultNavigationTimeout(ZZAP_TIMEOUT_MS)
+                p2.setDefaultTimeout(ZZAP_TIMEOUT_MS)
+                await p2.setViewport({ width: 1440, height: 900 })
+                await p2.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36')
+              } catch {}
+              try { await restoreSession(p2) } catch {}
+              try { await openSearch(p2, item.article, item.brand) } catch {}
+              try { await p2.waitForSelector('tr[id*="SearchGridView_DXDataRow"], table[id*="SearchGridView_DXMainTable"], #ctl00_BodyPlace_SearchGridView', { timeout: 20000 }) } catch {}
+              await sleep(1200)
+              const prices2 = await scrapeTop3Prices(p2, item.brand, item.article)
+              let monthly2: { label: string; count: number }[] | null = await captureDxFromSearch(p2 as any, id, item.article)
+              if (!monthly2 || monthly2.length === 0) {
+                const m2 = await scrapeMonthlyCounts(p2 as any, monthLabels)
+                if (m2 && m2.length) monthly2 = m2
+              }
+              const counts2: Record<string, number> = {}
+              for (const ml of monthLabels) counts2[ml] = 0
+              for (const r of monthly2 || []) {
+                const lbl = toLabelFromCompact(r.label) || r.label
+                if (lbl in counts2) counts2[lbl] = r.count
+              }
+              const prev = results[i - 1] as any
+              const hasPrices = Array.isArray(prices2) && prices2.some(n => Number.isFinite(n))
+              const hasNonZeroMonths = Object.values(counts2).some(v => (v as number) > 0)
+              const improved = (hasPrices || hasNonZeroMonths)
+                && (priceSig(prices2) !== priceSig(prev?.prices) || monthSig(counts2) !== monthSig(prev?.stats))
+              if (improved) {
+                results[i] = { article: item.article, brand: item.brand, prices: prices2, stats: counts2, imageUrl: (results[i] as any)?.imageUrl ?? null }
+                appendJobLog(id, `post-pass: row ${i} fixed`) 
+              } else {
+                appendJobLog(id, `post-pass: row ${i} still matches previous; keep`) 
+              }
+              try { await p2.close() } catch {}
+              await sleep(1000 + Math.floor(Math.random()*500))
+            } catch {}
+          }
+        }
+      } catch {}
       const title = [
         `Отчёт ZZAP на ${new Date().toLocaleDateString('ru-RU')}`
       ];
@@ -1859,8 +2021,7 @@ export async function POST(req: NextRequest) {
         ...monthLabels,
       ];
       // Build fast lookup map by article|brand to avoid index drift
-      // Match keys ignoring any non-alphanumeric characters and case, so hyphens etc. do not break mapping
-      const norm = (s: string) => (s || '').toString().trim().toUpperCase().replace(/[^0-9A-ZА-Я]/g, '');
+      const norm = (s: string) => (s || '').toString().trim().toUpperCase().replace(/\s+/g, '');
       const keyOf = (a: string, b: string) => `${norm(a)}|${norm(b)}`;
       const byKey = new Map<string, any>();
       for (const r of results || []) {
@@ -1875,8 +2036,14 @@ export async function POST(req: NextRequest) {
         let r = byKey.get(k) || results[i] || null;
         if (!r) r = { article: rowDef.article, brand: rowDef.brand, prices: [], stats: {} };
         const row: (string | number)[] = [rowDef.article, rowDef.brand];
-        const p = ((r as any).prices || []) as number[];
-        row.push(p[0] ?? "", p[1] ?? "", p[2] ?? "");
+        const pRaw = ((r as any).prices || []) as number[];
+        // Deduplicate prices here to avoid duplicate values in the final XLSX without touching scraping
+        const pUniq: number[] = []
+        for (const n of pRaw) {
+          if (Number.isFinite(n) && !pUniq.includes(n)) pUniq.push(n)
+          if (pUniq.length >= 3) break
+        }
+        row.push(pUniq[0] ?? "", pUniq[1] ?? "", pUniq[2] ?? "");
         for (const ml of monthLabels) {
           const v = ((r as any).stats && (r as any).stats[ml]) ?? "";
           row.push(v);
