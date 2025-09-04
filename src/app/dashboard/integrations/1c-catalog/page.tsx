@@ -50,6 +50,10 @@ export default function OneCCatalogDocs() {
       "price": 1290,
       "stock": 15,
       "images": ["https://example.com/img1.jpg"],
+      "images_base64": [
+        "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...",
+        { "filename": "img2.png", "content": "iVBORw0KGgoAAAANSUhEUg...", "contentType": "image/png" }
+      ],
       "category_code": "001254",
       "characteristics": {"Длина": "500 мм"},
       "isVisible": true
@@ -68,6 +72,7 @@ export default function OneCCatalogDocs() {
   weight?: number,
   dimensions?: string,
   images?: string[],
+  images_base64?: (string | { filename: string, content: string, contentType?: string })[],
   category_code: string,
   characteristics?: { [key: string]: string },
   isVisible?: boolean
@@ -298,8 +303,9 @@ export default function OneCCatalogDocs() {
             <ul className="list-disc pl-5 mt-2 space-y-1">
               <li><b>Категория</b>: передаётся код <span className="font-mono">category_code</span> (обяз.), справочник заполняется отдельным запросом.</li>
               <li><b>Изображения</b>: синхронизация полного набора (удаление отсутствующих, порядок по индексу).</li>
+              <li><b>Картинки base64</b>: можно передавать через <span className="font-mono">images_base64</span> (data URL или { filename, content, contentType }); CMS загрузит в S3 и подставит URL.</li>
               <li><b>Характеристики</b>: создаются ключи; upsert по паре (productId, characteristicId).</li>
-              <li><b>Нормализация</b>: brand → UPPERCASE; article → без пробелов/дефисов, UPPERCASE; <b>externalId</b> по умолчанию = <span className="font-mono">article+&quot;_&quot;+brand</span> в нижнем регистре.</li>
+              <li><b>Нормализация</b>: brand → UPPERCASE; article → без пробелов/дефисов, UPPERCASE; <b>externalId</b> по умолчанию = <span className="font-mono">article+"_"+brand</span> в нижнем регистре.</li>
             </ul>
             <div className="mt-3 flex items-center text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 text-sm">
               <TriangleAlert className="h-4 w-4 mr-2"/> При дублях <span className="font-mono">(article, brand)</span> в БД — сначала почистите данные для успешного применения уникального индекса.

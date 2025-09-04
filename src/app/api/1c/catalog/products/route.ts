@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { randomUUID } from 'crypto'
+import { uploadBuffer } from '@/lib/s3'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -80,6 +81,12 @@ function checkAuth(req: NextRequest): { ok: true } | { ok: false; status: number
   return { ok: true }
 }
 
+const base64ImageObjectSchema = z.object({
+  filename: z.string().trim().min(1),
+  content: z.string().trim().min(1), // base64 string or data URL
+  contentType: z.string().trim().optional(),
+})
+
 const productItemSchema = z.object({
   externalId: z.string().trim().min(1).optional(),
   article: z.string().trim().min(1),
@@ -91,6 +98,10 @@ const productItemSchema = z.object({
   weight: z.number().finite().nonnegative().optional(),
   dimensions: z.string().trim().optional(),
   images: z.array(z.string().url()).optional(),
+  // New: 1C can send images as base64 strings or objects { filename, content, contentType }
+  images_base64: z
+    .array(z.union([z.string().min(1), base64ImageObjectSchema]))
+    .optional(),
   category_code: z.string().trim().min(1),
   characteristics: z.record(z.string().trim()).optional(),
   isVisible: z.boolean().optional(),
@@ -163,6 +174,7 @@ export async function POST(req: NextRequest) {
       weight: raw.weight,
       dimensions: raw.dimensions?.trim(),
       images: (raw.images || []).map((u) => String(u).trim()).filter(Boolean),
+      images_base64: Array.isArray(raw.images_base64) ? raw.images_base64 : undefined,
       category_code: raw.category_code?.trim(),
       characteristics: raw.characteristics || {},
       isVisible: typeof raw.isVisible === 'boolean' ? raw.isVisible : undefined,
@@ -224,6 +236,24 @@ export async function POST(req: NextRequest) {
         if (Object.keys(updateData).length) {
           product = await prisma.product.update({ where: { id: product.id }, data: updateData, include: { images: true, categories: true, characteristics: { include: { characteristic: true } } } })
         }
+      }
+
+      // If base64 images provided — upload them to S3 and replace images with uploaded URLs
+      if (norm.images_base64 && norm.images_base64.length > 0) {
+        try {
+          const uploadedUrls: string[] = []
+          for (const img of norm.images_base64 as Array<string | z.infer<typeof base64ImageObjectSchema>>) {
+            const parsed = await parseBase64Image(img)
+            if (!parsed) continue
+            const key = buildProductImageKey(norm.article || norm.externalId || 'unknown', parsed.extension)
+            const res = await uploadBuffer(parsed.buffer, key, parsed.contentType).catch(() => null as any)
+            const url = (typeof res === 'string' ? res : res?.url) || null
+            if (url) uploadedUrls.push(url)
+          }
+          if (uploadedUrls.length) {
+            norm.images = uploadedUrls
+          }
+        } catch {}
       }
 
       // link product to category by category_code (required)
@@ -312,4 +342,69 @@ async function makeUniqueSlug(base: string): Promise<string> {
     if (!exists) return candidate
     attempt++
   }
+}
+
+// Helpers for base64 image parsing and S3 key building
+function detectExtFromContentType(ct?: string | null): string {
+  const map: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/svg+xml': 'svg',
+  }
+  return (ct && map[ct.toLowerCase()]) || 'jpg'
+}
+
+function extFromFilename(name?: string | null): string | null {
+  if (!name) return null
+  const m = String(name).trim().match(/\.([a-z0-9]+)$/i)
+  return m ? m[1].toLowerCase() : null
+}
+
+async function parseBase64Image(
+  img: string | { filename: string; content: string; contentType?: string }
+): Promise<{ buffer: Buffer; contentType: string; extension: string } | null> {
+  try {
+    let filename = ''
+    let content = ''
+    let contentType: string | undefined
+    if (typeof img === 'string') {
+      // Can be data URL or raw base64 – try to detect
+      const m = img.match(/^data:([^;]+);base64,(.+)$/i)
+      if (m) {
+        contentType = m[1]
+        content = m[2]
+      } else {
+        // Unknown type, assume jpeg
+        contentType = 'image/jpeg'
+        content = img
+      }
+    } else {
+      filename = img.filename || ''
+      content = img.content || ''
+      if (/^data:/i.test(content)) {
+        const m = content.match(/^data:([^;]+);base64,(.+)$/i)
+        if (m) { contentType = img.contentType || m[1]; content = m[2] }
+      } else {
+        contentType = img.contentType || undefined
+      }
+    }
+    const buf = Buffer.from(content, 'base64')
+    if (!buf || buf.length === 0) return null
+    let ext = extFromFilename(filename)
+    if (!ext) ext = detectExtFromContentType(contentType)
+    const ct = contentType || (ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : ext === 'svg' ? 'image/svg+xml' : 'image/jpeg')
+    return { buffer: buf, contentType: ct, extension: ext || 'jpg' }
+  } catch {
+    return null
+  }
+}
+
+function buildProductImageKey(articleOrId: string, ext: string): string {
+  const safe = (articleOrId || 'unknown').toString().replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()
+  const stamp = Date.now()
+  const rnd = Math.random().toString(36).slice(2, 8)
+  return `products/images/${safe}/${stamp}-${rnd}.${ext || 'jpg'}`
 }
