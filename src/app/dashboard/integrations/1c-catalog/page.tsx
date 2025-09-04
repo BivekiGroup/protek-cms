@@ -208,9 +208,9 @@ export default function OneCCatalogDocs() {
       } catch {
         setResp(text)
       }
-    } catch (e: any) {
+    } catch (e) {
       setStatus('')
-      setResp(String(e?.message || e))
+      setResp(String((e as Error)?.message || e))
     } finally {
       setLoading(false)
     }
@@ -303,9 +303,9 @@ export default function OneCCatalogDocs() {
             <ul className="list-disc pl-5 mt-2 space-y-1">
               <li><b>Категория</b>: передаётся код <span className="font-mono">category_code</span> (обяз.), справочник заполняется отдельным запросом.</li>
               <li><b>Изображения</b>: синхронизация полного набора (удаление отсутствующих, порядок по индексу).</li>
-              <li><b>Картинки base64</b>: можно передавать через <span className="font-mono">images_base64</span> (data URL или { filename, content, contentType }); CMS загрузит в S3 и подставит URL.</li>
+              <li><b>Картинки base64</b>: можно передавать через <span className="font-mono">images_base64</span> (data URL или {"{ filename, content, contentType }"}); CMS загрузит в S3 и подставит URL.</li>
               <li><b>Характеристики</b>: создаются ключи; upsert по паре (productId, characteristicId).</li>
-              <li><b>Нормализация</b>: brand → UPPERCASE; article → без пробелов/дефисов, UPPERCASE; <b>externalId</b> по умолчанию = <span className="font-mono">article+"_"+brand</span> в нижнем регистре.</li>
+              <li><b>Нормализация</b>: brand → UPPERCASE; article → без пробелов/дефисов, UPPERCASE; <b>externalId</b> по умолчанию = <span className="font-mono">article+&quot;_&quot;+brand</span> в нижнем регистре.</li>
             </ul>
             <div className="mt-3 flex items-center text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 text-sm">
               <TriangleAlert className="h-4 w-4 mr-2"/> При дублях <span className="font-mono">(article, brand)</span> в БД — сначала почистите данные для успешного применения уникального индекса.
@@ -376,7 +376,7 @@ export default function OneCCatalogDocs() {
               <select
                 className="w-full h-10 border rounded-md px-3 bg-white"
                 value={endpoint}
-                onChange={(e) => { setEndpoint(e.target.value as any); setTimeout(resetBodyForEndpoint, 0) }}
+                onChange={(e) => { setEndpoint(e.target.value as Endpoint); setTimeout(resetBodyForEndpoint, 0) }}
               >
                 <option value="health">GET /api/1c/catalog/health</option>
                 <option value="products">POST /api/1c/catalog/products</option>
