@@ -23,6 +23,7 @@
 Примечания:
 - Публичные ключи Next начинаются с `NEXT_PUBLIC_` (например, `NEXT_PUBLIC_FRONTEND_ORIGIN`). Для CORS в API также используется `FRONTEND_ORIGIN`.
 - Для работы Zzap‑скриншотов (опционально) нужны `ZZAP_EMAIL`/`ZZAP_PASSWORD`.
+ - Для внутреннего обращения между API‑роутами (например, чат ИИ) можно задать `INTERNAL_ORIGIN`. Если не задан, используется `req.nextUrl.origin`. Полезно, если CMS работает за прокси и autodetect даёт неверный origin.
 - Для DaData используйте `DADATA_API_KEY`.
 
 ### 2) Первый деплой

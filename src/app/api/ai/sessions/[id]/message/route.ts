@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { POST as chatPOST } from '../../../chat/route'
 import { prisma } from '@/lib/prisma'
 import { randomUUID } from 'crypto'
 
@@ -46,13 +47,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
   } catch {}
 
-  // Call existing chat endpoint with streaming (use internal origin to avoid proxy/TLS issues)
-  const internalOrigin = process.env.INTERNAL_ORIGIN || 'http://127.0.0.1:3000'
-  const backend = await fetch(`${internalOrigin}/api/ai/chat`, {
+  // Вызов обработчика чата напрямую, без сетевого запроса и без env
+  const chatUrl = new URL('/api/ai/chat', req.nextUrl)
+  const backend = await chatPOST(new Request(chatUrl.toString(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'text/plain' },
-    body: JSON.stringify({ messages, model }),
-  })
+    body: JSON.stringify({ messages, model })
+  }))
 
   if (!backend.ok || !backend.body) {
     const text = await backend.text().catch(() => '')
