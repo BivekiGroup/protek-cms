@@ -14,14 +14,17 @@ export async function POST(req: NextRequest) {
   try {
     const rows = (job.inputRows as any[]) as { article: string; brand: string }[]
     const results = (job.results as any[]) || []
-    // Соберём месячные заголовки из уже найденных results.stats
-    const monthSet = new Set<string>()
-    for (const r of results) {
-      const stats = (r as any)?.stats || {}
-      for (const k of Object.keys(stats)) monthSet.add(k)
+    // Построим месячные заголовки хронологически по периодам задачи (как в финальном отчёте)
+    function* eachMonth(from: Date, to: Date): Generator<Date> {
+      const d = new Date(from.getFullYear(), from.getMonth(), 1)
+      while (d <= to) { yield new Date(d); d.setMonth(d.getMonth() + 1) }
     }
-    const monthLabels = Array.from(monthSet)
-    monthLabels.sort((a, b) => a.localeCompare(b, 'ru'))
+    const ruGenitive = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря']
+    function labelFor(d: Date) { return `${ruGenitive[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}` }
+    const from = new Date(job.periodFrom)
+    const to = new Date(job.periodTo)
+    const monthLabels: string[] = []
+    for (const dt of eachMonth(from, to)) monthLabels.push(labelFor(dt))
     const header = ['Артикул', 'Бренд', 'Цена 1', 'Цена 2', 'Цена 3', ...monthLabels]
     const aoa: any[][] = [['Частичный отчёт ZZAP (остановлен пользователем)'], header]
     const norm = (s: string) => (s || '').toString().trim()
