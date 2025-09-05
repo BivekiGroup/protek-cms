@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { format } from 'date-fns'
@@ -431,8 +431,8 @@ export default function ZzapStatsPage() {
                 <TableRow><TableCell colSpan={6}>Пусто</TableCell></TableRow>
               )}
               {reportHistory.map((r) => (
-                <>
-                  <TableRow key={r.id}>
+                <Fragment key={r.id}>
+                  <TableRow>
                     <TableCell>{r.createdAt ? format(new Date(r.createdAt), 'dd.MM.yyyy HH:mm') : '—'}</TableCell>
                     <TableCell className="font-mono text-xs max-w-[220px] truncate" title={r.id}>{r.id}</TableCell>
                     <TableCell>{statusRu(r.status)}</TableCell>
@@ -458,9 +458,9 @@ export default function ZzapStatsPage() {
                     </TableCell>
                   </TableRow>
                   {['running'].includes(String(r.status).toLowerCase()) && (
-                    <RunningJobLogsRow key={`${r.id}-logs`} jobId={r.id} />
+                    <RunningJobLogsRow jobId={r.id} />
                   )}
-                </>
+                </Fragment>
               ))}
             </TableBody>
           </Table>
@@ -542,6 +542,8 @@ export default function ZzapStatsPage() {
                 <TableHead>Дата</TableHead>
                 <TableHead>Артикул</TableHead>
                 <TableHead>Статус</TableHead>
+                <TableHead>Цены</TableHead>
+                <TableHead>Статистика по месяцам</TableHead>
                 <TableHead>URL статистики</TableHead>
                 <TableHead>Изображение</TableHead>
               </TableRow>
@@ -558,6 +560,18 @@ export default function ZzapStatsPage() {
                   <TableCell>{item.createdAt ? format(new Date(item.createdAt), 'dd.MM.yyyy HH:mm') : '—'}</TableCell>
                   <TableCell>{item.article}</TableCell>
                   <TableCell>{item.ok ? 'OK' : 'ERR'}</TableCell>
+                  <TableCell>
+                    {Array.isArray(item.prices) && item.prices.length > 0 ? (
+                      <div className="text-xs">{item.prices.slice(0,3).map((p:any,i:number)=>(<span key={i} className="mr-2">{p}</span>))}</div>
+                    ) : '—'}
+                  </TableCell>
+                  <TableCell>
+                    {item.stats && typeof item.stats === 'object' ? (
+                      <div className="text-xs max-w-[320px] truncate" title={JSON.stringify(item.stats)}>
+                        {Object.entries(item.stats).slice(0,6).map(([k,v])=>`${k}:${v}`).join(' | ')}{Object.keys(item.stats).length>6?' …':''}
+                      </div>
+                    ) : '—'}
+                  </TableCell>
                   <TableCell className="max-w-[280px] truncate">
                     {item.statsUrl ? <a className="text-blue-600 underline" href={item.statsUrl} target="_blank" rel="noreferrer">{item.statsUrl}</a> : '—'}
                   </TableCell>

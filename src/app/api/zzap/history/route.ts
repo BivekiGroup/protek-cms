@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const skip = (page - 1) * pageSize
 
     const where = q ? { article: { contains: q, mode: 'insensitive' as const } } : undefined
-    const [items, total] = await Promise.all([
+    const [items, total, recentJobs] = await Promise.all([
       (prisma as any).zzapRequest.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -30,10 +30,27 @@ export async function GET(req: NextRequest) {
           createdAt: true,
         }
       }),
-      (prisma as any).zzapRequest.count({ where })
+      (prisma as any).zzapRequest.count({ where }),
+      (prisma as any).zzapReportJob.findMany({ orderBy: { createdAt: 'desc' }, take: 10, select: { results: true } })
     ])
+    // Enrich with prices/stats from recent batch jobs by article key
+    const norm = (s: string) => (s || '').toString().trim().toUpperCase().replace(/\s+/g, '')
+    const byArticle = new Map<string, { prices?: number[]; stats?: Record<string, number> }>()
+    for (const j of recentJobs || []) {
+      const arr = (j?.results as any[]) || []
+      for (const r of arr) {
+        const a = norm((r as any)?.article || '')
+        if (!a) continue
+        if (!byArticle.has(a)) byArticle.set(a, { prices: (r as any)?.prices || undefined, stats: (r as any)?.stats || undefined })
+      }
+    }
+    const enriched = items.map((it: any) => {
+      const a = norm(it.article)
+      const extra = byArticle.get(a) || {}
+      return { ...it, prices: extra.prices, stats: extra.stats }
+    })
 
-    return new Response(JSON.stringify({ items, total, page, pageSize }), {
+    return new Response(JSON.stringify({ items: enriched, total, page, pageSize }), {
       status: 200,
       headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }
     })
