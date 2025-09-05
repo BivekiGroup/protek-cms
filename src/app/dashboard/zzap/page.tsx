@@ -43,6 +43,7 @@ export default function ZzapStatsPage() {
   const [reportHistory, setReportHistory] = useState<any[]>([])
   const [stoppingId, setStoppingId] = useState<string>('')
   const [jobLogs, setJobLogs] = useState<string[]>([])
+  const [showLogs, setShowLogs] = useState<boolean>(true)
   const sseRef = useRef<EventSource | null>(null)
   const sseJobRef = useRef<string>('')
   const calcEtaText = useCallback((items: number) => {
@@ -57,6 +58,51 @@ export default function ZzapStatsPage() {
     const m2 = mm % 60
     return `~${hh} ч ${m2} мин`
   }, [])
+
+  function RunningJobLogsRow({ jobId }: { jobId: string }) {
+    const [lines, setLines] = useState<string[]>([])
+    const [show, setShow] = useState<boolean>(true)
+    const esRef = useRef<EventSource | null>(null)
+    useEffect(() => {
+      try { esRef.current?.close() } catch {}
+      esRef.current = null
+      const es = new EventSource(`/api/zzap/report/stream?id=${encodeURIComponent(jobId)}`)
+      esRef.current = es
+      es.onmessage = (ev) => {
+        try {
+          const j = JSON.parse(ev.data || '{}')
+          // ignore status messages here; logs come via event: log
+        } catch {}
+      }
+      es.addEventListener('log', (ev: MessageEvent) => {
+        try {
+          const j = JSON.parse((ev as any).data || '{}')
+          const line = typeof j?.line === 'string' ? j.line : ''
+          if (line) setLines((prev) => (prev.length > 400 ? [...prev.slice(-400), line] : [...prev, line]))
+        } catch {}
+      })
+      es.addEventListener('error', () => {})
+      return () => { try { es.close() } catch {}; esRef.current = null }
+    }, [jobId])
+
+    return (
+      <TableRow>
+        <TableCell colSpan={6}>
+          <div className="mt-2">
+            <div className="flex items-center gap-2 mb-2">
+              <Button size="sm" variant="outline" onClick={() => setShow((v) => !v)}>{show ? 'Скрыть логи' : 'Показать логи'}</Button>
+              <Button size="sm" variant="outline" onClick={() => setLines([])}>Очистить</Button>
+            </div>
+            {show && (
+              <div className="p-2 bg-muted rounded border text-xs max-h-48 overflow-auto font-mono whitespace-pre-wrap">
+                {lines.length === 0 ? <div className="text-muted-foreground">Нет логов</div> : lines.map((l, i) => (<div key={i}>{l}</div>))}
+              </div>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
+    )
+  }
 
   const statusRu = useCallback((s?: string) => {
     switch ((s || '').toLowerCase()) {
@@ -133,9 +179,7 @@ export default function ZzapStatsPage() {
           sseRef.current = null
           sseJobRef.current = ''
         }
-        if (typeof j.line === 'string' && j.line) {
-          setJobLogs((prev) => (prev.length > 400 ? [...prev.slice(-400), j.line] : [...prev, j.line]))
-        }
+        if (typeof j.line === 'string' && j.line) setJobLogs((prev) => (prev.length > 400 ? [...prev.slice(-400), j.line] : [...prev, j.line]))
       } catch {}
     }
     es.addEventListener('log', (ev: MessageEvent) => {
@@ -316,11 +360,17 @@ export default function ZzapStatsPage() {
                       {Math.round(jobTotal ? (jobProcessed / jobTotal) * 100 : 0)}%
                     </span>
                   </div>
-                  {jobLogs.length > 0 && (
-                    <div className="mt-2 p-2 bg-muted rounded border text-xs max-h-48 overflow-auto font-mono whitespace-pre-wrap">
-                      {jobLogs.map((l, i) => (<div key={i}>{l}</div>))}
+                  <div className="mt-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Button size="sm" variant="outline" onClick={() => setShowLogs((v) => !v)}>{showLogs ? 'Скрыть логи' : 'Показать логи'}</Button>
+                      <Button size="sm" variant="outline" onClick={() => setJobLogs([])}>Очистить</Button>
                     </div>
-                  )}
+                    {showLogs && jobLogs.length > 0 && (
+                      <div className="p-2 bg-muted rounded border text-xs max-h-48 overflow-auto font-mono whitespace-pre-wrap">
+                        {jobLogs.map((l, i) => (<div key={i}>{l}</div>))}
+                      </div>
+                    )}
+                  </div>
                   {jobResultUrl && (
                     <div>
                       <a className="text-blue-600 underline" href={jobResultUrl} target="_blank" rel="noreferrer">Скачать результат (XLSX)</a>
@@ -381,31 +431,36 @@ export default function ZzapStatsPage() {
                 <TableRow><TableCell colSpan={6}>Пусто</TableCell></TableRow>
               )}
               {reportHistory.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>{r.createdAt ? format(new Date(r.createdAt), 'dd.MM.yyyy HH:mm') : '—'}</TableCell>
-                  <TableCell className="font-mono text-xs max-w-[220px] truncate" title={r.id}>{r.id}</TableCell>
-                  <TableCell>{statusRu(r.status)}</TableCell>
-                  <TableCell>{r.processed}/{r.total}</TableCell>
-                  <TableCell>
-                    {r.resultFile ? (
-                      <a className="text-blue-600 underline" href={r.resultFile} target="_blank" rel="noreferrer">Скачать</a>
-                    ) : '—'}
-                  </TableCell>
-                  <TableCell className="space-x-2">
-                    {(!r.resultFile && ['pending','running'].includes(String(r.status).toLowerCase())) && (
-                      <Button size="sm" variant="secondary" onClick={async () => {
-                        try { await fetch(`/api/zzap/report/process?id=${encodeURIComponent(r.id)}`, { method: 'POST' }) } catch {}
-                        await loadReportHistory()
-                      }}>Продолжить</Button>
-                    )}
-                    {['running'].includes(String(r.status).toLowerCase()) && (
-                      <Button size="sm" variant="destructive" onClick={async () => {
-                        try { await fetch(`/api/zzap/report/stop?id=${encodeURIComponent(r.id)}`, { method: 'POST' }) } catch {}
-                        await loadReportHistory()
-                      }}>Остановить</Button>
-                    )}
-                  </TableCell>
-                </TableRow>
+                <>
+                  <TableRow key={r.id}>
+                    <TableCell>{r.createdAt ? format(new Date(r.createdAt), 'dd.MM.yyyy HH:mm') : '—'}</TableCell>
+                    <TableCell className="font-mono text-xs max-w-[220px] truncate" title={r.id}>{r.id}</TableCell>
+                    <TableCell>{statusRu(r.status)}</TableCell>
+                    <TableCell>{r.processed}/{r.total}</TableCell>
+                    <TableCell>
+                      {r.resultFile ? (
+                        <a className="text-blue-600 underline" href={r.resultFile} target="_blank" rel="noreferrer">Скачать</a>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="space-x-2">
+                      {(!r.resultFile && ['pending','running'].includes(String(r.status).toLowerCase())) && (
+                        <Button size="sm" variant="secondary" onClick={async () => {
+                          try { await fetch(`/api/zzap/report/process?id=${encodeURIComponent(r.id)}`, { method: 'POST' }) } catch {}
+                          await loadReportHistory()
+                        }}>Продолжить</Button>
+                      )}
+                      {['running'].includes(String(r.status).toLowerCase()) && (
+                        <Button size="sm" variant="destructive" onClick={async () => {
+                          try { await fetch(`/api/zzap/report/stop?id=${encodeURIComponent(r.id)}`, { method: 'POST' }) } catch {}
+                          await loadReportHistory()
+                        }}>Остановить</Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                  {['running'].includes(String(r.status).toLowerCase()) && (
+                    <RunningJobLogsRow key={`${r.id}-logs`} jobId={r.id} />
+                  )}
+                </>
               ))}
             </TableBody>
           </Table>

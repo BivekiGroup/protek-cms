@@ -22,7 +22,20 @@ export async function GET(req: NextRequest) {
       // Tail logs file incrementally
       const logPath = path.join(RUNTIME_DIR, `.zzap-report-${id}.log`)
       let lastSize = 0
-      try { if (fs.existsSync(logPath)) { const st = fs.statSync(logPath); lastSize = st.size } } catch {}
+      try {
+        if (fs.existsSync(logPath)) {
+          const st = fs.statSync(logPath)
+          // Отправим уже накопленные логи сразу при подключении
+          const fd = fs.openSync(logPath, 'r')
+          const buf = Buffer.alloc(st.size)
+          fs.readSync(fd, buf, 0, buf.length, 0)
+          fs.closeSync(fd)
+          lastSize = st.size
+          const chunk = buf.toString('utf-8')
+          const lines = chunk.split(/\r?\n/).filter(Boolean)
+          for (const line of lines) sendLog(line)
+        }
+      } catch {}
       const interval = setInterval(async () => {
         try {
           const j = await (prisma as any).zzapReportJob.findUnique({ where: { id }, select: { id: true, status: true, processed: true, total: true, resultFile: true, error: true, updatedAt: true } })

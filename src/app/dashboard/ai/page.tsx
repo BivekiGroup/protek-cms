@@ -8,9 +8,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Bot, Send, User, Pencil, Trash2 } from 'lucide-react';
+import { useAuth } from '@/components/providers/AuthProvider'
 import ModelPicker from '@/components/ai/ModelPicker'
 
 export default function AIChat() {
+  const { token } = useAuth()
   const [sessionId, setSessionId] = useState<string>('');
   const [sessions, setSessions] = useState<{ id: string; title: string; model: string; createdAt: string; updatedAt: string }[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -30,7 +32,7 @@ export default function AIChat() {
 
   // Load sessions list and open the last one
   const refreshSessions = async () => {
-    const res = await fetch('/api/ai/sessions', { cache: 'no-store' })
+    const res = await fetch('/api/ai/sessions', { cache: 'no-store', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
     const data = await res.json().catch(() => null)
     const items = Array.isArray(data?.items) ? data.items : []
     setSessions(items)
@@ -41,7 +43,7 @@ export default function AIChat() {
 
   const selectSession = async (id: string) => {
     setSessionId(id)
-    const res = await fetch(`/api/ai/sessions/${id}/messages`, { cache: 'no-store' })
+    const res = await fetch(`/api/ai/sessions/${id}/messages`, { cache: 'no-store', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
     const data = await res.json().catch(() => null)
     const items = Array.isArray(data?.items) ? data.items : []
     setMessages(items.map((m: any) => ({ role: m.role, content: m.content })))
@@ -84,7 +86,7 @@ export default function AIChat() {
       // Ensure session exists
       let currentId = sessionId
       if (!currentId) {
-        const create = await fetch('/api/ai/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Новый диалог', model: selectedModel || undefined }) })
+        const create = await fetch('/api/ai/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ title: 'Новый диалог', model: selectedModel || undefined }) })
         const data = await create.json().catch(() => null)
         currentId = data?.id
         setSessionId(currentId)
@@ -92,7 +94,7 @@ export default function AIChat() {
       }
       const res = await fetch(`/api/ai/sessions/${currentId}/message`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'text/plain' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/plain', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ content, model: selectedModel || undefined }),
       });
 
@@ -150,7 +152,7 @@ export default function AIChat() {
             <CardContent className="flex-1 min-h-0 p-0">
               <div className="p-3">
                 <Button className="w-full" variant="secondary" onClick={async () => {
-                  const create = await fetch('/api/ai/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Новый диалог', model: selectedModel || undefined }) })
+                  const create = await fetch('/api/ai/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ title: 'Новый диалог', model: selectedModel || undefined }) })
                   const data = await create.json().catch(() => null)
                   if (data?.id) { await refreshSessions(); await selectSession(data.id) }
                 }}>Новый диалог</Button>
@@ -174,7 +176,7 @@ export default function AIChat() {
                                 const title = editingTitle.trim() || 'Диалог'
                                 setEditingId(null)
                                 setEditingTitle('')
-                                await fetch(`/api/ai/sessions/${s.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) })
+                                await fetch(`/api/ai/sessions/${s.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ title }) })
                                 refreshSessions()
                               }}
                               onKeyDown={async (e) => {
@@ -194,7 +196,7 @@ export default function AIChat() {
                               </button>
                               <button title="Удалить" onClick={async () => {
                                 if (!confirm('Удалить диалог?')) return
-                                await fetch(`/api/ai/sessions/${s.id}`, { method: 'DELETE' })
+                                await fetch(`/api/ai/sessions/${s.id}`, { method: 'DELETE', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
                                 if (sessionId === s.id) { setSessionId(''); setMessages([]) }
                                 refreshSessions()
                               }} className="text-muted-foreground hover:text-destructive p-1 rounded hover:bg-background/50">

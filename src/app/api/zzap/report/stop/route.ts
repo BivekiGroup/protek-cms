@@ -14,15 +14,33 @@ export async function POST(req: NextRequest) {
   try {
     const rows = (job.inputRows as any[]) as { article: string; brand: string }[]
     const results = (job.results as any[]) || []
-    // Построим частичный XLSX по уже полученным результатам
-    const header = ['Артикул', 'Бренд', 'Цена 1', 'Цена 2', 'Цена 3']
+    // Соберём месячные заголовки из уже найденных results.stats
+    const monthSet = new Set<string>()
+    for (const r of results) {
+      const stats = (r as any)?.stats || {}
+      for (const k of Object.keys(stats)) monthSet.add(k)
+    }
+    const monthLabels = Array.from(monthSet)
+    monthLabels.sort((a, b) => a.localeCompare(b, 'ru'))
+    const header = ['Артикул', 'Бренд', 'Цена 1', 'Цена 2', 'Цена 3', ...monthLabels]
     const aoa: any[][] = [['Частичный отчёт ZZAP (остановлен пользователем)'], header]
     const norm = (s: string) => (s || '').toString().trim()
+    // Быстрый доступ по ключу article|brand
+    const normKey = (a: string, b: string) => `${norm(a).toUpperCase().replace(/\s+/g, '')}|${norm(b).toUpperCase().replace(/\s+/g, '')}`
+    const byKey = new Map<string, any>()
+    results.forEach((r: any) => {
+      const k = normKey(r?.article || '', r?.brand || '')
+      if (k !== '|') byKey.set(k, r)
+    })
     for (let i = 0; i < rows.length; i++) {
       const def = rows[i]
-      const r = results[i] as any
-      const p = (r?.prices || []) as number[]
-      aoa.push([norm(def.article), norm(def.brand), p[0] ?? '', p[1] ?? '', p[2] ?? ''])
+      const k = normKey(def.article, def.brand)
+      const r = byKey.get(k) || results[i] || null
+      const p = ((r as any)?.prices || []) as number[]
+      const row: (string | number)[] = [norm(def.article), norm(def.brand), p[0] ?? '', p[1] ?? '', p[2] ?? '']
+      const stats = ((r as any)?.stats || {}) as Record<string, number>
+      for (const ml of monthLabels) row.push(stats[ml] ?? '')
+      aoa.push(row)
     }
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet(aoa)
