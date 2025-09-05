@@ -5,6 +5,7 @@ import fs from 'fs'
 import path from "path";
 import * as XLSX from "xlsx";
 import { uploadBuffer } from "@/lib/s3";
+import { randomUUID } from 'crypto'
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1391,6 +1392,26 @@ function appendJobLog(id: string, line: string) {
     const p = getJobLogPath(id);
     const ts = new Date().toISOString().replace("T", " ").replace("Z", "");
     fs.appendFileSync(p, `[${ts}] ${line}\n`);
+  } catch {}
+  // Best-effort: also persist to DB for environments without writable FS
+  try {
+    const ts = new Date().toISOString();
+    const uid = randomUUID();
+    const safeId = id.replace(/'/g, "''");
+    const safeLine = line.replace(/'/g, "''");
+    // Fire-and-forget; ignore errors
+    // Create table if not exists
+    (async () => {
+      try {
+        await (prisma as any).$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "zzap_report_job_logs" (
+          id text primary key,
+          "jobId" text not null,
+          line text not null,
+          "createdAt" timestamptz not null default now()
+        )`)
+        await (prisma as any).$executeRawUnsafe(`INSERT INTO "zzap_report_job_logs" (id, "jobId", line, "createdAt") VALUES ('${uid}', '${safeId}', '${safeLine}', '${ts}')`)
+      } catch {}
+    })().catch(() => null as any)
   } catch {}
 }
 

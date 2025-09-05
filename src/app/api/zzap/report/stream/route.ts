@@ -34,6 +34,12 @@ export async function GET(req: NextRequest) {
           const chunk = buf.toString('utf-8')
           const lines = chunk.split(/\r?\n/).filter(Boolean)
           for (const line of lines) sendLog(line)
+        } else {
+          // Нет ФС-логов — попробуем добрать последние N строк из БД
+          try {
+            const rows: any[] = await (prisma as any).$queryRawUnsafe(`SELECT line, "createdAt" FROM "zzap_report_job_logs" WHERE "jobId"='${id.replace(/'/g, "''")}' ORDER BY "createdAt" ASC LIMIT 500`)
+            for (const r of rows) sendLog(String(r?.line || ''))
+          } catch {}
         }
       } catch {}
       const interval = setInterval(async () => {
@@ -45,7 +51,7 @@ export async function GET(req: NextRequest) {
             lastUpdated = upd
             send(j)
           }
-          // Emit any new log lines appended since last tick
+          // Emit any new log lines appended since last tick (FS)
           try {
             if (fs.existsSync(logPath)) {
               const st = fs.statSync(logPath)
@@ -59,6 +65,14 @@ export async function GET(req: NextRequest) {
                 const lines = chunk.split(/\r?\n/).filter(Boolean)
                 for (const line of lines) sendLog(line)
               }
+            }
+          } catch {}
+          // Если ФС-логов нет, периодически подгружаем свежие строки из БД
+          try {
+            if (!fs.existsSync(logPath)) {
+              const sinceIso = lastUpdated || ''
+              const rows: any[] = await (prisma as any).$queryRawUnsafe(`SELECT line, "createdAt" FROM "zzap_report_job_logs" WHERE "jobId"='${id.replace(/'/g, "''")}' ORDER BY "createdAt" ASC LIMIT 100`)
+              for (const r of rows) sendLog(String(r?.line || ''))
             }
           } catch {}
           const done = ['done','error','failed','canceled'].includes((j.status || '').toLowerCase())
