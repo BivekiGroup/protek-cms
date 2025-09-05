@@ -285,11 +285,11 @@ export default function ZzapStatsPage() {
                   if (!jobId) return
                   try {
                     setStopping(true)
-                    await fetch(`/api/zzap/report/stop?id=${jobId}`, { method: 'POST' })
-                    const st = await fetch(`/api/zzap/report/status?id=${jobId}`).then(r=>r.json()).catch(()=>null)
-                    if (st?.ok) {
-                      setJobStatus(st.status)
-                      setJobProcessed(st.processed || 0)
+                    const res = await fetch(`/api/zzap/report/stop?id=${jobId}`, { method: 'POST' })
+                    const j = await res.json().catch(() => null)
+                    if (j?.ok) {
+                      if (typeof j.resultFile === 'string' && j.resultFile) setJobResultUrl(j.resultFile)
+                      if (typeof j.status === 'string') setJobStatus(j.status)
                     }
                   } finally {
                     setStopping(false)
