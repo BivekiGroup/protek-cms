@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, shOverview, 'Overview')
 
     // Daily
-    const dailyAoA = [['Date', 'Searches', 'Views']]
+    const dailyAoA: (string | number)[][] = [['Date', 'Searches', 'Views']]
     const byDate: Record<string, { s: number; v: number }> = {}
     for (const r of searchByDay) { const d = new Date(r.d).toISOString().slice(0,10); byDate[d] = { ...(byDate[d]||{s:0,v:0}), s: Number(r.c)||0 } }
     for (const r of viewsByDay) { const d = new Date(r.d).toISOString().slice(0,10); byDate[d] = { ...(byDate[d]||{s:0,v:0}), v: Number(r.c)||0 } }
