@@ -52,6 +52,15 @@ export async function POST(req: NextRequest) {
   }
 
   const items = Array.isArray(body?.items) ? body.items : [body]
+
+  // optional max batch limit (consistent with other 1C endpoints)
+  const maxBatch = Number(process.env.ONEC_MAX_BATCH_SIZE || 1000)
+  if (items.length > maxBatch) {
+    return new Response(
+      JSON.stringify({ ok: false, error: `Too many items: ${items.length} > ${maxBatch}` }),
+      { status: 422, headers }
+    )
+  }
   const parsed = items.map((it: any) => categorySchema.parse(it))
 
   const results: any[] = []
@@ -88,4 +97,3 @@ function slugify(input: string) {
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
 }
-

@@ -82,10 +82,20 @@ export default function OneCCatalogDocs() {
   -H "Content-Type: application/json" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" \\
   -d '{
-  "category_code": "001254",
-  "category_name": "Ремни ГРМ",
-  "category_head_code": "151554",
-  "category_head_name": "ГРМ, рем. комплекты и тд"
+  "items": [
+    {
+      "category_code": "001254",
+      "category_name": "Ремни ГРМ",
+      "category_head_code": "151554",
+      "category_head_name": "ГРМ, рем. комплекты и тд"
+    },
+    {
+      "category_code": "001255",
+      "category_name": "Ролики ГРМ",
+      "category_head_code": "151554",
+      "category_head_name": "ГРМ, рем. комплекты и тд"
+    }
+  ]
 }'`
 
   const curlPrices = `curl -X POST "${CURL_BASE}/api/1c/catalog/prices" \\
@@ -160,10 +170,20 @@ export default function OneCCatalogDocs() {
         }, null, 2)
       case 'categories':
         return JSON.stringify({
-          category_code: '001254',
-          category_name: 'Ремни ГРМ',
-          category_head_code: '151554',
-          category_head_name: 'ГРМ, рем. комплекты и тд',
+          items: [
+            {
+              category_code: '001254',
+              category_name: 'Ремни ГРМ',
+              category_head_code: '151554',
+              category_head_name: 'ГРМ, рем. комплекты и тд',
+            },
+            {
+              category_code: '001255',
+              category_name: 'Ролики ГРМ',
+              category_head_code: '151554',
+              category_head_name: 'ГРМ, рем. комплекты и тд',
+            }
+          ]
         }, null, 2)
       case 'prices':
         return JSON.stringify({
@@ -217,22 +237,32 @@ export default function OneCCatalogDocs() {
   }
 
   const generateSamples = (n: number) => {
-    if (endpoint !== 'products') return
+    if (endpoint !== 'products' && endpoint !== 'categories') return
     const safeN = Math.max(1, Math.min(50, Math.floor(n || 1)))
     const items = Array.from({ length: safeN }).map((_, i) => {
-      const suffix = String.fromCharCode(65 + (i % 26)) // A, B, C ...
-      const base = 941024 + i
-      return {
-        externalId: `${base}${suffix}_dayco`,
-        article: `${base}${suffix}`,
-        brand: 'DAYCO',
-        name: `Тестовый товар ${i + 1}`,
-        price: 1290 + i,
-        stock: 10 + i,
-        images: ['https://example.com/img1.jpg'],
-        category_code: '001254',
-        characteristics: { 'Длина': `${500 + i} мм` },
-        isVisible: true,
+      if (endpoint === 'products') {
+        const suffix = String.fromCharCode(65 + (i % 26)) // A, B, C ...
+        const base = 941024 + i
+        return {
+          externalId: `${base}${suffix}_dayco`,
+          article: `${base}${suffix}`,
+          brand: 'DAYCO',
+          name: `Тестовый товар ${i + 1}`,
+          price: 1290 + i,
+          stock: 10 + i,
+          images: ['https://example.com/img1.jpg'],
+          category_code: '001254',
+          characteristics: { 'Длина': `${500 + i} мм` },
+          isVisible: true,
+        }
+      } else {
+        const code = String(1254 + i).padStart(6, '0')
+        return {
+          category_code: code,
+          category_name: `Категория ${i + 1}`,
+          category_head_code: '151554',
+          category_head_name: 'ГРМ, рем. комплекты и тд',
+        }
       }
     })
     setBody(JSON.stringify({ items }, null, 2))
@@ -400,7 +430,7 @@ export default function OneCCatalogDocs() {
               <div className="flex items-center justify-between">
                 <label className="text-xs text-gray-600">Тело запроса (JSON)</label>
                 <div className="flex items-center gap-2">
-                  {endpoint === 'products' && (
+                  {(endpoint === 'products' || endpoint === 'categories') && (
                     <div className="flex items-center gap-2">
                       <label className="text-xs text-gray-600">Количество</label>
                       <Input

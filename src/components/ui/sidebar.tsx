@@ -71,6 +71,12 @@ const navigationGroups: NavGroup[] = [
     ],
   },
   {
+    title: 'Аналитика',
+    items: [
+      { title: 'Аналитика', href: '/dashboard/analytics', icon: BarChart3 },
+    ],
+  },
+  {
     title: 'Интеграции',
     items: [
       { title: '1С: Каталог', href: '/dashboard/integrations/1c-catalog', icon: Shield },
