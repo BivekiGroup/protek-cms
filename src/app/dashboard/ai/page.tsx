@@ -25,6 +25,12 @@ export default function AIChat() {
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [attachments, setAttachments] = useState<{ url: string; name?: string; contentType?: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [genOpen, setGenOpen] = useState(false)
+  const [genType, setGenType] = useState<'image' | 'video'>('image')
+  const [genModel, setGenModel] = useState<string>('nano-banana')
+  const [genPrompt, setGenPrompt] = useState<string>('')
+  const [genBusy, setGenBusy] = useState(false)
+  const [genStatus, setGenStatus] = useState<string>('')
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -329,6 +335,110 @@ export default function AIChat() {
         
         <CardFooter>
           <div className="w-full space-y-2">
+            {/* Generation panel */}
+            <div className="border rounded p-2 bg-muted/30">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant={genType === 'image' ? 'default' : 'outline'} onClick={() => { setGenType('image'); setGenModel('nano-banana') }}>Фото</Button>
+                  <Button size="sm" variant={genType === 'video' ? 'default' : 'outline'} onClick={() => { setGenType('video'); setGenModel('veo3-fast') }}>Видео</Button>
+                </div>
+                <button className="text-xs underline" onClick={() => setGenOpen(v => !v)}>{genOpen ? 'Скрыть генерацию' : 'Генерация'}</button>
+              </div>
+              {genOpen && (
+                <div className="mt-2 grid sm:grid-cols-3 gap-2">
+                  <div className="col-span-1">
+                    <label className="text-xs text-muted-foreground">Модель</label>
+                    <select className="w-full border rounded px-2 py-1 text-sm bg-background" value={genModel} onChange={(e) => setGenModel(e.target.value)}>
+                      {genType === 'image' ? (
+                        <>
+                          <option value="nano-banana">nano-banana</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="veo3-fast">veo3-fast</option>
+                          <option value="veo3">veо3</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs text-muted-foreground">Промпт</label>
+                    <Input value={genPrompt} onChange={(e) => setGenPrompt(e.target.value)} placeholder={genType === 'image' ? 'Например: лого в стиле неон' : 'Например: короткое видео про продукт'} />
+                  </div>
+                  <div className="col-span-3 flex items-center gap-2">
+                    <Button size="sm" disabled={genBusy || !genPrompt.trim()} onClick={async () => {
+                      // ensure session exists
+                      let currentId = sessionId
+                      if (!currentId) {
+                        const create = await fetch('/api/ai/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ title: 'Новый диалог', model: selectedModel || undefined }) })
+                        const dj = await create.json().catch(() => null)
+                        currentId = dj?.id
+                        if (currentId) setSessionId(currentId)
+                      }
+                      setGenBusy(true); setGenStatus('')
+                      try {
+                        if (genType === 'image') {
+                          const filesUrl = attachments.filter(a => (a.contentType || '').startsWith('image/')).map(a => a.url)
+                          const res = await fetch('/api/ai/images/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: genModel, prompt: genPrompt.trim(), filesUrl }) })
+                          const j = await res.json().catch(() => null)
+                          if (!res.ok || !j?.requestId) throw new Error(j?.error || 'Ошибка старта генерации')
+                          const id = j.requestId
+                          setGenStatus('Запущено…')
+                          let tries = 0
+                          const poll = async () => {
+                            tries++
+                            const s = await fetch(`/api/ai/images/${id}`).then(r => r.json()).catch(() => null)
+                            const status = (s?.status || '').toUpperCase()
+                            if (status === 'COMPLETED' && s?.url) {
+                              setMessages(prev => [...prev, { role: 'assistant', content: `Готово: ${s.url}`, attachments: [{ url: s.url, name: 'image.png', contentType: 'image/png' }] }])
+                              if (currentId) {
+                                await fetch(`/api/ai/sessions/${currentId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ role: 'assistant', content: `Готово: ${s.url}` }) })
+                              }
+                              setGenBusy(false); setGenStatus('')
+                              return
+                            }
+                            if (status === 'FAILED') { setGenBusy(false); setGenStatus('Ошибка генерации'); return }
+                            if (tries > 60) { setGenBusy(false); setGenStatus('Таймаут ожидания'); return }
+                            setGenStatus(`Статус: ${status || '…'}`)
+                            setTimeout(poll, 3000)
+                          }
+                          setTimeout(poll, 2500)
+                        } else {
+                          const imageUrls = attachments.filter(a => (a.contentType || '').startsWith('image/')).map(a => a.url)
+                          const res = await fetch('/api/ai/videos/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: genModel, prompt: genPrompt.trim(), imageUrls }) })
+                          const j = await res.json().catch(() => null)
+                          if (!res.ok || !j?.requestId) throw new Error(j?.error || 'Ошибка старта генерации')
+                          const id = j.requestId
+                          setGenStatus('Запущено…')
+                          let tries = 0
+                          const poll = async () => {
+                            tries++
+                            const s = await fetch(`/api/ai/videos/${id}`).then(r => r.json()).catch(() => null)
+                            const status = (s?.status || '').toUpperCase()
+                            if (status === 'COMPLETED' && s?.url) {
+                              setMessages(prev => [...prev, { role: 'assistant', content: `Видео готово: ${s.url}` }])
+                              if (currentId) {
+                                await fetch(`/api/ai/sessions/${currentId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ role: 'assistant', content: `Видео готово: ${s.url}` }) })
+                              }
+                              setGenBusy(false); setGenStatus('')
+                              return
+                            }
+                            if (status === 'FAILED') { setGenBusy(false); setGenStatus('Ошибка генерации'); return }
+                            if (tries > 80) { setGenBusy(false); setGenStatus('Таймаут ожидания'); return }
+                            setGenStatus(`Статус: ${status || '…'}`)
+                            setTimeout(poll, 4000)
+                          }
+                          setTimeout(poll, 3000)
+                        }
+                      } catch (e: any) {
+                        setGenBusy(false); setGenStatus(e?.message || 'Ошибка')
+                      }
+                    }}>Сгенерировать</Button>
+                    {genStatus && <div className="text-xs text-muted-foreground">{genStatus}</div>}
+                  </div>
+                </div>
+              )}
+            </div>
             <div>
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 {attachments.map((a, idx) => {
