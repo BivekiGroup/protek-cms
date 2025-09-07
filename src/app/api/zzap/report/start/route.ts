@@ -134,17 +134,34 @@ export async function POST(req: NextRequest) {
     }
     const buf = Buffer.from(await file.arrayBuffer())
     const rows = parseRows(buf, file.name)
-    const job = await (prisma as any).zzapReportJob.create({
-      data: {
-        status: 'pending',
-        periodFrom: new Date(periodFrom),
-        periodTo: new Date(periodTo),
-        total: rows.length,
-        processed: 0,
-        inputRows: rows,
-        results: Array.from({ length: rows.length }).fill(null)
-      }
-    })
+    let job
+    try {
+      job = await (prisma as any).zzapReportJob.create({
+        data: {
+          status: 'pending',
+          periodFrom: new Date(periodFrom),
+          periodTo: new Date(periodTo),
+          total: rows.length,
+          processed: 0,
+          originalFilename: (file.name || '').slice(0, 255),
+          inputRows: rows,
+          results: Array.from({ length: rows.length }).fill(null)
+        }
+      })
+    } catch (_e) {
+      // Backward-compatible fallback if DB doesn't have originalFilename yet
+      job = await (prisma as any).zzapReportJob.create({
+        data: {
+          status: 'pending',
+          periodFrom: new Date(periodFrom),
+          periodTo: new Date(periodTo),
+          total: rows.length,
+          processed: 0,
+          inputRows: rows,
+          results: Array.from({ length: rows.length }).fill(null)
+        }
+      })
+    }
     // Rough ETA: base per-item processing + expected inter-item delay
     const estItemMs = Number(process.env.ZZAP_ESTIMATE_ITEM_MS || 12000)
     const delayBase = Number(process.env.ZZAP_BETWEEN_ITEMS_DELAY_MS || 2000)

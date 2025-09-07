@@ -353,7 +353,12 @@ export default function ZzapStatsPage() {
               {jobId && (
                 <div className="space-y-1">
                   <div>Задача: <span className="font-mono">{jobId}</span></div>
-                  <div>Статус: {statusRu(jobStatus)}; Прогресс: {jobProcessed}/{jobTotal}{jobEtaText ? `; Оценка: ${jobEtaText}` : ''}</div>
+                  <div>
+                    Статус: {statusRu(jobStatus)}; Прогресс: {jobProcessed}/{jobTotal}{jobEtaText ? `; Оценка: ${jobEtaText}` : ''}
+                    {reportFile?.name ? (
+                      <span className="ml-2 text-muted-foreground">Файл: {reportFile.name}</span>
+                    ) : null}
+                  </div>
                   <div className="flex items-center gap-3 max-w-md mt-1">
                     <Progress value={jobTotal ? (jobProcessed / jobTotal) * 100 : 0} />
                     <span className="text-xs text-muted-foreground">
@@ -436,7 +441,12 @@ export default function ZzapStatsPage() {
                     <TableCell>{r.createdAt ? format(new Date(r.createdAt), 'dd.MM.yyyy HH:mm') : '—'}</TableCell>
                     <TableCell className="font-mono text-xs max-w-[220px] truncate" title={r.id}>{r.id}</TableCell>
                     <TableCell>{statusRu(r.status)}</TableCell>
-                    <TableCell>{r.processed}/{r.total}</TableCell>
+                    <TableCell>
+                      <div>{r.processed}/{r.total}</div>
+                      {r.originalFilename ? (
+                        <div className="text-xs text-muted-foreground max-w-[260px] truncate" title={r.originalFilename}>{r.originalFilename}</div>
+                      ) : null}
+                    </TableCell>
                     <TableCell>
                       {r.resultFile ? (
                         <a className="text-blue-600 underline" href={r.resultFile} target="_blank" rel="noreferrer">Скачать</a>

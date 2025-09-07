@@ -480,6 +480,7 @@ model ZzapReportJob {
   periodTo   DateTime
   total      Int      @default(0)
   processed  Int      @default(0)
+  originalFilename String?
   inputRows  Json // [{ article, brand }]
   results    Json? // [{ article, brand, prices:[p1,p2,p3], stats:{"yyyy-mm":count} }]
   resultFile String? // S3 URL
