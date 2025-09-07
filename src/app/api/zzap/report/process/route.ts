@@ -37,6 +37,35 @@ function jitter(base: number, jitter: number) {
   return base + j;
 }
 
+async function reauthInPage(page: Page, jobId?: string): Promise<boolean> {
+  try { if (jobId) appendJobLog(jobId, 'reauth: try restoreSession+ensureAuthenticated') } catch {}
+  try { await restoreSession(page) } catch {}
+  try {
+    await page.goto(ZZAP_BASE, { waitUntil: 'domcontentloaded', timeout: ZZAP_TIMEOUT_MS }).catch(() => {})
+  } catch {}
+  let ok = false
+  try { ok = await ensureAuthenticated(page) } catch { ok = false }
+  if (ok) { try { if (jobId) appendJobLog(jobId, 'reauth: ok via ensureAuthenticated') } catch {} ; return true }
+  // Fallback: login in a fresh page, then copy cookies into current page
+  try {
+    const p2 = await loginAndGetPage().catch(() => null as any)
+    if (p2) {
+      try {
+        const cookies = await p2.cookies()
+        await page.setCookie(...cookies)
+        await saveSession(page)
+      } catch {}
+      try { await p2.browser()?.close?.() } catch {}
+    }
+  } catch {}
+  try {
+    await page.goto(ZZAP_BASE, { waitUntil: 'domcontentloaded', timeout: ZZAP_TIMEOUT_MS }).catch(() => {})
+  } catch {}
+  try { ok = await ensureAuthenticated(page) } catch { ok = false }
+  try { if (jobId) appendJobLog(jobId, `reauth: final=${ok}`) } catch {}
+  return !!ok
+}
+
 async function pageContainsArticleBrand(
   page: Page,
   article: string,
@@ -415,6 +444,14 @@ async function openSearch(page: Page, article: string, brand?: string) {
 
   // Try to explicitly trigger search if results grid not present yet
   try {
+    // Captcha check first
+    try {
+      const u = page.url() || ''
+      if (/\/sys\/captcha\.aspx/i.test(u)) {
+        await reauthInPage(page as any)
+        for (const url of urls) { try { await page.goto(url, { waitUntil: 'domcontentloaded', timeout: ZZAP_TIMEOUT_MS }) ; break } catch {} }
+      }
+    } catch {}
     const ensured = await page.evaluate(async (art: string, br?: string) => {
       const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
       const fillAndSubmit = async () => {
@@ -1124,12 +1161,19 @@ async function fetchDxMonthly(
       })()
       if (!ok && jobId) appendJobLog(jobId, 'dx: ensureAuthenticated=false')
     } catch {}
-    // If redirected to login — try to login right here (uses same cookies scope)
+    // If redirected to captcha/login — try to re-auth in-place
     let urlNow = statsPage.url?.() || "";
     if (/\/sys\/captcha\.aspx/i.test(urlNow)) {
-      if (jobId)
-        appendJobLog(jobId, "captcha detected before DX, skip capture");
-      return null;
+      if (jobId) appendJobLog(jobId, "captcha detected before DX, try reauth");
+      const ok = await reauthInPage(statsPage as any, jobId)
+      if (ok) {
+        try {
+          await statsPage.goto(ZZAP_BASE, { waitUntil: 'domcontentloaded', timeout: 12000 }).catch(() => {})
+        } catch {}
+      } else {
+        if (jobId) appendJobLog(jobId, "captcha persists before DX, skip capture");
+        return null;
+      }
     }
     if (/\/user\/logon\.aspx/i.test(urlNow)) {
       const email = process.env.ZZAP_EMAIL || "";
@@ -1181,12 +1225,9 @@ async function fetchDxMonthly(
     try {
       const curUrl = statsPage.url?.() || "";
       if (/\/sys\/captcha\.aspx/i.test(curUrl)) {
-        if (jobId)
-          appendJobLog(
-            jobId,
-            "captcha detected on search page, skip navigation"
-          );
-        return null;
+        if (jobId) appendJobLog(jobId, 'captcha on search page, try reauth');
+        const ok = await reauthInPage(statsPage as any, jobId)
+        if (!ok) return null;
       }
       const rel = await statsPage.evaluate(() => {
         const links = Array.from(
@@ -1892,8 +1933,12 @@ export async function POST(req: NextRequest) {
         // Captcha handling: pause and one retry
         const urlNow = statsPage.url?.() || "";
         if (/\/sys\/captcha\.aspx/i.test(urlNow)) {
-          appendJobLog(id, "captcha detected, sleeping 90s then retry once");
-          await sleep(90000);
+          appendJobLog(id, "captcha detected, trying reauth then retry");
+          const ok = await reauthInPage(statsPage, id)
+          if (!ok) {
+            appendJobLog(id, "reauth failed; sleeping 90s then retry once");
+            await sleep(90000);
+          }
           try {
             const retryUrl = statsUrlFromShot || urlNow;
             await statsPage
