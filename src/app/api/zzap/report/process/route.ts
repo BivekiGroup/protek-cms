@@ -1485,18 +1485,32 @@ export async function POST(req: NextRequest) {
   }
 
   // Concurrency guard: allow only one active processor
-  // Try to atomically set status to 'running' if it isn't running yet
+  // Fast-path: if job is already marked as running, just report status and exit
   try {
-    if (job.status !== 'running') {
-      const upd = await (prisma as any).zzapReportJob.updateMany({ where: { id, status: 'pending' }, data: { status: 'running' } })
-      if (upd?.count > 0) {
-        job.status = 'running'
-      } else {
-        // Someone else already running; reload to confirm
-        const j2 = await (prisma as any).zzapReportJob.findUnique({ where: { id }, select: { status: true, processed: true, total: true, resultFile: true } })
-        if (j2?.status === 'running') {
-          return new Response(JSON.stringify({ ok: true, status: 'running', processed: j2.processed, total: j2.total, resultFile: j2.resultFile }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
-        }
+    if (job.status === 'running') {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          status: 'running',
+          processed: job.processed,
+          total: job.total,
+          resultFile: job.resultFile,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } }
+      )
+    }
+    // Try to atomically set status to 'running' if it isn't running yet
+    const upd = await (prisma as any).zzapReportJob.updateMany({ where: { id, status: 'pending' }, data: { status: 'running' } })
+    if (upd?.count > 0) {
+      job.status = 'running'
+    } else {
+      // Someone else already set running concurrently; reload to confirm and exit
+      const j2 = await (prisma as any).zzapReportJob.findUnique({ where: { id }, select: { status: true, processed: true, total: true, resultFile: true } })
+      if (j2?.status === 'running') {
+        return new Response(
+          JSON.stringify({ ok: true, status: 'running', processed: j2.processed, total: j2.total, resultFile: j2.resultFile }),
+          { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } }
+        )
       }
     }
   } catch {}
