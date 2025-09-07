@@ -7,9 +7,10 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Bot, Send, User, Pencil, Trash2 } from 'lucide-react';
+import { Bot, Send, User, Pencil, Trash2, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider'
 import ModelPicker from '@/components/ai/ModelPicker'
+import { FileUpload } from '@/components/ui/file-upload'
 
 export default function AIChat() {
   const { token } = useAuth()
@@ -17,11 +18,13 @@ export default function AIChat() {
   const [sessions, setSessions] = useState<{ id: string; title: string; model: string; createdAt: string; updatedAt: string }[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState<string>('');
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; attachments?: { url: string; name?: string; contentType?: string }[] }[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
+  const [attachments, setAttachments] = useState<{ url: string; name?: string; contentType?: string }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,10 +77,13 @@ export default function AIChat() {
     const content = input.trim();
     if (!content || isLoading) return;
 
-    const userMsg = { role: 'user' as const, content };
+    // attachments are per-message
+    const atts = attachments
+    const userMsg = { role: 'user' as const, content, attachments: atts };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
+    setAttachments([])
 
     // Create placeholder assistant message
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
@@ -95,7 +101,7 @@ export default function AIChat() {
       const res = await fetch(`/api/ai/sessions/${currentId}/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'text/plain', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ content, model: selectedModel || undefined }),
+        body: JSON.stringify({ content, model: selectedModel || undefined, attachments: atts }),
       });
 
       if (!res.body) {
@@ -273,6 +279,22 @@ export default function AIChat() {
                     <div className="whitespace-pre-wrap text-sm">
                       {message.content}
                     </div>
+                    {Array.isArray(message.attachments) && message.attachments.length > 0 && (
+                      <div className={`mt-2 ${message.role === 'user' ? 'text-primary-foreground/90' : 'text-foreground/90'}`}>
+                        <div className="flex flex-wrap gap-2">
+                          {message.attachments.map((a, i) => {
+                            const isImg = (a.contentType || '').startsWith('image/') || /\.(png|jpg|jpeg|gif|webp)$/i.test(a.url)
+                            if (!isImg) return null
+                            return (
+                              <div key={i} className="border border-white/10 rounded p-0.5">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={a.url} alt={a.name || 'attachment'} className="h-8 w-8 object-cover rounded" />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   {message.role === 'user' && (
@@ -306,20 +328,70 @@ export default function AIChat() {
         </CardContent>
         
         <CardFooter>
-          <form onSubmit={handleSubmit} className="flex gap-2 w-full">
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Введите ваш вопрос..."
-              disabled={isLoading}
-              className="flex-1"
-            />
-            <Button type="submit" disabled={isLoading || !input.trim()} size="icon">
-              <Send className="h-4 w-4" />
-            </Button>
-          </form>
+          <div className="w-full space-y-2">
+            <div>
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                {attachments.map((a, idx) => {
+                  const isImg = (a.contentType || '').startsWith('image/') || /\.(png|jpg|jpeg|gif|webp)$/i.test(a.url)
+                  return (
+                    <div key={idx} className="relative border rounded p-0.5">
+                      {isImg ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={a.url} alt={a.name || 'attachment'} className="h-10 w-10 object-cover rounded" />
+                      ) : (
+                        null
+                      )}
+                      <button type="button" className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-4 h-4 text-[10px] leading-3" onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}>×</button>
+                    </div>
+                  )
+                })}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    try {
+                      if (!file.type.startsWith('image/')) return
+                      if (file.size > 10 * 1024 * 1024) return
+                      const form = new FormData()
+                      form.append('file', file)
+                      form.append('prefix', 'ai')
+                      const res = await fetch('/api/upload', { method: 'POST', body: form })
+                      const j = await res.json().catch(() => null)
+                      if (res.ok && j?.data?.url) {
+                        const url: string = j.data.url
+                        const name = url.split('/').pop() || file.name
+                        setAttachments(prev => [...prev, { url, name, contentType: file.type }])
+                      }
+                    } finally {
+                      if (fileInputRef.current) fileInputRef.current.value = ''
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                  <ImageIcon className="h-4 w-4 mr-1" /> Фото
+                </Button>
+              </div>
+              {/* убрали большой дропзон — компактная кнопка добавления фото */}
+            </div>
+            <form onSubmit={handleSubmit} className="flex gap-2 w-full">
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Введите ваш вопрос..."
+                disabled={isLoading}
+                className="flex-1"
+              />
+              <Button type="submit" disabled={isLoading || !input.trim()} size="icon">
+                <Send className="h-4 w-4" />
+              </Button>
+            </form>
+          </div>
         </CardFooter>
-          </Card>
+        </Card>
         </div>
       </div>
     </div>

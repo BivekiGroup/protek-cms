@@ -32,7 +32,13 @@ export async function POST(request: NextRequest) {
       'application/pdf',
       'text/plain',
       'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
+      'application/vnd.ms-excel', // xls
+      'text/csv',
+      'application/json',
+      'application/zip',
+      'application/octet-stream'
     ]
 
     if (!allowedTypes.includes(file.type)) {

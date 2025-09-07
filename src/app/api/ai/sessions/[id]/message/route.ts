@@ -12,7 +12,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const token = extractTokenFromHeaders(req.headers)
   const user = getUserFromToken(token)
   if (!user?.userId) return new Response('unauthorized', { status: 401 })
-  const { content, model } = await req.json().catch(() => ({}))
+  const { content, model, attachments } = await req.json().catch(() => ({}))
   if (!content || typeof content !== 'string') {
     return new Response(JSON.stringify({ error: 'content is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
   }
@@ -44,17 +44,42 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
   } catch {}
 
-  const userMsg = { role: 'user', content }
+  // Build multimodal message if attachments include images
+  const atts: { url: string; contentType?: string; name?: string }[] = Array.isArray(attachments) ? attachments.filter((a: any) => a && typeof a.url === 'string') : []
+  // Полза поддерживает только изображения: игнорируем остальные типы
+  const imageAtts = atts.filter(a => (a.contentType || '').startsWith('image/'))
+  let userMsg: any
+  if (imageAtts.length > 0) {
+    const parts: any[] = []
+    parts.push({ type: 'text', text: content })
+    for (const img of imageAtts) parts.push({ type: 'image_url', image_url: { url: img.url } })
+    userMsg = { role: 'user', content: parts }
+  } else {
+    userMsg = { role: 'user', content }
+  }
   const messages = [...history, userMsg]
 
   // Persist user message immediately
   try {
     const anyPrisma: any = prisma as any
     if (anyPrisma.chatMessage?.create) {
-      await anyPrisma.chatMessage.create({ data: { sessionId: id, role: 'user', content } })
+      // Persist plain text + список изображений (без прочих файлов)
+      const persisted = (() => {
+        if (imageAtts.length === 0) return content
+        const imgs = imageAtts.map(a => a.url)
+        const tail = imgs.length ? `\n\nИзображения:\n${imgs.join('\n')}` : ''
+        return `${content}${tail}`
+      })()
+      await anyPrisma.chatMessage.create({ data: { sessionId: id, role: 'user', content: persisted } })
     } else {
       const uid = randomUUID()
-      await prisma.$executeRawUnsafe(`INSERT INTO "chat_messages" (id, "sessionId", role, content) VALUES ('${uid}', '${id.replace(/'/g, "''")}', 'user', '${content.replace(/'/g, "''")}')`)
+      const persisted = (() => {
+        if (imageAtts.length === 0) return content
+        const imgs = imageAtts.map(a => a.url)
+        const tail = imgs.length ? `\n\nИзображения:\n${imgs.join('\n')}` : ''
+        return `${content}${tail}`
+      })()
+      await prisma.$executeRawUnsafe(`INSERT INTO "chat_messages" (id, "sessionId", role, content) VALUES ('${uid}', '${id.replace(/'/g, "''")}', 'user', '${persisted.replace(/'/g, "''")}')`)
     }
   } catch {}
 

@@ -14,6 +14,7 @@ interface FileUploadProps {
   maxSize?: number // в байтах
   className?: string
   disabled?: boolean
+  prefix?: string
 }
 
 export const FileUpload = ({ 
@@ -21,7 +22,8 @@ export const FileUpload = ({
   accept = "image/*", 
   maxSize = 10 * 1024 * 1024, // 10MB по умолчанию
   className,
-  disabled = false
+  disabled = false,
+  prefix = 'avatars'
 }: FileUploadProps) => {
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -60,7 +62,7 @@ export const FileUpload = ({
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('prefix', 'avatars') // Для аватаров
+      formData.append('prefix', prefix)
 
       const response = await fetch('/api/upload', {
         method: 'POST',
@@ -85,7 +87,7 @@ export const FileUpload = ({
     } finally {
       setIsUploading(false)
     }
-  }, [accept, maxSize, onUpload])
+  }, [accept, maxSize, onUpload, prefix])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
