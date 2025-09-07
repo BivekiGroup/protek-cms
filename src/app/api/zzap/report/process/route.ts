@@ -401,16 +401,104 @@ async function openSearch(page: Page, article: string, brand?: string) {
     `${ZZAP_BASE}/search?txt=${encodeURIComponent(article)}`,
     `${ZZAP_BASE}/catalog/?q=${encodeURIComponent(article)}`,
   ];
+  let navigated = false
   for (const url of urls) {
     try {
-      await page.goto(url, {
-        waitUntil: "domcontentloaded",
-        timeout: ZZAP_TIMEOUT_MS,
-      });
-      return;
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: ZZAP_TIMEOUT_MS });
+      navigated = true
+      break
     } catch {}
   }
-  await page.goto(ZZAP_BASE, { waitUntil: "domcontentloaded" });
+  if (!navigated) {
+    await page.goto(ZZAP_BASE, { waitUntil: "domcontentloaded", timeout: ZZAP_TIMEOUT_MS }).catch(() => {})
+  }
+
+  // Try to explicitly trigger search if results grid not present yet
+  try {
+    const ensured = await page.evaluate(async (art: string, br?: string) => {
+      const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+      const fillAndSubmit = async () => {
+        const candidates: (HTMLInputElement | HTMLTextAreaElement)[] = [] as any
+        const bySel = (sel: string) => Array.from(document.querySelectorAll(sel)) as any[]
+        const pushAll = (arr: any[]) => { for (const el of arr) if (el && (el as any).focus) candidates.push(el as any) }
+        pushAll(bySel('input[id*="SearchTextBox" i]'))
+        pushAll(bySel('input[name*="SearchTextBox" i]'))
+        pushAll(bySel('input[id*="Search" i][type="text" i]'))
+        pushAll(bySel('input[type="search" i]'))
+        pushAll(bySel('input[placeholder*="поиск" i], input[placeholder*="article" i], input[placeholder*="номер" i]'))
+        let used: HTMLInputElement | HTMLTextAreaElement | null = null
+        for (const el of candidates) {
+          try {
+            el.focus();
+            (el as any).value = art
+            el.dispatchEvent(new Event('input', { bubbles: true }))
+            el.dispatchEvent(new Event('change', { bubbles: true }))
+            used = el
+            break
+          } catch {}
+        }
+        // Try DevExpress control API
+        try {
+          const coll = (window as any).ASPx?.GetControlCollection?.()
+          const ids = [
+            'ctl00_TopPanel_HeaderPlace_GridLayoutSearchControl_SearchTextBox',
+            'ctl00_BodyPlace_SearchTextBox',
+            'ctl00_ContentPlaceHolder1_SearchTextBox'
+          ]
+          for (const id of ids) {
+            const ctrl = coll?.Get?.(id)
+            if (ctrl?.SetValue) { try { ctrl.SetValue(art) } catch {} }
+          }
+        } catch {}
+        // Press Enter to submit
+        try { document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) } catch {}
+        try { (document.activeElement as any)?.blur?.() } catch {}
+        // Click any visible search button
+        const buttons = [
+          '#ctl00_TopPanel_HeaderPlace_GridLayoutSearchControl_SearchButton',
+          'input[id*="SearchButton" i]',
+          'button[id*="Search" i]',
+          'input[type="submit" i][value*="Поиск" i]',
+          'button[type="submit" i]'
+        ]
+        for (const sel of buttons) {
+          const b = document.querySelector(sel) as HTMLElement | null
+          if (b) { try { b.click() } catch {} }
+        }
+        // Try DevExpress postback
+        try {
+          const w: any = window as any
+          if (typeof w.__doPostBack === 'function') {
+            const targets = [
+              'ctl00$TopPanel$HeaderPlace$GridLayoutSearchControl$SearchButton',
+              'ctl00$BodyPlace$SearchButton'
+            ]
+            for (const t of targets) { try { w.__doPostBack(t, '') } catch {} }
+          }
+        } catch {}
+        // If suggest list is present and brand provided, try to click a matching brand row
+        if (br) {
+          try {
+            await sleep(300)
+            const table = document.querySelector('table[id*="SearchSuggestGridView_DXMainTable" i]') as HTMLTableElement | null
+            if (table) {
+              const rows = Array.from(table.querySelectorAll('tr')).filter(r => r.id && /DXDataRow/i.test(r.id)) as HTMLTableRowElement[]
+              const target = rows.find(tr => ((tr.querySelector('td:nth-child(1)')?.textContent || '').toUpperCase()).includes(br.toUpperCase()))
+              if (target) { (target as any).click?.(); (target as any).dispatchEvent?.(new MouseEvent('dblclick', { bubbles: true })) }
+            }
+          } catch {}
+        }
+      }
+      const hasRows = () => !!document.querySelector('tr[id*="SearchGridView_DXDataRow"], table[id*="SearchGridView_DXMainTable"]')
+      if (!hasRows()) { await fillAndSubmit(); await sleep(600) }
+      if (!hasRows()) { await fillAndSubmit(); await sleep(800) }
+      return hasRows()
+    }, article, brand)
+    if (!ensured) {
+      // as a last resort, small wait
+      await sleep(600)
+    }
+  } catch {}
 }
 
 // removed heavy DOM stabilization to avoid long stalls
