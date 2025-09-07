@@ -1485,9 +1485,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Concurrency guard: allow only one active processor
-  // Fast-path: if job is already marked as running, just report status and exit
+  // Fast-path: if job is already marked as running and it's NOT stale, just report status and exit
   try {
-    if (job.status === 'running') {
+    const staleMs = Number(process.env.ZZAP_JOB_STALE_MS || 180000) // 3 minutes by default
+    const updatedAt = new Date(job.updatedAt || job.createdAt || Date.now()) as any
+    const ageMs = Math.max(0, Date.now() - new Date(updatedAt).getTime())
+    const isStale = job.status === 'running' && ageMs > staleMs
+    if (job.status === 'running' && !isStale) {
       return new Response(
         JSON.stringify({
           ok: true,
@@ -1500,18 +1504,35 @@ export async function POST(req: NextRequest) {
       )
     }
     // Try to atomically set status to 'running' if it isn't running yet
-    const upd = await (prisma as any).zzapReportJob.updateMany({ where: { id, status: 'pending' }, data: { status: 'running' } })
-    if (upd?.count > 0) {
-      job.status = 'running'
-    } else {
-      // Someone else already set running concurrently; reload to confirm and exit
-      const j2 = await (prisma as any).zzapReportJob.findUnique({ where: { id }, select: { status: true, processed: true, total: true, resultFile: true } })
-      if (j2?.status === 'running') {
-        return new Response(
-          JSON.stringify({ ok: true, status: 'running', processed: j2.processed, total: j2.total, resultFile: j2.resultFile }),
-          { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } }
-        )
+    if (job.status !== 'running') {
+      const upd = await (prisma as any).zzapReportJob.updateMany({ where: { id, status: 'pending' }, data: { status: 'running' } })
+      if (upd?.count > 0) {
+        job.status = 'running'
+      } else {
+        const j2 = await (prisma as any).zzapReportJob.findUnique({ where: { id }, select: { status: true, processed: true, total: true, resultFile: true } })
+        if (j2?.status === 'running') {
+          return new Response(
+            JSON.stringify({ ok: true, status: 'running', processed: j2.processed, total: j2.total, resultFile: j2.resultFile }),
+            { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } }
+          )
+        }
       }
+    } else if (isStale) {
+      // Attempt to take over a stale 'running' job by bumping updatedAt via guarded updateMany
+      try {
+        const threshold = new Date(Date.now() - staleMs)
+        const upd2 = await (prisma as any).zzapReportJob.updateMany({ where: { id, status: 'running', updatedAt: { lt: threshold } }, data: { status: 'running' } })
+        if (upd2?.count > 0) {
+          appendJobLog(id, `stale-runner detected (age=${ageMs}ms); taking over`)
+        } else {
+          // Someone else refreshed it; report running
+          const j2 = await (prisma as any).zzapReportJob.findUnique({ where: { id }, select: { status: true, processed: true, total: true, resultFile: true } })
+          return new Response(
+            JSON.stringify({ ok: true, status: 'running', processed: j2?.processed ?? job.processed, total: j2?.total ?? job.total, resultFile: j2?.resultFile ?? job.resultFile }),
+            { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } }
+          )
+        }
+      } catch {}
     }
   } catch {}
 
