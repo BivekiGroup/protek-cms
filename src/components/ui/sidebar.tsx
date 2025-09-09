@@ -22,7 +22,8 @@ import {
   Bot,
   Store,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  MessageSquare
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -64,6 +65,7 @@ const navigationGroups: NavGroup[] = [
     title: 'Инструменты',
     items: [
       { title: 'Чат с ИИ', href: '/dashboard/ai', icon: Bot },
+      { title: 'Мессенджер', href: '/dashboard/messenger', icon: MessageSquare },
       { title: 'Рассылки', href: '/dashboard/newsletter', icon: Mail },
       { title: 'Тест стилей', href: '/dashboard/test-styles', icon: Palette },
       { title: 'Ozon', href: '/dashboard/ozon', icon: Store },

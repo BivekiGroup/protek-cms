@@ -24,6 +24,10 @@ model User {
   managedClients Client[]
   productHistory ProductHistory[]
   ChatSession    ChatSession[]
+  messengerMemberships  MessengerParticipant[] @relation("MessengerParticipantUser")
+  messengerSentMessages MessengerMessage[]     @relation("MessengerMessageSender")
+  messengerReadReceipts MessengerReadReceipt[] @relation("MessengerReadReceiptUser")
+  messengerReactions    MessengerReaction[]    @relation("MessengerReactionUser")
 
   @@map("users")
 }
@@ -1012,4 +1016,90 @@ model IntegrationProviderSetting {
   updatedAt         DateTime @updatedAt
 
   @@map("integration_provider_settings")
+}
+
+// Messenger models
+model MessengerConversation {
+  id        String   @id @default(cuid())
+  type      String   @default("DIRECT") // DIRECT | GROUP
+  title     String?
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members  MessengerParticipant[]
+  messages MessengerMessage[]
+
+  @@map("messenger_conversations")
+}
+
+model MessengerParticipant {
+  id             String                 @id @default(cuid())
+  conversationId String
+  userId         String
+  lastReadAt     DateTime?
+
+  conversation MessengerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User                  @relation("MessengerParticipantUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([userId])
+  @@unique([conversationId, userId])
+  @@map("messenger_participants")
+}
+
+model MessengerMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String
+  createdAt      DateTime @default(now())
+
+  conversation MessengerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User                  @relation("MessengerMessageSender", fields: [senderId], references: [id])
+  attachments  MessengerAttachment[]
+  reads        MessengerReadReceipt[]
+  reactions    MessengerReaction[]
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@map("messenger_messages")
+}
+
+model MessengerAttachment {
+  id          String  @id @default(cuid())
+  messageId   String
+  url         String
+  fileName    String
+  contentType String?
+  size        Int
+
+  message MessengerMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("messenger_attachments")
+}
+
+model MessengerReadReceipt {
+  messageId String
+  userId    String
+  readAt    DateTime @default(now())
+
+  message MessengerMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User             @relation("MessengerReadReceiptUser", fields: [userId], references: [id])
+
+  @@id([messageId, userId])
+  @@map("messenger_read_receipts")
+}
+
+model MessengerReaction {
+  messageId String
+  userId    String
+  emoji     String
+
+  message MessengerMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User             @relation("MessengerReactionUser", fields: [userId], references: [id])
+
+  @@id([messageId, userId, emoji])
+  @@map("messenger_reactions")
 }

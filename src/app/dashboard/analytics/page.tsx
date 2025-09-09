@@ -41,6 +41,31 @@ export default function AnalyticsPage() {
   const maxSearch = useMemo(() => Math.max(1, ...(data?.searchByDay || []).map((p: DayPoint) => Number(p.c)||0)), [data])
   const maxViews = useMemo(() => Math.max(1, ...(data?.viewsByDay || []).map((p: DayPoint) => Number(p.c)||0)), [data])
 
+  const AreaChart = ({ points, color }: { points: DayPoint[]; color: string }) => {
+    const width = 640
+    const height = 160
+    const pad = 16
+    const values = points.map(p => Number(p.c)||0)
+    const max = Math.max(1, ...values)
+    const stepX = points.length > 1 ? (width - pad*2) / (points.length - 1) : 0
+    const toY = (v: number) => height - pad - (v / max) * (height - pad*2)
+    const path = points.map((p, i) => `${i===0 ? 'M' : 'L'} ${pad + i*stepX},${toY(Number(p.c)||0)}`).join(' ')
+    const area = `${path} L ${pad + (points.length-1)*stepX},${height - pad} L ${pad},${height - pad} Z`
+    return (
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-40">
+        <defs>
+          <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.35" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.05" />
+          </linearGradient>
+        </defs>
+        <rect x={pad} y={pad} width={width - pad*2} height={height - pad*2} fill="#fafafa" rx={8} />
+        <path d={area} fill="url(#grad)" />
+        <path d={path} fill="none" stroke={color} strokeWidth={2} />
+      </svg>
+    )
+  }
+
   return (
     <main className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -124,31 +149,31 @@ export default function AnalyticsPage() {
           <Card>
             <CardHeader><CardTitle>Поиск по дням</CardTitle></CardHeader>
             <CardContent>
-              <ul className="text-sm space-y-2">
-                {data.searchByDay?.map((p: DayPoint, i: number) => (
-                  <li key={i} className="flex items-center gap-3">
-                    <span className="w-28 shrink-0 text-gray-600">{new Date(p.d).toLocaleDateString('ru-RU')}</span>
-                    <div className="flex-1 h-2 bg-gray-100 rounded">
-                      <div className="h-2 bg-blue-500 rounded" style={{ width: `${Math.min(100, Math.round((Number(p.c)||0) / maxSearch * 100))}%` }} />
-                    </div>
-                    <span className="w-10 text-right">{p.c}</span>
-                  </li>
-                ))}
-              </ul>
+              <AreaChart points={data.searchByDay || []} color="#2563eb" />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader><CardTitle>Просмотры карточек по дням</CardTitle></CardHeader>
             <CardContent>
+              <AreaChart points={data.viewsByDay || []} color="#059669" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Топ запросов</CardTitle></CardHeader>
+            <CardContent>
               <ul className="text-sm space-y-2">
-                {data.viewsByDay?.map((p: DayPoint, i: number) => (
+                {data.topQueries?.slice(0,20).map((t: TopItem, i: number) => (
                   <li key={i} className="flex items-center gap-3">
-                    <span className="w-28 shrink-0 text-gray-600">{new Date(p.d).toLocaleDateString('ru-RU')}</span>
-                    <div className="flex-1 h-2 bg-gray-100 rounded">
-                      <div className="h-2 bg-emerald-500 rounded" style={{ width: `${Math.min(100, Math.round((Number(p.c)||0) / maxViews * 100))}%` }} />
+                    <span className="w-8 text-xs text-gray-500">{i+1}</span>
+                    <div className="flex-1">
+                      <div className="truncate">{t.q}</div>
+                      <div className="h-2 bg-gray-100 rounded">
+                        <div className="h-2 rounded bg-gradient-to-r from-blue-500 to-sky-400" style={{ width: `${Math.min(100, Math.round((Number(t.c)||0) / Math.max(1, Number(data.topQueries?.[0]?.c||1)) * 100))}%` }} />
+                      </div>
                     </div>
-                    <span className="w-10 text-right">{p.c}</span>
+                    <span className="w-12 text-right font-medium">{t.c}</span>
                   </li>
                 ))}
               </ul>
@@ -156,24 +181,22 @@ export default function AnalyticsPage() {
           </Card>
 
           <Card>
-            <CardHeader><CardTitle>Топ запросов</CardTitle></CardHeader>
-            <CardContent>
-              <ol className="text-sm space-y-1">
-                {data.topQueries?.map((t: TopItem, i: number) => (
-                  <li key={i} className="flex justify-between border-b py-1"><span className="truncate pr-3">{t.q}</span><span className="font-medium">{t.c}</span></li>
-                ))}
-              </ol>
-            </CardContent>
-          </Card>
-
-          <Card>
             <CardHeader><CardTitle>Топ брендов (поиск)</CardTitle></CardHeader>
             <CardContent>
-              <ol className="text-sm space-y-1">
-                {data.topBrands?.map((t: TopItem, i: number) => (
-                  <li key={i} className="flex justify-between border-b py-1"><span className="truncate pr-3">{t.b}</span><span className="font-medium">{t.c}</span></li>
+              <ul className="text-sm space-y-2">
+                {data.topBrands?.slice(0,20).map((t: TopItem, i: number) => (
+                  <li key={i} className="flex items-center gap-3">
+                    <span className="w-8 text-xs text-gray-500">{i+1}</span>
+                    <div className="flex-1">
+                      <div className="truncate">{t.b}</div>
+                      <div className="h-2 bg-gray-100 rounded">
+                        <div className="h-2 rounded bg-gradient-to-r from-emerald-500 to-lime-400" style={{ width: `${Math.min(100, Math.round((Number(t.c)||0) / Math.max(1, Number(data.topBrands?.[0]?.c||1)) * 100))}%` }} />
+                      </div>
+                    </div>
+                    <span className="w-12 text-right font-medium">{t.c}</span>
+                  </li>
                 ))}
-              </ol>
+              </ul>
             </CardContent>
           </Card>
 

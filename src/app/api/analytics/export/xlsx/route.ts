@@ -48,21 +48,21 @@ export async function GET(req: NextRequest) {
     // Overview (KPI + период)
     const generatedAt = new Date().toISOString()
     const overviewAoA = [
-      ['Analytics Export'],
-      ['Generated At', generatedAt],
-      ['Period (days)', days],
-      ['Since', since.toISOString()],
+      ['Отчёт аналитики'],
+      ['Сгенерировано', generatedAt],
+      ['Период (дней)', days],
+      ['С', since.toISOString()],
       [],
-      ['Metric', '1d', '7d', '30d'],
-      ['Searches', n(kSearch1), n(kSearch7), n(kSearch30)],
-      ['Product Views', n(kViews1), n(kViews7), n(kViews30)],
+      ['Метрика', '1 день', '7 дней', '30 дней'],
+      ['Поиски', n(kSearch1), n(kSearch7), n(kSearch30)],
+      ['Просмотры карточек', n(kViews1), n(kViews7), n(kViews30)],
     ]
     const shOverview = XLSX.utils.aoa_to_sheet(overviewAoA)
     shOverview['!cols'] = [{ wch: 22 }, { wch: 28 }, { wch: 14 }, { wch: 14 }]
     XLSX.utils.book_append_sheet(wb, shOverview, 'Overview')
 
     // Daily
-    const dailyAoA: (string | number)[][] = [['Date', 'Searches', 'Views']]
+    const dailyAoA: (string | number)[][] = [['Дата', 'Поиски', 'Просмотры']]
     const byDate: Record<string, { s: number; v: number }> = {}
     for (const r of searchByDay) { const d = new Date(r.d).toISOString().slice(0,10); byDate[d] = { ...(byDate[d]||{s:0,v:0}), s: Number(r.c)||0 } }
     for (const r of viewsByDay) { const d = new Date(r.d).toISOString().slice(0,10); byDate[d] = { ...(byDate[d]||{s:0,v:0}), v: Number(r.c)||0 } }
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, shDaily, 'Daily')
 
     // Top queries
-    const tqAoA = [['Query', 'Count']]
+    const tqAoA = [['Запрос', 'Количество']]
     topQueries.forEach((t: any) => tqAoA.push([t.q, Number(t.c)||0]))
     const shTopQ = XLSX.utils.aoa_to_sheet(tqAoA)
     shTopQ['!cols'] = [{ wch: 40 }, { wch: 10 }]
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, shTopQ, 'TopQueries')
 
     // Top brands (search)
-    const tbAoA = [['Brand', 'Count']]
+    const tbAoA = [['Бренд', 'Количество']]
     topBrands.forEach((t: any) => tbAoA.push([t.b, Number(t.c)||0]))
     const shTopB = XLSX.utils.aoa_to_sheet(tbAoA)
     shTopB['!cols'] = [{ wch: 18 }, { wch: 10 }]
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, shTopB, 'TopBrands')
 
     // Top viewed articles
-    const taAoA = [['Brand', 'Article', 'Views']]
+    const taAoA = [['Бренд', 'Артикул', 'Просмотры']]
     topArticles.forEach((t: any) => taAoA.push([t.b, t.a, Number(t.c)||0]))
     const shTopA = XLSX.utils.aoa_to_sheet(taAoA)
     shTopA['!cols'] = [{ wch: 20 }, { wch: 24 }, { wch: 10 }]
@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, shTopA, 'TopArticles')
 
     // Full search events for period
-    const seAoA = [['DateTime', 'Query', 'Brand', 'Article', 'Results', 'Mode', 'Page', 'ClientId', 'SessionId']]
+    const seAoA = [['Дата/время', 'Запрос', 'Бренд', 'Артикул', 'Результатов', 'Режим', 'Страница', 'ClientId', 'SessionId']]
     fullSearches.forEach((s: any) => {
       const mode = (s.filters && (s.filters as any).mode) || ''
       const page = (s.filters && (s.filters as any).page) || ''
@@ -114,7 +114,7 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, shSearches, 'Searches')
 
     // Full product view events for period
-    const veAoA = [['DateTime', 'Brand', 'Article', 'ProductId', 'OfferKey', 'Referrer', 'ClientId', 'SessionId']]
+    const veAoA = [['Дата/время', 'Бренд', 'Артикул', 'ProductId', 'OfferKey', 'Referrer', 'ClientId', 'SessionId']]
     fullViews.forEach((v: any) => veAoA.push([
       new Date(v.createdAt).toISOString(), v.brand||'', v.article||'', v.productId||'', v.offerKey||'', v.referrer||'', v.clientId||'', v.sessionId||''
     ]))
@@ -124,6 +124,33 @@ export async function GET(req: NextRequest) {
     ]
     shViews['!autofilter'] = { ref: shViews['!ref'] as string }
     XLSX.utils.book_append_sheet(wb, shViews, 'Views')
+
+    // Recent (dashboard-like) sections
+    const rsAoA: (string | number)[][] = [['Когда', 'Запрос', 'Результатов']]
+    fullSearches.forEach((s: any) => {
+      rsAoA.push([
+        new Date(s.createdAt).toLocaleString('ru-RU'),
+        s.query || '',
+        Number(s.resultsCount) || 0,
+      ])
+    })
+    const shRecentSearches = XLSX.utils.aoa_to_sheet(rsAoA)
+    shRecentSearches['!cols'] = [{ wch: 22 }, { wch: 36 }, { wch: 12 }]
+    shRecentSearches['!autofilter'] = { ref: shRecentSearches['!ref'] as string }
+    XLSX.utils.book_append_sheet(wb, shRecentSearches, 'Последние поиски')
+
+    const rvAoA: (string | number)[][] = [['Когда', 'Бренд', 'Артикул']]
+    fullViews.forEach((v: any) => {
+      rvAoA.push([
+        new Date(v.createdAt).toLocaleString('ru-RU'),
+        v.brand || '-',
+        v.article || '-',
+      ])
+    })
+    const shRecentViews = XLSX.utils.aoa_to_sheet(rvAoA)
+    shRecentViews['!cols'] = [{ wch: 22 }, { wch: 20 }, { wch: 24 }]
+    shRecentViews['!autofilter'] = { ref: shRecentViews['!ref'] as string }
+    XLSX.utils.book_append_sheet(wb, shRecentViews, 'Последние открытия')
 
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
     const fname = `analytics-${new Date().toISOString().slice(0,10)}.xlsx`

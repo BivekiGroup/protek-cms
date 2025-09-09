@@ -52,6 +52,29 @@ export const extractTokenFromHeaders = (headers: Headers): string | null => {
   return parts[1]
 }
 
+// Fallback: try to read token from cookies (auth-token)
+export const extractTokenFromCookies = (headers: Headers): string | null => {
+  try {
+    const cookie = headers.get('cookie') || headers.get('Cookie') || ''
+    if (!cookie) return null
+    const parts = cookie.split(';')
+    for (const p of parts) {
+      const idx = p.indexOf('=')
+      if (idx === -1) continue
+      const key = p.slice(0, idx).trim()
+      const val = p.slice(idx + 1).trim()
+      if (key === 'auth-token' && val) return decodeURIComponent(val)
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+export const extractAnyToken = (headers: Headers): string | null => {
+  return extractTokenFromHeaders(headers) || extractTokenFromCookies(headers)
+}
+
 // Получение пользователя из токена
 export const getUserFromToken = (token: string | null): JWTPayload | null => {
   if (!token) return null
