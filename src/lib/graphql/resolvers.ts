@@ -4087,6 +4087,8 @@ export const resolvers = {
       }
     },
 
+    
+
     // SEO configs
     seoPageConfigs: async (_: unknown, { search, skip = 0, take = 50 }: { search?: string; skip?: number; take?: number }, context: Context) => {
       if (!context.userId) throw new Error('Не авторизовано')
@@ -4478,12 +4480,84 @@ export const resolvers = {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       } as any
+    },
+
+    // Support tickets
+    mySupportTickets: async (_: unknown, { limit = 50, offset = 0 }: { limit?: number; offset?: number }, context: Context) => {
+      const ctx = context || getContext()
+      if (!ctx.clientId) throw new Error('Требуется авторизация клиента')
+      const tickets = await (prisma as any).supportTicket.findMany({
+        where: { clientId: ctx.clientId },
+        orderBy: { lastMessageAt: 'desc' },
+        skip: offset,
+        take: Math.min(limit, 100),
+      })
+      return tickets
+    },
+
+    supportTickets: async (_: unknown, { filter, limit = 50, offset = 0 }: { filter?: any; limit?: number; offset?: number }, context: Context) => {
+      const ctx = context || getContext()
+      if (!ctx.userId) throw new Error('Требуется авторизация администратора')
+      const where: any = {}
+      if (filter?.status) where.status = filter.status as any
+      if (filter?.clientId) where.clientId = filter.clientId
+      if (filter?.assignedToUserId) where.assignedToUserId = filter.assignedToUserId
+      if (filter?.search) where.subject = { contains: filter.search, mode: 'insensitive' }
+      const tickets = await (prisma as any).supportTicket.findMany({
+        where,
+        orderBy: { lastMessageAt: 'desc' },
+        skip: offset,
+        take: Math.min(limit, 100)
+      })
+      return tickets
+    },
+
+    supportTicket: async (_: unknown, { id }: { id: string }, context: Context) => {
+      const ctx = context || getContext()
+      const ticket = await (prisma as any).supportTicket.findUnique({ where: { id } })
+      if (!ticket) return null
+      if (!ctx.userId && ctx.clientId !== ticket.clientId) {
+        throw new Error('Доступ запрещён')
+      }
+      return ticket
     }
   },
 
   ClientProfile: {
     _count: (parent: { _count?: { clients: number } }) => {
       return parent._count || { clients: 0 }
+    }
+  },
+
+  // Support ticket type resolvers
+  SupportTicket: {
+    client: async (parent: { clientId: string }) => {
+      return await prisma.client.findUnique({ where: { id: parent.clientId } })
+    },
+    assignedTo: async (parent: { assignedToUserId?: string | null }) => {
+      if (!parent.assignedToUserId) return null
+      return await prisma.user.findUnique({ where: { id: parent.assignedToUserId } })
+    },
+    messages: async (parent: { id: string }) => {
+      return await (prisma as any).supportTicketMessage.findMany({
+        where: { ticketId: parent.id },
+        orderBy: { createdAt: 'asc' },
+        include: { attachments: true }
+      })
+    }
+  },
+
+  SupportTicketMessage: {
+    attachments: async (parent: { id: string }) => {
+      return await (prisma as any).supportTicketAttachment.findMany({ where: { messageId: parent.id }, orderBy: { createdAt: 'asc' } })
+    },
+    authorUser: async (parent: { authorUserId?: string | null }) => {
+      if (!parent.authorUserId) return null
+      return await prisma.user.findUnique({ where: { id: parent.authorUserId } })
+    },
+    authorClient: async (parent: { authorClientId?: string | null }) => {
+      if (!parent.authorClientId) return null
+      return await prisma.client.findUnique({ where: { id: parent.authorClientId } })
     }
   },
 
@@ -4513,6 +4587,84 @@ export const resolvers = {
   },
 
   Mutation: {
+    // Support tickets
+    createSupportTicket: async (_: unknown, { input }: { input: { subject: string; message: string; attachments?: Array<{ url: string; fileName?: string; contentType?: string; size?: number }>; priority?: string } }, context: Context) => {
+      const ctx = context || getContext()
+      if (!ctx.clientId) throw new Error('Требуется авторизация клиента')
+      const ticket = await (prisma as any).supportTicket.create({
+        data: {
+          clientId: ctx.clientId,
+          subject: input.subject.trim(),
+          status: 'OPEN',
+          priority: (input.priority || 'NORMAL') as any,
+          lastMessageAt: new Date(),
+        }
+      })
+      const msg = await (prisma as any).supportTicketMessage.create({
+        data: {
+          ticketId: ticket.id,
+          authorType: 'CLIENT',
+          authorClientId: ctx.clientId,
+          content: input.message.trim(),
+        }
+      })
+      if (Array.isArray(input.attachments) && input.attachments.length > 0) {
+        await (prisma as any).supportTicketAttachment.createMany({
+          data: input.attachments.map(a => ({
+            messageId: msg.id,
+            url: a.url,
+            fileName: a.fileName || null,
+            contentType: a.contentType || null,
+            size: a.size || null
+          }))
+        })
+      }
+      return ticket
+    },
+
+    addSupportTicketMessage: async (_: unknown, { input }: { input: { ticketId: string; message: string; attachments?: Array<{ url: string; fileName?: string; contentType?: string; size?: number }> } }, context: Context) => {
+      const ctx = context || getContext()
+      const ticket = await (prisma as any).supportTicket.findUnique({ where: { id: input.ticketId } })
+      if (!ticket) throw new Error('Тикет не найден')
+      if (!ctx.userId && ctx.clientId !== ticket.clientId) throw new Error('Доступ запрещён')
+      const authorType = ctx.userId ? 'ADMIN' : 'CLIENT'
+      const msg = await (prisma as any).supportTicketMessage.create({
+        data: {
+          ticketId: ticket.id,
+          authorType,
+          authorUserId: ctx.userId || null,
+          authorClientId: ctx.clientId || null,
+          content: input.message.trim(),
+        }
+      })
+      if (Array.isArray(input.attachments) && input.attachments.length > 0) {
+        await (prisma as any).supportTicketAttachment.createMany({
+          data: input.attachments.map(a => ({
+            messageId: msg.id,
+            url: a.url,
+            fileName: a.fileName || null,
+            contentType: a.contentType || null,
+            size: a.size || null
+          }))
+        })
+      }
+      await (prisma as any).supportTicket.update({ where: { id: ticket.id }, data: { lastMessageAt: new Date(), status: authorType === 'ADMIN' ? ('IN_PROGRESS' as any) : undefined } })
+      return msg
+    },
+
+    updateSupportTicketStatus: async (_: unknown, { id, status }: { id: string; status: string }, context: Context) => {
+      const ctx = context || getContext()
+      if (!ctx.userId) throw new Error('Требуется авторизация администратора')
+      const data: any = { status: status as any }
+      if (status === 'RESOLVED' || status === 'CLOSED') data.closedAt = new Date()
+      return await (prisma as any).supportTicket.update({ where: { id }, data })
+    },
+
+    assignSupportTicket: async (_: unknown, { id, userId }: { id: string; userId?: string | null }, context: Context) => {
+      const ctx = context || getContext()
+      if (!ctx.userId) throw new Error('Требуется авторизация администратора')
+      return await (prisma as any).supportTicket.update({ where: { id }, data: { assignedToUserId: userId || null } })
+    },
     createUser: async (_: unknown, { input }: { input: CreateUserInput }, context: Context) => {
       try {
         const { firstName, lastName, email, password, avatar, role } = input

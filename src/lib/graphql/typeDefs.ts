@@ -937,6 +937,68 @@ export const typeDefs = gql`
     createdAt: DateTime!
   }
 
+  # Support tickets
+  type SupportTicketAttachment {
+    id: ID!
+    url: String!
+    fileName: String
+    contentType: String
+    size: Int
+    createdAt: DateTime!
+  }
+
+  type SupportTicketMessage {
+    id: ID!
+    ticketId: ID!
+    authorType: String!
+    authorUser: User
+    authorClient: Client
+    content: String!
+    attachments: [SupportTicketAttachment!]!
+    createdAt: DateTime!
+  }
+
+  type SupportTicket {
+    id: ID!
+    subject: String!
+    status: String!
+    priority: String!
+    client: Client!
+    assignedTo: User
+    messages: [SupportTicketMessage!]!
+    lastMessageAt: DateTime!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    closedAt: DateTime
+  }
+
+  input SupportAttachmentInput {
+    url: String!
+    fileName: String
+    contentType: String
+    size: Int
+  }
+
+  input CreateSupportTicketInput {
+    subject: String!
+    message: String!
+    attachments: [SupportAttachmentInput!]
+    priority: String
+  }
+
+  input AddSupportTicketMessageInput {
+    ticketId: ID!
+    message: String!
+    attachments: [SupportAttachmentInput!]
+  }
+
+  input SupportTicketsFilter {
+    status: String
+    clientId: ID
+    assignedToUserId: ID
+    search: String
+  }
+
   type Query {
     users: [User!]!
     user(id: ID!): User
@@ -1126,6 +1188,11 @@ export const typeDefs = gql`
     
     # Интеграции/Поставщики
     integrationSettings: IntegrationSettings!
+    
+    # Support tickets
+    mySupportTickets(limit: Int, offset: Int): [SupportTicket!]!
+    supportTickets(filter: SupportTicketsFilter, limit: Int, offset: Int): [SupportTicket!]!
+    supportTicket(id: ID!): SupportTicket
   }
 
   type AuthPayload {
@@ -1358,6 +1425,12 @@ export const typeDefs = gql`
 
     # Интеграции/Поставщики
     updateIntegrationSettings(input: IntegrationSettingsInput!): IntegrationSettings!
+    
+    # Support tickets
+    createSupportTicket(input: CreateSupportTicketInput!): SupportTicket!
+    addSupportTicketMessage(input: AddSupportTicketMessageInput!): SupportTicketMessage!
+    updateSupportTicketStatus(id: ID!, status: String!): SupportTicket!
+    assignSupportTicket(id: ID!, userId: ID): SupportTicket!
   }
 
   # Интеграции/Поставщики

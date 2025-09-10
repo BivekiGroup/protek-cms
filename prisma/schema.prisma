@@ -29,6 +29,10 @@ model User {
   messengerReadReceipts MessengerReadReceipt[] @relation("MessengerReadReceiptUser")
   messengerReactions    MessengerReaction[]    @relation("MessengerReactionUser")
 
+  // Support system relations
+  supportAssignedTickets   SupportTicket[]         @relation("SupportTicketAssignedTo")
+  supportMessagesAuthored  SupportTicketMessage[]  @relation("SupportTicketMessageAuthorUser")
+
   @@map("users")
 }
 
@@ -285,6 +289,10 @@ model Client {
   partsSearchHistory   PartsSearchHistory[]
   searchEvents         SearchEvent[]
   productViews         ProductViewEvent[]
+
+  // Support system relations
+  supportTickets            SupportTicket[]
+  supportMessagesAuthored   SupportTicketMessage[] @relation("SupportTicketMessageAuthorClient")
 
   @@map("clients")
 }
@@ -1131,4 +1139,75 @@ model MessengerReaction {
   @@index([messageId])
   @@index([userId])
   @@map("messenger_reactions")
+}
+
+// Support tickets
+model SupportTicket {
+  id              String               @id @default(cuid())
+  clientId        String
+  subject         String
+  status          SupportTicketStatus  @default(OPEN)
+  priority        SupportTicketPriority @default(NORMAL)
+  assignedToUserId String?
+  lastMessageAt   DateTime             @default(now())
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  closedAt        DateTime?
+
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignedTo User?  @relation("SupportTicketAssignedTo", fields: [assignedToUserId], references: [id])
+  messages SupportTicketMessage[]
+
+  @@index([clientId])
+  @@index([assignedToUserId])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id         String   @id @default(cuid())
+  ticketId   String
+  authorType String   // 'CLIENT' | 'ADMIN'
+  authorUserId   String?
+  authorClientId String?
+  content    String
+  createdAt  DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorUser   User?   @relation("SupportTicketMessageAuthorUser", fields: [authorUserId], references: [id])
+  authorClient Client? @relation("SupportTicketMessageAuthorClient", fields: [authorClientId], references: [id])
+  attachments  SupportTicketAttachment[]
+
+  @@index([ticketId])
+  @@index([authorUserId])
+  @@index([authorClientId])
+  @@map("support_ticket_messages")
+}
+
+model SupportTicketAttachment {
+  id          String  @id @default(cuid())
+  messageId   String
+  url         String
+  fileName    String?
+  contentType String?
+  size        Int?
+  createdAt   DateTime @default(now())
+
+  message SupportTicketMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("support_ticket_attachments")
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
 }
