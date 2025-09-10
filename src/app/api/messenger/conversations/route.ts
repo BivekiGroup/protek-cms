@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { MessengerConversationType } from '@/generated/prisma'
 import { extractAnyToken, getUserFromToken } from '@/lib/auth'
 import { messengerBus } from '@/lib/messenger-events'
 
@@ -72,8 +73,7 @@ export async function POST(req: NextRequest) {
     if (pair.length === 2) {
       const existing = await prisma.messengerConversation.findFirst({
         where: {
-          // enum in DB: MessengerConversationType. Cast to any to satisfy TS after enum mapping.
-          type: 'DIRECT' as any,
+          type: MessengerConversationType.DIRECT,
           AND: [
             { members: { some: { userId: pair[0] } } },
             { members: { some: { userId: pair[1] } } },
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 
   const created = await prisma.messengerConversation.create({
     data: {
-      type: type as any,
+      type: type as MessengerConversationType,
       title: type === 'GROUP' ? (typeof body?.title === 'string' ? body.title : null) : null,
       members: {
         createMany: { data: memberIds.map(uid => ({ userId: uid })) },
