@@ -51,7 +51,25 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ ok: false, error: 'Invalid JSON' }), { status: 400, headers })
   }
 
-  const items = Array.isArray(body?.items) ? body.items : [body]
+  // Accept preferred root key `categories` (docs), keep back-compat with `items` and common typo `categorys`.
+  const rootArray = Array.isArray(body?.categories)
+    ? body.categories
+    : Array.isArray(body?.categorys)
+      ? body.categorys
+      : Array.isArray(body?.items)
+        ? body.items
+        : Array.isArray(body)
+          ? body
+          : undefined
+
+  if (!rootArray) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "Invalid payload: expected array under 'categories' (preferred) or 'items' (compat)", example: { categories: [{ category_code: '001254', category_name: 'Ремни ГРМ', category_head_code: '151554', category_head_name: 'ГРМ, рем. комплекты и тд' }] } }),
+      { status: 400, headers }
+    )
+  }
+
+  const items = rootArray
 
   // optional max batch limit (consistent with other 1C endpoints)
   const maxBatch = Number(process.env.ONEC_MAX_BATCH_SIZE || 1000)
@@ -61,7 +79,15 @@ export async function POST(req: NextRequest) {
       { status: 422, headers }
     )
   }
-  const parsed = items.map((it: any) => categorySchema.parse(it))
+  let parsed: Array<z.infer<typeof categorySchema>>
+  try {
+    parsed = items.map((it: any) => categorySchema.parse(it))
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return new Response(JSON.stringify({ ok: false, error: 'Validation failed', issues: e.issues }), { status: 400, headers })
+    }
+    throw e
+  }
 
   const results: any[] = []
   for (const c of parsed) {
