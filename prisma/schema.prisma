@@ -1021,7 +1021,7 @@ model IntegrationProviderSetting {
 // Messenger models
 model MessengerConversation {
   id        String   @id @default(cuid())
-  type      String   @default("DIRECT") // DIRECT | GROUP
+  type      MessengerConversationType @default(DIRECT) @db.Enum("MessengerConversationType")
   title     String?
   avatar    String?
   createdAt DateTime @default(now())
@@ -1031,6 +1031,12 @@ model MessengerConversation {
   messages MessengerMessage[]
 
   @@map("messenger_conversations")
+}
+
+enum MessengerConversationType {
+  DIRECT
+  GROUP
+  CHANNEL
 }
 
 model MessengerParticipant {

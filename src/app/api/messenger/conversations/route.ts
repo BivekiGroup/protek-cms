@@ -72,7 +72,8 @@ export async function POST(req: NextRequest) {
     if (pair.length === 2) {
       const existing = await prisma.messengerConversation.findFirst({
         where: {
-          type: 'DIRECT',
+          // enum in DB: MessengerConversationType. Cast to any to satisfy TS after enum mapping.
+          type: 'DIRECT' as any,
           AND: [
             { members: { some: { userId: pair[0] } } },
             { members: { some: { userId: pair[1] } } },
