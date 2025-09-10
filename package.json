@@ -19,7 +19,8 @@
     "update:env": "bash scripts/update-env.sh",
     "env:check": "bash scripts/sync-env.sh check",
     "env:sync": "bash scripts/sync-env.sh sync",
-    "make:admin": "node scripts/make-admin.mjs"
+    "make:admin": "node scripts/make-admin.mjs",
+    "db:clear-catalog": "tsx scripts/clear-catalog.ts"
   },
   "dependencies": {
     "@apollo/client": "^3.13.8",

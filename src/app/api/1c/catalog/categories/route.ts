@@ -95,14 +95,17 @@ export async function POST(req: NextRequest) {
     if (c.category_head_code) {
       let head = await prisma.category.findFirst({ where: { code: c.category_head_code } })
       if (!head) {
-        head = await prisma.category.create({ data: { name: c.category_head_name || c.category_head_code, slug: slugify(c.category_head_name || c.category_head_code), code: c.category_head_code } })
+        const headName = c.category_head_name || c.category_head_code
+        const headSlug = slugify(`${headName}-${c.category_head_code}`)
+        head = await prisma.category.create({ data: { name: headName, slug: headSlug, code: c.category_head_code } })
       }
       parentId = head.id
     }
 
     let cat = await prisma.category.findFirst({ where: { code: c.category_code } })
     if (!cat) {
-      cat = await prisma.category.create({ data: { name: c.category_name, slug: slugify(c.category_name), code: c.category_code, headCode: c.category_head_code, headName: c.category_head_name, parentId } })
+      const catSlug = slugify(`${c.category_name}-${c.category_code}`)
+      cat = await prisma.category.create({ data: { name: c.category_name, slug: catSlug, code: c.category_code, headCode: c.category_head_code, headName: c.category_head_name, parentId } })
       results.push({ code: c.category_code, status: 'created' })
     } else {
       await prisma.category.update({ where: { id: cat.id }, data: { name: c.category_name, headCode: c.category_head_code, headName: c.category_head_name, parentId } })
