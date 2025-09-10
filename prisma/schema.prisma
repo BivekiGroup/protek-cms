@@ -492,7 +492,23 @@ model ZzapReportJob {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  // Back relation to logs
+  logs      ZzapReportJobLog[]
+
   @@map("zzap_report_jobs")
+}
+
+// Логи задач ZZAP (сохраняем существующую таблицу)
+model ZzapReportJobLog {
+  id        String   @id @default(cuid())
+  jobId     String
+  line      String
+  createdAt DateTime @default(now())
+
+  job ZzapReportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("zzap_report_job_logs")
 }
 
 // Аналитика: события поиска на сайте (frontend)
@@ -1021,7 +1037,7 @@ model IntegrationProviderSetting {
 // Messenger models
 model MessengerConversation {
   id        String   @id @default(cuid())
-  type      MessengerConversationType @default(DIRECT) @db.Enum("MessengerConversationType")
+  type      MessengerConversationType @default(DIRECT)
   title     String?
   avatar    String?
   createdAt DateTime @default(now())
@@ -1037,13 +1053,16 @@ enum MessengerConversationType {
   DIRECT
   GROUP
   CHANNEL
+  @@map("MessengerConversationType")
 }
 
 model MessengerParticipant {
   id             String                 @id @default(cuid())
   conversationId String
   userId         String
+  joinedAt       DateTime               @default(now())
   lastReadAt     DateTime?
+  isAdmin        Boolean                @default(false)
 
   conversation MessengerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User                  @relation("MessengerParticipantUser", fields: [userId], references: [id], onDelete: Cascade)
@@ -1076,9 +1095,10 @@ model MessengerAttachment {
   id          String  @id @default(cuid())
   messageId   String
   url         String
-  fileName    String
+  fileName    String?
   contentType String?
-  size        Int
+  size        Int?
+  createdAt   DateTime @default(now())
 
   message MessengerMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
@@ -1099,13 +1119,16 @@ model MessengerReadReceipt {
 }
 
 model MessengerReaction {
+  id        String  @id @default(cuid())
   messageId String
   userId    String
   emoji     String
+  createdAt DateTime @default(now())
 
   message MessengerMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
   user    User             @relation("MessengerReactionUser", fields: [userId], references: [id])
 
-  @@id([messageId, userId, emoji])
+  @@index([messageId])
+  @@index([userId])
   @@map("messenger_reactions")
 }
