@@ -82,7 +82,7 @@ export default function OneCCatalogDocs() {
   -H "Content-Type: application/json" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" \\
   -d '{
-  "items": [
+  "categories": [
     {
       "category_code": "001254",
       "category_name": "Ремни ГРМ",
@@ -170,7 +170,7 @@ export default function OneCCatalogDocs() {
         }, null, 2)
       case 'categories':
         return JSON.stringify({
-          items: [
+          categories: [
             {
               category_code: '001254',
               category_name: 'Ремни ГРМ',
@@ -239,8 +239,8 @@ export default function OneCCatalogDocs() {
   const generateSamples = (n: number) => {
     if (endpoint !== 'products' && endpoint !== 'categories') return
     const safeN = Math.max(1, Math.min(50, Math.floor(n || 1)))
-    const items = Array.from({ length: safeN }).map((_, i) => {
-      if (endpoint === 'products') {
+    if (endpoint === 'products') {
+      const items = Array.from({ length: safeN }).map((_, i) => {
         const suffix = String.fromCharCode(65 + (i % 26)) // A, B, C ...
         const base = 941024 + i
         return {
@@ -255,17 +255,19 @@ export default function OneCCatalogDocs() {
           characteristics: { 'Длина': `${500 + i} мм` },
           isVisible: true,
         }
-      } else {
-        const code = String(1254 + i).padStart(6, '0')
-        return {
-          category_code: code,
-          category_name: `Категория ${i + 1}`,
-          category_head_code: '151554',
-          category_head_name: 'ГРМ, рем. комплекты и тд',
-        }
-      }
-    })
-    setBody(JSON.stringify({ items }, null, 2))
+      })
+      setBody(JSON.stringify({ items }, null, 2))
+      return
+    }
+    // categories: генерируем плоский список дочерних категорий от одного head
+    const head = { code: '151554', name: 'ГРМ, рем. комплекты и тд' }
+    const categories = Array.from({ length: safeN }).map((_, i) => ({
+      category_code: String(1254 + i).padStart(6, '0'),
+      category_name: `Категория ${i + 1}`,
+      category_head_code: head.code,
+      category_head_name: head.name,
+    }))
+    setBody(JSON.stringify({ categories }, null, 2))
   }
 
   return (

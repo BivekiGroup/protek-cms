@@ -26,7 +26,11 @@ function checkAuth(req: NextRequest): { ok: true } | { ok: false; status: number
 
 const itemSchema = z.object({
   sku: z.string().trim().min(1),
-  price: z.string().trim().min(1), // строка, конвертируем в float
+  // Принимаем цену как строку или число (включая 0)
+  price: z.union([
+    z.string().trim().min(1),
+    z.number().nonnegative()
+  ]),
 })
 
 export async function OPTIONS() {
@@ -50,7 +54,15 @@ export async function POST(req: NextRequest) {
   }
 
   const items = Array.isArray(body?.items) ? body.items : [body]
-  const parsed = items.map((it: any) => itemSchema.parse(it))
+  let parsed: Array<z.infer<typeof itemSchema>>
+  try {
+    parsed = items.map((it: any) => itemSchema.parse(it))
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return new Response(JSON.stringify({ ok: false, error: 'Validation failed', issues: e.issues }), { status: 400, headers })
+    }
+    throw e
+  }
 
   const results: any[] = []
   for (const it of parsed) {
@@ -68,10 +80,15 @@ export async function POST(req: NextRequest) {
   return new Response(JSON.stringify({ ok: true, items: results }), { status: 200, headers })
 }
 
-function parsePrice(s: string): number {
-  // convert "1 234,56" or "1234.56" to number
-  const cleaned = s.replace(/\s+/g, '').replace(',', '.')
-  const n = Number.parseFloat(cleaned)
+function parsePrice(s: string | number): number {
+  // convert "1 234,56" or "1234.56" or 1234 to number
+  let n: number
+  if (typeof s === 'number') {
+    n = s
+  } else {
+    const cleaned = s.replace(/\s+/g, '').replace(',', '.')
+    n = Number.parseFloat(cleaned)
+  }
   if (!Number.isFinite(n) || n < 0) return 0
   return n
 }
@@ -80,4 +97,3 @@ function normalizeArticle(article?: string | null) {
   if (!article) return ''
   return article.replace(/\s+/g, '').replace(/[-–—]+/g, '').trim().toUpperCase()
 }
-
