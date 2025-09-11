@@ -122,8 +122,11 @@ export default function OneCCatalogDocs() {
   const curlClients = `curl -sS "${CURL_BASE}/api/1c/catalog/clients" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" | jq`
 
+  const curlOrders = `curl -sS "${CURL_BASE}/api/1c/orders?limit=50" \\
+  -H "X-API-Key: <ONEC_API_TOKEN>" | jq`
+
   // Live Tester state
-  type Endpoint = 'health' | 'products' | 'categories' | 'prices' | 'stocks' | 'visits' | 'clients'
+  type Endpoint = 'health' | 'products' | 'categories' | 'prices' | 'stocks' | 'visits' | 'clients' | 'orders'
   const [endpoint, setEndpoint] = useState<Endpoint>('health')
   const [apiKey, setApiKey] = useState('')
   const [idemKey, setIdemKey] = useState('demo-001')
@@ -134,7 +137,7 @@ export default function OneCCatalogDocs() {
   const [multiCount, setMultiCount] = useState<number>(3)
 
   const method: 'GET' | 'POST' = useMemo(() => (
-    endpoint === 'health' || endpoint === 'visits' || endpoint === 'clients' ? 'GET' : 'POST'
+    endpoint === 'health' || endpoint === 'visits' || endpoint === 'clients' || endpoint === 'orders' ? 'GET' : 'POST'
   ), [endpoint])
 
   const path = useMemo(() => {
@@ -146,6 +149,7 @@ export default function OneCCatalogDocs() {
       case 'stocks': return '/api/1c/catalog/stocks'
       case 'visits': return '/api/1c/catalog/visits?limit=50'
       case 'clients': return '/api/1c/catalog/clients'
+      case 'orders': return '/api/1c/orders?limit=50'
     }
   }, [endpoint])
 
@@ -295,6 +299,7 @@ export default function OneCCatalogDocs() {
             <div><Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/stocks</span></div>
             <div><Badge>GET</Badge> <span className="font-mono">/api/1c/catalog/visits</span></div>
             <div><Badge>GET</Badge> <span className="font-mono">/api/1c/catalog/clients</span></div>
+            <div><Badge>GET</Badge> <span className="font-mono">/api/1c/orders</span></div>
           </CardContent>
         </Card>
         <Card>
@@ -375,6 +380,16 @@ export default function OneCCatalogDocs() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Заказы (list)</CardTitle>
+          <CardDescription>Получение заказов. Поддерживает `limit/offset`, `status`, `from/to`, `orderNumber`.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <CodeBlock title="curl" code={curlOrders} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> История посещений (demo)</CardTitle>
         </CardHeader>
         <CardContent>
@@ -417,6 +432,7 @@ export default function OneCCatalogDocs() {
                 <option value="stocks">POST /api/1c/catalog/stocks</option>
                 <option value="visits">GET /api/1c/catalog/visits</option>
                 <option value="clients">GET /api/1c/catalog/clients</option>
+                <option value="orders">GET /api/1c/orders</option>
               </select>
             </div>
             {endpoint === 'products' && (
