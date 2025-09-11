@@ -126,7 +126,9 @@ export async function POST(req: NextRequest) {
 
   const reqId = randomUUID()
   const strict = (process.env.ONEC_STRICT_VALIDATION || 'false') === 'true'
-  const maxBatch = Number(process.env.ONEC_MAX_BATCH_SIZE || 1000)
+  // maxBatch: 0 or unset means no limit
+  const maxBatchRaw = process.env.ONEC_MAX_BATCH_SIZE
+  const maxBatch = Number(maxBatchRaw ?? 0) || 0
   const apiKey = req.headers.get('x-api-key') || ''
   const idemKeyHeader = req.headers.get('idempotency-key') || ''
   const cacheKey = idemKeyHeader ? `${apiKey}:${idemKeyHeader}` : ''
@@ -143,7 +145,7 @@ export async function POST(req: NextRequest) {
   if (items.length === 0) {
     return new Response(JSON.stringify({ ok: true, created: 0, updated: 0, errors: [], items: [], requestId: reqId }), { status: 200, headers })
   }
-  if (items.length > maxBatch) {
+  if (maxBatch > 0 && items.length > maxBatch) {
     return new Response(JSON.stringify({ ok: false, error: `Too many items: ${items.length} > ${maxBatch}`, requestId: reqId }), { status: 422, headers })
   }
 
