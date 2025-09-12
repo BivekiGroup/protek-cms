@@ -194,24 +194,48 @@ export default function OzonPage() {
               onClick={async () => {
                 if (!confirm('Импортировать ВСЕ товары из Ozon в каталог? Операция может занять длительное время.')) return
                 setAllLoading(true)
-                setMessage(null)
+                setMessage('Стартую фоновую задачу…')
                 try {
-                  const res = await fetch('/api/ozon/import/all', {
+                  // 1) start job
+                  const start = await fetch('/api/ozon/import/all/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ q: q.trim() || undefined, mode: 'auto', batchSize: 50, maxPages: 500 })
                   })
-                  const json = await res.json().catch(() => null)
-                  if (!res.ok) throw new Error(json?.error || 'Импорт не удался')
-                  const s = json?.summary || {}
-                  const msg = `Импорт завершён: создано ${s.created || 0}, обновлено ${s.updated || 0}, ошибок ${s.failed || 0}`
-                  toast.success(msg)
-                  setMessage(msg)
+                  const sj = await start.json()
+                  if (!start.ok || !sj?.id) throw new Error(sj?.error || 'Не удалось создать задачу')
+                  const id = sj.id as string
+                  setMessage('Задача создана. Импорт идёт в фоне…')
+
+                  // 2) poll status + push steps periodically
+                  let stop = false
+                  const doStep = async () => {
+                    if (stop) return
+                    await fetch('/api/ozon/import/all/step', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+                  }
+                  const poll = async () => {
+                    if (stop) return
+                    const r = await fetch(`/api/ozon/import/all/status?id=${encodeURIComponent(id)}`, { cache: 'no-store' })
+                    const j = await r.json().catch(() => null)
+                    const job = j?.job
+                    if (job) {
+                      setMessage(`Статус: ${job.status}. Обработано: ${job.processed}. Создано: ${job.createdCnt}. Обновлено: ${job.updatedCnt}. Ошибок: ${job.failedCnt}.`)
+                      if (job.status === 'done' || job.status === 'error') {
+                        stop = true
+                        setAllLoading(false)
+                        toast.success(job.status === 'done' ? 'Импорт завершён' : 'Задача завершилась с ошибкой')
+                        return
+                      }
+                    }
+                    // расписание: толкнуть шаг и снова опросить
+                    await doStep()
+                    setTimeout(poll, 2000)
+                  }
+                  poll()
                 } catch (e: any) {
                   const msg = e?.message || 'Глобальный импорт не удался'
                   toast.error(msg)
                   setMessage(msg)
-                } finally {
                   setAllLoading(false)
                 }
               }}

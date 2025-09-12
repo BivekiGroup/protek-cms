@@ -890,6 +890,28 @@ model HeroBanner {
   @@map("hero_banners")
 }
 
+// Ozon import background job
+model OzonImportJob {
+  id         String   @id @default(cuid())
+  status     String   @default("pending") // pending|running|done|error
+  q          String?
+  mode       String   @default("auto") // new|auto|update
+  batchSize  Int      @default(50)
+  maxPages   Int      @default(500)
+  page       Int      @default(0)
+  lastId     String?
+  processed  Int      @default(0)
+  createdCnt Int      @default(0)
+  updatedCnt Int      @default(0)
+  failedCnt  Int      @default(0)
+  startedAt  DateTime? 
+  finishedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("ozon_import_jobs")
+}
+
 enum UserRole {
   ADMIN
   MODERATOR

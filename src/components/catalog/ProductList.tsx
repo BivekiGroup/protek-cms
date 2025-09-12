@@ -264,12 +264,13 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
             </div>
             <div className="col-span-1">Фото</div>
             <div className="col-span-2">Название</div>
+            <div className="col-span-2">Категория</div>
             <div className="col-span-1">Артикул</div>
             <div className="col-span-1">Остаток</div>
             <div className="col-span-1">Цена опт</div>
             <div className="col-span-1">Цена сайт</div>
             <div className="col-span-1">На сайте</div>
-            <div className="col-span-3">Действия</div>
+            <div className="col-span-2">Действия</div>
           </div>
         </div>
       </div>
@@ -307,11 +308,13 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                 {/* Название */}
                 <div className="col-span-2">
                   <h3 className="font-medium text-gray-900 truncate">{product.name}</h3>
-                  {product.categories.length > 0 && (
-                    <p className="text-xs text-gray-500 mt-1 truncate">
-                      {product.categories.map(cat => cat.name).join(', ')}
-                    </p>
-                  )}
+                </div>
+
+                {/* Категория */}
+                <div className="col-span-2">
+                  <span className="text-sm text-gray-700 truncate">
+                    {product.categories.length > 0 ? product.categories.map(cat => cat.name).join(', ') : '—'}
+                  </span>
                 </div>
 
                 {/* Артикул */}
@@ -349,7 +352,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
               </div>
 
                 {/* Действия */}
-                <div className="col-span-3 flex space-x-2 pr-6">
+                <div className="col-span-2 flex space-x-2 pr-6">
                   <Button
                     variant="outline"
                     size="sm"
