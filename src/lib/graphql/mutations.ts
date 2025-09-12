@@ -1442,4 +1442,47 @@ export const DELETE_HERO_BANNER = gql`
   mutation DeleteHeroBanner($id: String!) {
     deleteHeroBanner(id: $id)
   }
-` 
+`
+
+// News mutations
+export const CREATE_NEWS = gql`
+  mutation CreateNews($input: NewsInput!) {
+    createNews(input: $input) {
+      id
+      slug
+      title
+      category
+      shortDescription
+      coverImageUrl
+      coverImageAlt
+      status
+      publishedAt
+      createdAt
+      updatedAt
+    }
+  }
+`
+
+export const UPDATE_NEWS = gql`
+  mutation UpdateNews($id: ID!, $input: NewsUpdateInput!) {
+    updateNews(id: $id, input: $input) {
+      id
+      slug
+      title
+      category
+      shortDescription
+      coverImageUrl
+      coverImageAlt
+      status
+      publishedAt
+      createdAt
+      updatedAt
+    }
+  }
+`
+
+export const DELETE_NEWS = gql`
+  mutation DeleteNews($id: ID!) {
+    deleteNews(id: $id)
+  }
+`

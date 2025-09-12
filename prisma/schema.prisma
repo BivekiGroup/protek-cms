@@ -9,6 +9,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// --- News/Articles ---
+model News {
+  id               String    @id @default(cuid())
+  slug             String    @unique
+  title            String
+  category         String
+  shortDescription String
+  coverImageUrl    String
+  coverImageAlt    String?
+  contentHtml      String
+  status           NewsStatus @default(DRAFT)
+  publishedAt      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([publishedAt])
+  @@map("news")
+}
+
+enum NewsStatus {
+  DRAFT
+  PUBLISHED
+}
+
 model User {
   id             String                 @id @default(cuid())
   firstName      String

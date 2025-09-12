@@ -1175,6 +1175,12 @@ export const typeDefs = gql`
     heroBanners: [HeroBanner!]!
     heroBanner(id: String!): HeroBanner
     
+    # Новости (публичные/админские)
+    newsList(search: String, category: String, limit: Int, offset: Int, publishedOnly: Boolean = true): [News!]!
+    newsCount(search: String, category: String, publishedOnly: Boolean = true): Int!
+    newsBySlug(slug: String!): News
+    news(id: ID!): News
+    
     # Новые поступления
     newArrivals(limit: Int = 8): [Product!]!
     
@@ -1404,6 +1410,11 @@ export const typeDefs = gql`
     createHeroBanner(input: HeroBannerInput!): HeroBanner!
     updateHeroBanner(id: String!, input: HeroBannerUpdateInput!): HeroBanner!
     deleteHeroBanner(id: String!): Boolean!
+    
+    # Новости
+    createNews(input: NewsInput!): News!
+    updateNews(id: ID!, input: NewsUpdateInput!): News!
+    deleteNews(id: ID!): Boolean!
     
     # Кража - работа с базой данных запчастей
     fetchCategoryProducts(input: FetchCategoryProductsInput!): FetchCategoryProductsResult!
@@ -2602,6 +2613,51 @@ export const typeDefs = gql`
     linkUrl: String
     isActive: Boolean
     sortOrder: Int
+  }
+
+  # --- News ---
+  enum NewsStatus {
+    DRAFT
+    PUBLISHED
+  }
+
+  type News {
+    id: ID!
+    slug: String!
+    title: String!
+    category: String!
+    shortDescription: String!
+    coverImageUrl: String!
+    coverImageAlt: String
+    contentHtml: String!
+    status: NewsStatus!
+    publishedAt: DateTime
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  input NewsInput {
+    slug: String
+    title: String!
+    category: String!
+    shortDescription: String!
+    coverImageUrl: String!
+    coverImageAlt: String
+    contentHtml: String!
+    status: NewsStatus
+    publishedAt: DateTime
+  }
+
+  input NewsUpdateInput {
+    slug: String
+    title: String
+    category: String
+    shortDescription: String
+    coverImageUrl: String
+    coverImageAlt: String
+    contentHtml: String
+    status: NewsStatus
+    publishedAt: DateTime
   }
 
   # Кража - типы для работы с базой данных запчастей

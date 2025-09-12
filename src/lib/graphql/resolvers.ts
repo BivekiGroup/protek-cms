@@ -97,6 +97,31 @@ interface AdminChangePasswordInput {
   newPassword: string
 }
 
+// News inputs
+interface NewsInput {
+  slug?: string
+  title: string
+  category: string
+  shortDescription: string
+  coverImageUrl: string
+  coverImageAlt?: string
+  contentHtml: string
+  status?: 'DRAFT' | 'PUBLISHED'
+  publishedAt?: string
+}
+
+interface NewsUpdateInput {
+  slug?: string
+  title?: string
+  category?: string
+  shortDescription?: string
+  coverImageUrl?: string
+  coverImageAlt?: string
+  contentHtml?: string
+  status?: 'DRAFT' | 'PUBLISHED'
+  publishedAt?: string | null
+}
+
 interface Context {
   userId?: string
   clientId?: string
@@ -172,6 +197,37 @@ const saveSearchHistory = async (
     console.error('❌ Ошибка сохранения истории поиска:', error)
   }
 }
+
+// --- Helpers ---
+const slugify = (str: string) =>
+  str
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9а-яё\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .replace(/[а]/g, 'a').replace(/[б]/g, 'b').replace(/[в]/g, 'v').replace(/[г]/g, 'g')
+    .replace(/[д]/g, 'd').replace(/[её]/g, 'e').replace(/[ж]/g, 'zh').replace(/[з]/g, 'z')
+    .replace(/[и]/g, 'i').replace(/[й]/g, 'y').replace(/[к]/g, 'k').replace(/[л]/g, 'l')
+    .replace(/[м]/g, 'm').replace(/[н]/g, 'n').replace(/[о]/g, 'o').replace(/[п]/g, 'p')
+    .replace(/[р]/g, 'r').replace(/[с]/g, 's').replace(/[т]/g, 't').replace(/[у]/g, 'u')
+    .replace(/[ф]/g, 'f').replace(/[х]/g, 'h').replace(/[ц]/g, 'ts').replace(/[ч]/g, 'ch')
+    .replace(/[ш]/g, 'sh').replace(/[щ]/g, 'sch').replace(/[ъ]/g, '').replace(/[ы]/g, 'y')
+    .replace(/[ь]/g, '').replace(/[э]/g, 'e').replace(/[ю]/g, 'yu').replace(/[я]/g, 'ya')
+
+const getUniqueSlug = async (base: string, excludeId?: string | null): Promise<string> => {
+  const baseSlug = slugify(base) || 'news'
+  let candidate = baseSlug
+  let i = 1
+  while (true) {
+    const found = await (prisma as any).news.findUnique({ where: { slug: candidate } })
+    if (!found || (excludeId && found.id === excludeId)) return candidate
+    i += 1
+    candidate = `${baseSlug}-${i}`
+  }
+}
+
 
 // Интерфейсы для каталога
 interface CategoryInput {
@@ -4442,6 +4498,100 @@ export const resolvers = {
       } catch (error) {
         console.error('Ошибка получения баннера героя:', error)
         throw new Error('Не удалось получить баннер героя')
+      }
+    },
+
+    // News queries
+    newsList: async (
+      _: unknown,
+      { search, category, limit = 12, offset = 0, publishedOnly = true }: { search?: string; category?: string; limit?: number; offset?: number; publishedOnly?: boolean },
+      context: Context
+    ) => {
+      try {
+        const where: any = {}
+        if (search && search.trim()) {
+          where.OR = [
+            { title: { contains: search, mode: 'insensitive' as const } },
+            { shortDescription: { contains: search, mode: 'insensitive' as const } }
+          ]
+        }
+        if (category && category.trim()) {
+          where.category = { equals: category }
+        }
+        if (publishedOnly) {
+          where.status = 'PUBLISHED'
+        }
+
+        const orderBy = publishedOnly
+          ? [{ publishedAt: 'desc' as const }, { createdAt: 'desc' as const }]
+          : [{ createdAt: 'desc' as const }]
+
+        const items = await (prisma as any).news.findMany({
+          where,
+          orderBy,
+          take: Math.max(1, Math.min(100, limit)),
+          skip: Math.max(0, offset),
+        })
+        return items
+      } catch (error) {
+        console.error('Ошибка получения новостей:', error)
+        throw new Error('Не удалось получить новости')
+      }
+    },
+
+    newsCount: async (
+      _: unknown,
+      { search, category, publishedOnly = true }: { search?: string; category?: string; publishedOnly?: boolean }
+    ) => {
+      try {
+        const where: any = {}
+        if (search && search.trim()) {
+          where.OR = [
+            { title: { contains: search, mode: 'insensitive' as const } },
+            { shortDescription: { contains: search, mode: 'insensitive' as const } }
+          ]
+        }
+        if (category && category.trim()) {
+          where.category = { equals: category }
+        }
+        if (publishedOnly) {
+          where.status = 'PUBLISHED'
+        }
+        const count = await (prisma as any).news.count({ where })
+        return count
+      } catch (error) {
+        console.error('Ошибка получения количества новостей:', error)
+        throw new Error('Не удалось получить количество новостей')
+      }
+    },
+
+    newsBySlug: async (
+      _: unknown,
+      { slug }: { slug: string },
+      context: Context
+    ) => {
+      try {
+        const item = await (prisma as any).news.findUnique({ where: { slug } })
+        if (!item) return null
+        if (item.status !== 'PUBLISHED' && !context.userId) {
+          return null
+        }
+        return item
+      } catch (error) {
+        console.error('Ошибка получения новости:', error)
+        throw new Error('Не удалось получить новость')
+      }
+    },
+
+    news: async (_: unknown, { id }: { id: string }, context: Context) => {
+      try {
+        const item = await (prisma as any).news.findUnique({ where: { id } })
+        if (!item) return null
+        if (item.status !== 'PUBLISHED' && !context.userId) return null
+        return item
+      } catch (error) {
+        console.error('Ошибка получения новости по id:', error)
+        throw new Error('Не удалось получить новость')
       }
     },
 
@@ -10206,6 +10356,82 @@ export const resolvers = {
     },
 
     // Кража - мутации для работы с базой данных запчастей
+    
+    // News mutations
+    createNews: async (_: unknown, { input }: { input: NewsInput }, context: Context) => {
+      try {
+        if (!context.userId) {
+          throw new Error('Пользователь не авторизован')
+        }
+        const data: any = {
+          slug: await getUniqueSlug(input.title),
+          title: input.title,
+          category: input.category,
+          shortDescription: input.shortDescription,
+          coverImageUrl: input.coverImageUrl,
+          coverImageAlt: input.coverImageAlt,
+          contentHtml: input.contentHtml,
+          status: input.status || 'DRAFT',
+          publishedAt: input.publishedAt ? new Date(input.publishedAt) : null,
+        }
+        const created = await (prisma as any).news.create({ data })
+        return created
+      } catch (error) {
+        console.error('Ошибка создания новости:', error)
+        if (error instanceof Error) throw error
+        throw new Error('Не удалось создать новость')
+      }
+    },
+
+    updateNews: async (_: unknown, { id, input }: { id: string; input: NewsUpdateInput }, context: Context) => {
+      try {
+        if (!context.userId) {
+          throw new Error('Пользователь не авторизован')
+        }
+        const existing = await (prisma as any).news.findUnique({ where: { id } })
+        if (!existing) {
+          throw new Error('Новость не найдена')
+        }
+        const data: any = {}
+        if (input.title !== undefined) {
+          data.title = input.title
+          data.slug = await getUniqueSlug(input.title, id)
+        }
+        if (input.category !== undefined) data.category = input.category
+        if (input.shortDescription !== undefined) data.shortDescription = input.shortDescription
+        if (input.coverImageUrl !== undefined) data.coverImageUrl = input.coverImageUrl
+        if (input.coverImageAlt !== undefined) data.coverImageAlt = input.coverImageAlt
+        if (input.contentHtml !== undefined) data.contentHtml = input.contentHtml
+        if (input.status !== undefined) data.status = input.status
+        if (input.publishedAt !== undefined) data.publishedAt = input.publishedAt ? new Date(input.publishedAt) : null
+
+        const updated = await (prisma as any).news.update({ where: { id }, data })
+        return updated
+      } catch (error) {
+        console.error('Ошибка обновления новости:', error)
+        if (error instanceof Error) throw error
+        throw new Error('Не удалось обновить новость')
+      }
+    },
+
+    deleteNews: async (_: unknown, { id }: { id: string }, context: Context) => {
+      try {
+        if (!context.userId) {
+          throw new Error('Пользователь не авторизован')
+        }
+        const existing = await (prisma as any).news.findUnique({ where: { id } })
+        if (!existing) {
+          throw new Error('Новость не найдена')
+        }
+        await (prisma as any).news.delete({ where: { id } })
+        return true
+      } catch (error) {
+        console.error('Ошибка удаления новости:', error)
+        if (error instanceof Error) throw error
+        throw new Error('Не удалось удалить новость')
+      }
+    },
+
     fetchCategoryProducts: async (_: unknown, { input }: { input: any }, context: Context) => {
       try {
         if (!context.userId || context.userRole !== 'ADMIN') {

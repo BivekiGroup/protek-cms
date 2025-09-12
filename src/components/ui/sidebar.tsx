@@ -51,6 +51,7 @@ const navigationGroups: NavGroup[] = [
       { title: 'Каталог', href: '/dashboard/catalog', icon: Package },
       { title: 'Товары главной', href: '/dashboard/homepage-products', icon: Star },
       { title: 'Баннеры героя', href: '/dashboard/hero-banners', icon: Image },
+      { title: 'Новости', href: '/dashboard/news', icon: Mail },
     ],
   },
   {

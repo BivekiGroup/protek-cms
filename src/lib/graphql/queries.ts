@@ -1699,4 +1699,67 @@ export const GET_HERO_BANNER = gql`
   }
 `
 
+// News queries
+export const GET_NEWS_LIST = gql`
+  query GetNewsList($search: String, $category: String, $limit: Int, $offset: Int, $publishedOnly: Boolean) {
+    newsList(search: $search, category: $category, limit: $limit, offset: $offset, publishedOnly: $publishedOnly) {
+      id
+      slug
+      title
+      category
+      shortDescription
+      coverImageUrl
+      coverImageAlt
+      status
+      publishedAt
+      createdAt
+      updatedAt
+    }
+  }
+`
+
+export const GET_NEWS_COUNT = gql`
+  query GetNewsCount($search: String, $category: String, $publishedOnly: Boolean) {
+    newsCount(search: $search, category: $category, publishedOnly: $publishedOnly)
+  }
+`
+
+export const GET_NEWS_BY_SLUG = gql`
+  query GetNewsBySlug($slug: String!) {
+    newsBySlug(slug: $slug) {
+      id
+      slug
+      title
+      category
+      shortDescription
+      coverImageUrl
+      coverImageAlt
+      contentHtml
+      status
+      publishedAt
+      createdAt
+      updatedAt
+    }
+  }
+`
+
+export const GET_NEWS_BY_ID = gql`
+  query GetNewsById($id: ID!) {
+    news(id: $id) {
+      id
+      slug
+      title
+      category
+      shortDescription
+      coverImageUrl
+      coverImageAlt
+      contentHtml
+      status
+      publishedAt
+      createdAt
+      updatedAt
+    }
+  }
+`
+
  

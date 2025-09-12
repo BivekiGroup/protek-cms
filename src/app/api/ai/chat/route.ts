@@ -60,8 +60,16 @@ export async function POST(req: Request) {
         return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' } })
       }
       const json = await response.json().catch(() => null as any)
-      const text = json?.choices?.[0]?.message?.content ?? json?.choices?.[0]?.delta?.content ?? ''
-      return new Response(text || '', { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' } })
+      // Try multiple shapes
+      let text = json?.choices?.[0]?.message?.content
+        ?? json?.choices?.[0]?.delta?.content
+        ?? json?.output_text
+        ?? json?.text
+        ?? json?.data?.output_text
+        ?? json?.data?.text
+        ?? ''
+      if (typeof text !== 'string') text = ''
+      return new Response(text, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' } })
     } catch (e: any) {
       clear(); if (e?.name !== 'AbortError') console.warn(`AI provider ${p.name} failed:`, e?.message || e); continue
     }
