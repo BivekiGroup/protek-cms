@@ -52,10 +52,10 @@ export default function SupportTicketsPage() {
           <CardTitle>Техподдержка — тикеты</CardTitle>
           <div className="flex items-center gap-2 w-full max-w-xl">
             <Input placeholder="Поиск по теме" value={search} onChange={e => setSearch(e.target.value)} />
-            <Select value={status || ''} onValueChange={v => setStatus(v || undefined)}>
+            <Select value={status ?? 'all'} onValueChange={v => setStatus(v === 'all' ? undefined : v)}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="Все статусы" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Все статусы</SelectItem>
+                <SelectItem value="all">Все статусы</SelectItem>
                 <SelectItem value="OPEN">Открыт</SelectItem>
                 <SelectItem value="IN_PROGRESS">В работе</SelectItem>
                 <SelectItem value="RESOLVED">Решён</SelectItem>

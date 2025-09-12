@@ -11,6 +11,7 @@ import { Bot, Send, User, Pencil, Trash2, Image as ImageIcon } from 'lucide-reac
 import { useAuth } from '@/components/providers/AuthProvider'
 import ModelPicker from '@/components/ai/ModelPicker'
 import { FileUpload } from '@/components/ui/file-upload'
+import ChatMessageRenderer from '@/components/messenger/ChatMessageRenderer'
 
 export default function AIChat() {
   const { token } = useAuth()
@@ -261,55 +262,24 @@ export default function AIChat() {
             
             <div className="space-y-4">
               {messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={`flex gap-3 ${
-                    message.role === 'user' ? 'justify-end' : 'justify-start'
-                  }`}
-                >
-                  {message.role === 'assistant' && (
+                <div key={index} className="flex gap-3">
+                  {message.role === 'assistant' ? (
                     <Avatar className="h-8 w-8">
                       <AvatarFallback>
                         <Bot className="h-4 w-4" />
                       </AvatarFallback>
                     </Avatar>
-                  )}
-                  
-                  <div
-                    className={`rounded-lg px-4 py-2 max-w-[80%] ${
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground ml-auto'
-                        : 'bg-muted text-foreground'
-                    }`}
-                  >
-                    <div className="whitespace-pre-wrap text-sm">
-                      {message.content}
-                    </div>
-                    {Array.isArray(message.attachments) && message.attachments.length > 0 && (
-                      <div className={`mt-2 ${message.role === 'user' ? 'text-primary-foreground/90' : 'text-foreground/90'}`}>
-                        <div className="flex flex-wrap gap-2">
-                          {message.attachments.map((a, i) => {
-                            const isImg = (a.contentType || '').startsWith('image/') || /\.(png|jpg|jpeg|gif|webp)$/i.test(a.url)
-                            if (!isImg) return null
-                            return (
-                              <div key={i} className="border border-white/10 rounded p-0.5">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={a.url} alt={a.name || 'attachment'} className="h-8 w-8 object-cover rounded" />
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
+                  ) : <div className="w-8" />}
+                  <div className="flex-1">
+                    <ChatMessageRenderer msg={message as any} />
                   </div>
-                  
-                  {message.role === 'user' && (
+                  {message.role === 'user' ? (
                     <Avatar className="h-8 w-8">
                       <AvatarFallback>
                         <User className="h-4 w-4" />
                       </AvatarFallback>
                     </Avatar>
-                  )}
+                  ) : <div className="w-8" />}
                 </div>
               ))}
               

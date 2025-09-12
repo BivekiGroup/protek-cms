@@ -27,6 +27,7 @@ export default function OzonPage() {
   const [matches, setMatches] = useState<MatchMap>({})
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [actionLoading, setActionLoading] = useState(false)
+  const [allLoading, setAllLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [lastId, setLastId] = useState<string | undefined>('')
   const [total, setTotal] = useState<number | undefined>(undefined)
@@ -186,6 +187,35 @@ export default function OzonPage() {
               <Input id="oem" placeholder="например, 06A145710P" value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
             <Button type="submit" disabled={loading}>{loading ? 'Ищу…' : 'Найти'}</Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={allLoading}
+              onClick={async () => {
+                if (!confirm('Импортировать ВСЕ товары из Ozon в каталог? Операция может занять длительное время.')) return
+                setAllLoading(true)
+                setMessage(null)
+                try {
+                  const res = await fetch('/api/ozon/import/all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ q: q.trim() || undefined, mode: 'auto', batchSize: 50, maxPages: 500 })
+                  })
+                  const json = await res.json().catch(() => null)
+                  if (!res.ok) throw new Error(json?.error || 'Импорт не удался')
+                  const s = json?.summary || {}
+                  const msg = `Импорт завершён: создано ${s.created || 0}, обновлено ${s.updated || 0}, ошибок ${s.failed || 0}`
+                  toast.success(msg)
+                  setMessage(msg)
+                } catch (e: any) {
+                  const msg = e?.message || 'Глобальный импорт не удался'
+                  toast.error(msg)
+                  setMessage(msg)
+                } finally {
+                  setAllLoading(false)
+                }
+              }}
+            >{allLoading ? 'Импортирую всё…' : 'Импортировать всё (Ozon → каталог)'}</Button>
             {items.length > 0 && (
               <>
                 <Button type="button" variant="outline" onClick={() => toggleAll(true)}>Выделить все</Button>
