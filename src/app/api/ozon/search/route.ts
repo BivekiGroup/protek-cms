@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchOzonPage, searchProductsByOEM } from '@/lib/ozon'
+import { fetchOzonPage } from '@/lib/ozon'
 
 export async function GET(request: NextRequest) {
   try {

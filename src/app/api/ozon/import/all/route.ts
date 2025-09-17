@@ -22,7 +22,6 @@ export async function POST(request: NextRequest) {
 
     let last_id: string | undefined = ''
     let page = 0
-    let totalImported = 0
     let totalProcessed = 0
     let created = 0
     let updated = 0
@@ -63,7 +62,6 @@ export async function POST(request: NextRequest) {
         created += results.filter((r: any) => r.status === 'created').length
         updated += results.filter((r: any) => r.status === 'updated').length
         failed += results.filter((r: any) => r.status === 'error').length
-        totalImported += created + updated
       }
 
       last_id = resp.last_id
@@ -79,4 +77,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error?.message || 'Import all failed' }, { status: 500 })
   }
 }
-

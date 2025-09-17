@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import type { ComponentType, SVGProps } from 'react'
 import { 
   Home, 
   Settings,
@@ -34,7 +35,7 @@ interface SidebarProps {
   className?: string
 }
 
-type NavItem = { title: string; href: string; icon: React.ComponentType<any> }
+type NavItem = { title: string; href: string; icon: ComponentType<SVGProps<SVGSVGElement>> }
 type NavGroup = { title: string; items: NavItem[] }
 
 const navigationGroups: NavGroup[] = [

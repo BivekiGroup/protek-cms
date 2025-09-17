@@ -26,7 +26,8 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { FileUpload } from '@/components/ui/file-upload'
-import { Plus, Edit, Trash2, Image, ExternalLink } from 'lucide-react'
+import NextImage from 'next/image'
+import { Plus, Edit, Trash2, Image as ImageIcon, ExternalLink } from 'lucide-react'
 import { GET_HERO_BANNERS } from '@/lib/graphql/queries'
 import { CREATE_HERO_BANNER, UPDATE_HERO_BANNER, DELETE_HERO_BANNER } from '@/lib/graphql/mutations'
 import { toast } from 'sonner'
@@ -65,7 +66,7 @@ export default function HeroBannersPage() {
   const [showDialog, setShowDialog] = useState(false)
   const [editingBanner, setEditingBanner] = useState<HeroBanner | null>(null)
   const [formData, setFormData] = useState<BannerFormData>(defaultFormData)
-  const [uploading, setUploading] = useState(false)
+  
 
   const { data, loading, error, refetch } = useQuery(GET_HERO_BANNERS, {
     fetchPolicy: 'cache-and-network'
@@ -267,11 +268,14 @@ export default function HeroBannersPage() {
                 <Label>Изображение *</Label>
                 <div className="space-y-2">
                   {formData.imageUrl && (
-                    <div className="relative">
-                      <img 
-                        src={formData.imageUrl} 
-                        alt="Превью" 
-                        className="w-full h-32 object-cover rounded-lg border"
+                    <div className="relative h-32 w-full overflow-hidden rounded-lg border">
+                      <NextImage
+                        src={formData.imageUrl}
+                        alt="Превью баннера"
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 100vw, 512px"
+                        unoptimized
                       />
                     </div>
                   )}
@@ -279,11 +283,7 @@ export default function HeroBannersPage() {
                     onUpload={(url) => setFormData(prev => ({ ...prev, imageUrl: url }))}
                     accept="image/*"
                     maxSize={5 * 1024 * 1024}
-                    disabled={uploading}
                   />
-                  {uploading && (
-                    <div className="text-sm text-gray-500">Загрузка изображения...</div>
-                  )}
                 </div>
               </div>
 
@@ -300,7 +300,7 @@ export default function HeroBannersPage() {
                 <Button type="button" variant="outline" onClick={handleCloseDialog}>
                   Отмена
                 </Button>
-                <Button type="submit" disabled={uploading}>
+                <Button type="submit">
                   {editingBanner ? 'Обновить' : 'Создать'}
                 </Button>
               </DialogFooter>
@@ -314,7 +314,7 @@ export default function HeroBannersPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Всего баннеров</CardTitle>
-            <Image className="h-4 w-4 text-muted-foreground" />
+            <ImageIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{banners.length}</div>
@@ -324,7 +324,7 @@ export default function HeroBannersPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Активные</CardTitle>
-            <Image className="h-4 w-4 text-muted-foreground" />
+            <ImageIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
@@ -336,7 +336,7 @@ export default function HeroBannersPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Неактивные</CardTitle>
-            <Image className="h-4 w-4 text-muted-foreground" />
+            <ImageIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-gray-600">
@@ -357,7 +357,7 @@ export default function HeroBannersPage() {
         <CardContent>
           {banners.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              <Image className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <ImageIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
               <p>Нет созданных баннеров</p>
               <Button 
                 className="mt-4" 
@@ -385,11 +385,16 @@ export default function HeroBannersPage() {
                   .map((banner) => (
                     <TableRow key={banner.id}>
                       <TableCell>
-                        <img 
-                          src={banner.imageUrl} 
-                          alt={banner.title}
-                          className="w-16 h-10 object-cover rounded border"
-                        />
+                        <div className="relative h-10 w-16 overflow-hidden rounded border">
+                          <NextImage
+                            src={banner.imageUrl}
+                            alt={banner.title || 'Баннер'}
+                            fill
+                            className="object-cover"
+                            sizes="64px"
+                            unoptimized
+                          />
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,21 +10,90 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Bot, Send, User, Pencil, Trash2, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider'
 import ModelPicker from '@/components/ai/ModelPicker'
-import { FileUpload } from '@/components/ui/file-upload'
 import ChatMessageRenderer from '@/components/messenger/ChatMessageRenderer'
+
+type ChatAttachment = { url: string; name?: string; contentType?: string }
+type ChatMessage = { role: 'user' | 'assistant'; content: string; attachments?: ChatAttachment[] }
+type ChatSession = { id: string; title: string; model: string; createdAt: string; updatedAt: string }
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
+const normalizeAttachments = (value: unknown): ChatAttachment[] => {
+  if (!Array.isArray(value)) return []
+  const out: ChatAttachment[] = []
+  for (const item of value) {
+    if (!isRecord(item)) continue
+    const url = typeof item.url === 'string' ? item.url : undefined
+    if (!url) continue
+    const name = typeof item.name === 'string' ? item.name : undefined
+    const contentType = typeof item.contentType === 'string' ? item.contentType : undefined
+    out.push({ url, name, contentType })
+  }
+  return out
+}
+
+const normalizeMessage = (value: unknown): ChatMessage | null => {
+  if (!isRecord(value)) return null
+  const role = value.role
+  if (role !== 'user' && role !== 'assistant') return null
+  const content = typeof value.content === 'string' ? value.content : ''
+  const attachments = normalizeAttachments(value.attachments)
+  return {
+    role,
+    content,
+    attachments: attachments.length ? attachments : undefined,
+  }
+}
+
+const normalizeMessages = (value: unknown): ChatMessage[] => {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => normalizeMessage(item))
+    .filter((msg): msg is ChatMessage => Boolean(msg))
+}
+
+const normalizeSession = (value: unknown): ChatSession | null => {
+  if (!isRecord(value)) return null
+  const id = typeof value.id === 'string' ? value.id : undefined
+  const title = typeof value.title === 'string' ? value.title : 'Диалог'
+  const model = typeof value.model === 'string' ? value.model : ''
+  const createdAt = typeof value.createdAt === 'string' ? value.createdAt : new Date().toISOString()
+  const updatedAt = typeof value.updatedAt === 'string' ? value.updatedAt : createdAt
+  if (!id) return null
+  return { id, title, model, createdAt, updatedAt }
+}
+
+const normalizeSessions = (value: unknown): ChatSession[] => {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => normalizeSession(item))
+    .filter((session): session is ChatSession => Boolean(session))
+}
+
+const getErrorMessage = (error: unknown, fallback = 'Произошла ошибка'): string => {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error) return error
+  return fallback
+}
+
+const parseGenerationStatus = (value: unknown): { status: string; url?: string } => {
+  if (!isRecord(value)) return { status: '' }
+  const status = typeof value.status === 'string' ? value.status : ''
+  const url = typeof value.url === 'string' ? value.url : undefined
+  return { status, url }
+}
 
 export default function AIChat() {
   const { token } = useAuth()
   const [sessionId, setSessionId] = useState<string>('');
-  const [sessions, setSessions] = useState<{ id: string; title: string; model: string; createdAt: string; updatedAt: string }[]>([]);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState<string>('');
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; attachments?: { url: string; name?: string; contentType?: string }[] }[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [models, setModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
-  const [attachments, setAttachments] = useState<{ url: string; name?: string; contentType?: string }[]>([]);
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [genOpen, setGenOpen] = useState(false)
   const [genType, setGenType] = useState<'image' | 'video'>('image')
@@ -40,41 +109,40 @@ export default function AIChat() {
     }
   }, [messages]);
 
-  // Load sessions list and open the last one
-  const refreshSessions = async () => {
-    const res = await fetch('/api/ai/sessions', { cache: 'no-store', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
-    const data = await res.json().catch(() => null)
-    const items = Array.isArray(data?.items) ? data.items : []
-    setSessions(items)
-    if (!sessionId && items.length) {
-      selectSession(items[0].id)
-    }
-  }
-
-  const selectSession = async (id: string) => {
+  const selectSession = useCallback(async (id: string) => {
     setSessionId(id)
-    const res = await fetch(`/api/ai/sessions/${id}/messages`, { cache: 'no-store', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
-    const data = await res.json().catch(() => null)
-    const items = Array.isArray(data?.items) ? data.items : []
-    setMessages(items.map((m: any) => ({ role: m.role, content: m.content })))
-  }
+    const res = await fetch(`/api/ai/sessions/${id}/messages`, {
+      cache: 'no-store',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    })
+    const data = (await res.json().catch(() => null)) as unknown
+    const items = isRecord(data) && 'items' in data ? (data as { items?: unknown }).items : undefined
+    const normalized = normalizeMessages(items)
+    setMessages(normalized)
+  }, [token])
 
-  useEffect(() => { refreshSessions() }, [])
+  const refreshSessions = useCallback(async () => {
+    const res = await fetch('/api/ai/sessions', {
+      cache: 'no-store',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    })
+    const data = (await res.json().catch(() => null)) as unknown
+    const items = isRecord(data) && 'items' in data ? (data as { items?: unknown }).items : undefined
+    const normalized = normalizeSessions(items)
+    setSessions(normalized)
+    if (!sessionId && normalized.length) {
+      await selectSession(normalized[0].id)
+    }
+  }, [token, sessionId, selectSession])
+
+  useEffect(() => { refreshSessions() }, [refreshSessions])
 
   // Load available models and current config
   useEffect(() => {
     (async () => {
       try {
-        const dbg = await fetch('/api/ai/chat/debug', { cache: 'no-store' }).then(r => r.json()).catch(() => null)
-        if (dbg?.model && typeof dbg.model === 'string') setSelectedModel(dbg.model)
-      } catch {}
-      try {
-        const res = await fetch('/api/ai/models', { cache: 'no-store' })
-        const data = await res.json().catch(() => null)
-        const ids: string[] = Array.isArray(data?.data)
-          ? data.data.map((m: any) => m?.id).filter((s: any) => typeof s === 'string')
-          : (Array.isArray(data?.data?.data) ? data.data.data.map((m: any) => m?.id).filter((s: any) => typeof s === 'string') : [])
-        if (ids.length) setModels(ids)
+        const dbgRaw = (await fetch('/api/ai/chat/debug', { cache: 'no-store' }).then(r => r.json()).catch(() => null)) as unknown
+        if (isRecord(dbgRaw) && typeof dbgRaw.model === 'string') setSelectedModel(dbgRaw.model)
       } catch {}
     })()
   }, [])
@@ -100,8 +168,12 @@ export default function AIChat() {
       let currentId = sessionId
       if (!currentId) {
         const create = await fetch('/api/ai/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ title: 'Новый диалог', model: selectedModel || undefined }) })
-        const data = await create.json().catch(() => null)
-        currentId = data?.id
+        const payload = (await create.json().catch(() => null)) as unknown
+        const newId = isRecord(payload) && typeof payload.id === 'string' ? payload.id : undefined
+        if (!newId) {
+          throw new Error('Не удалось создать сессию ИИ')
+        }
+        currentId = newId
         setSessionId(currentId)
         refreshSessions()
       }
@@ -138,7 +210,7 @@ export default function AIChat() {
           return updated;
         });
       }
-    } catch (err) {
+    } catch {
       setMessages(prev => {
         const updated = [...prev];
         const idx = updated.findIndex((m, i) => i === updated.length - 1 && m.role === 'assistant');
@@ -166,8 +238,9 @@ export default function AIChat() {
               <div className="p-3">
                 <Button className="w-full" variant="secondary" onClick={async () => {
                   const create = await fetch('/api/ai/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ title: 'Новый диалог', model: selectedModel || undefined }) })
-                  const data = await create.json().catch(() => null)
-                  if (data?.id) { await refreshSessions(); await selectSession(data.id) }
+                  const payload = (await create.json().catch(() => null)) as unknown
+                  const newId = isRecord(payload) && typeof payload.id === 'string' ? payload.id : undefined
+                  if (newId) { await refreshSessions(); await selectSession(newId) }
                 }}>Новый диалог</Button>
               </div>
               <Separator />
@@ -261,27 +334,38 @@ export default function AIChat() {
             )}
             
             <div className="space-y-4">
-              {messages.map((message, index) => (
-                <div key={index} className="flex gap-3">
-                  {message.role === 'assistant' ? (
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback>
-                        <Bot className="h-4 w-4" />
-                      </AvatarFallback>
-                    </Avatar>
-                  ) : <div className="w-8" />}
-                  <div className="flex-1">
-                    <ChatMessageRenderer msg={message as any} />
+              {messages.map((message, index) => {
+                const renderMsg = {
+                  role: message.role,
+                  content: message.content,
+                  attachments: (message.attachments || []).map((att) => ({
+                    url: att.url,
+                    fileName: att.name,
+                    contentType: att.contentType,
+                  })),
+                }
+                return (
+                  <div key={index} className="flex gap-3">
+                    {message.role === 'assistant' ? (
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback>
+                          <Bot className="h-4 w-4" />
+                        </AvatarFallback>
+                      </Avatar>
+                    ) : <div className="w-8" />}
+                    <div className="flex-1">
+                      <ChatMessageRenderer msg={renderMsg} />
+                    </div>
+                    {message.role === 'user' ? (
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback>
+                          <User className="h-4 w-4" />
+                        </AvatarFallback>
+                      </Avatar>
+                    ) : <div className="w-8" />}
                   </div>
-                  {message.role === 'user' ? (
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback>
-                        <User className="h-4 w-4" />
-                      </AvatarFallback>
-                    </Avatar>
-                  ) : <div className="w-8" />}
-                </div>
-              ))}
+                )
+              })}
               
               {isLoading && (
                 <div className="flex gap-3 justify-start">
@@ -341,67 +425,77 @@ export default function AIChat() {
                       let currentId = sessionId
                       if (!currentId) {
                         const create = await fetch('/api/ai/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ title: 'Новый диалог', model: selectedModel || undefined }) })
-                        const dj = await create.json().catch(() => null)
-                        currentId = dj?.id
-                        if (currentId) setSessionId(currentId)
+                        const payload = (await create.json().catch(() => null)) as unknown
+                        const newId = isRecord(payload) && typeof payload.id === 'string' ? payload.id : undefined
+                        if (newId) {
+                          currentId = newId
+                          setSessionId(newId)
+                        }
                       }
                       setGenBusy(true); setGenStatus('')
                       try {
                         if (genType === 'image') {
                           const filesUrl = attachments.filter(a => (a.contentType || '').startsWith('image/')).map(a => a.url)
                           const res = await fetch('/api/ai/images/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: genModel, prompt: genPrompt.trim(), filesUrl }) })
-                          const j = await res.json().catch(() => null)
-                          if (!res.ok || !j?.requestId) throw new Error(j?.error || 'Ошибка старта генерации')
-                          const id = j.requestId
+                          const responseBody = (await res.json().catch(() => null)) as unknown
+                          const requestId = isRecord(responseBody) && typeof responseBody.requestId === 'string' ? responseBody.requestId : undefined
+                          const responseError = isRecord(responseBody) && typeof responseBody.error === 'string' ? responseBody.error : undefined
+                          if (!res.ok || !requestId) throw new Error(responseError || 'Ошибка старта генерации')
+                          const id = requestId
                           setGenStatus('Запущено…')
                           let tries = 0
                           const poll = async () => {
                             tries++
-                            const s = await fetch(`/api/ai/images/${id}`).then(r => r.json()).catch(() => null)
-                            const status = (s?.status || '').toUpperCase()
-                            if (status === 'COMPLETED' && s?.url) {
-                              setMessages(prev => [...prev, { role: 'assistant', content: `Готово: ${s.url}`, attachments: [{ url: s.url, name: 'image.png', contentType: 'image/png' }] }])
+                            const statusPayload = (await fetch(`/api/ai/images/${id}`).then(r => r.json()).catch(() => null)) as unknown
+                            const { status, url } = parseGenerationStatus(statusPayload)
+                            const upper = status.toUpperCase()
+                            if (upper === 'COMPLETED' && url) {
+                              setMessages(prev => [...prev, { role: 'assistant', content: `Готово: ${url}`, attachments: [{ url, name: 'image.png', contentType: 'image/png' }] }])
                               if (currentId) {
-                                await fetch(`/api/ai/sessions/${currentId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ role: 'assistant', content: `Готово: ${s.url}` }) })
+                                await fetch(`/api/ai/sessions/${currentId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ role: 'assistant', content: `Готово: ${url}` }) })
                               }
                               setGenBusy(false); setGenStatus('')
                               return
                             }
-                            if (status === 'FAILED') { setGenBusy(false); setGenStatus('Ошибка генерации'); return }
+                            if (upper === 'FAILED') { setGenBusy(false); setGenStatus('Ошибка генерации'); return }
                             if (tries > 60) { setGenBusy(false); setGenStatus('Таймаут ожидания'); return }
-                            setGenStatus(`Статус: ${status || '…'}`)
+                            setGenStatus(`Статус: ${upper || '…'}`)
                             setTimeout(poll, 3000)
                           }
                           setTimeout(poll, 2500)
                         } else {
                           const imageUrls = attachments.filter(a => (a.contentType || '').startsWith('image/')).map(a => a.url)
                           const res = await fetch('/api/ai/videos/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: genModel, prompt: genPrompt.trim(), imageUrls }) })
-                          const j = await res.json().catch(() => null)
-                          if (!res.ok || !j?.requestId) throw new Error(j?.error || 'Ошибка старта генерации')
-                          const id = j.requestId
+                          const responseBody = (await res.json().catch(() => null)) as unknown
+                          const requestId = isRecord(responseBody) && typeof responseBody.requestId === 'string' ? responseBody.requestId : undefined
+                          const responseError = isRecord(responseBody) && typeof responseBody.error === 'string' ? responseBody.error : undefined
+                          if (!res.ok || !requestId) throw new Error(responseError || 'Ошибка старта генерации')
+                          const id = requestId
                           setGenStatus('Запущено…')
                           let tries = 0
                           const poll = async () => {
                             tries++
-                            const s = await fetch(`/api/ai/videos/${id}`).then(r => r.json()).catch(() => null)
-                            const status = (s?.status || '').toUpperCase()
-                            if (status === 'COMPLETED' && s?.url) {
-                              setMessages(prev => [...prev, { role: 'assistant', content: `Видео готово: ${s.url}` }])
+                            const statusPayload = (await fetch(`/api/ai/videos/${id}`).then(r => r.json()).catch(() => null)) as unknown
+                            const { status, url } = parseGenerationStatus(statusPayload)
+                            const upper = status.toUpperCase()
+                            if (upper === 'COMPLETED' && url) {
+                              setMessages(prev => [...prev, { role: 'assistant', content: `Видео готово: ${url}` }])
                               if (currentId) {
-                                await fetch(`/api/ai/sessions/${currentId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ role: 'assistant', content: `Видео готово: ${s.url}` }) })
+                                await fetch(`/api/ai/sessions/${currentId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ role: 'assistant', content: `Видео готово: ${url}` }) })
                               }
                               setGenBusy(false); setGenStatus('')
                               return
                             }
-                            if (status === 'FAILED') { setGenBusy(false); setGenStatus('Ошибка генерации'); return }
+                            if (upper === 'FAILED') { setGenBusy(false); setGenStatus('Ошибка генерации'); return }
                             if (tries > 80) { setGenBusy(false); setGenStatus('Таймаут ожидания'); return }
-                            setGenStatus(`Статус: ${status || '…'}`)
+                            setGenStatus(`Статус: ${upper || '…'}`)
                             setTimeout(poll, 4000)
                           }
                           setTimeout(poll, 3000)
                         }
-                      } catch (e: any) {
-                        setGenBusy(false); setGenStatus(e?.message || 'Ошибка')
+                      } catch (error) {
+                        setGenBusy(false)
+                        setGenStatus(getErrorMessage(error, 'Ошибка'))
                       }
                     }}>Сгенерировать</Button>
                     {genStatus && <div className="text-xs text-muted-foreground">{genStatus}</div>}
@@ -440,9 +534,12 @@ export default function AIChat() {
                       form.append('file', file)
                       form.append('prefix', 'ai')
                       const res = await fetch('/api/upload', { method: 'POST', body: form })
-                      const j = await res.json().catch(() => null)
-                      if (res.ok && j?.data?.url) {
-                        const url: string = j.data.url
+                      const payload = (await res.json().catch(() => null)) as unknown
+                      const data = isRecord(payload) && 'data' in payload && isRecord((payload as { data?: unknown }).data)
+                        ? (payload as { data?: unknown }).data as Record<string, unknown>
+                        : undefined
+                      const url = typeof data?.url === 'string' ? data.url : undefined
+                      if (res.ok && url) {
                         const name = url.split('/').pop() || file.name
                         setAttachments(prev => [...prev, { url, name, contentType: file.type }])
                       }

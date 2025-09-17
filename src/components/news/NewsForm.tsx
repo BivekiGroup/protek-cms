@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation } from '@apollo/client'
 import { CREATE_NEWS, UPDATE_NEWS } from '@/lib/graphql/mutations'
 import ModelPicker from '@/components/ai/ModelPicker'
@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import { FileUpload } from '@/components/ui/file-upload'
 import RichTextEditor from '@/components/editor/RichTextEditor'
 import { toast } from 'sonner'
+import Image from 'next/image'
 
 type NewsItem = {
   id?: string
@@ -48,19 +49,19 @@ export default function NewsForm({ initial }: { initial?: Partial<NewsItem> }) {
   }, [initial])
 
   const [createNews, { loading: creating }] = useMutation(CREATE_NEWS, {
-    onCompleted: (res) => {
+    onCompleted: ({ createNews }) => {
       toast.success('Новость создана')
-      router.push(`/dashboard/news/${res.createNews.id}`)
+      router.push(`/dashboard/news/${createNews.id}`)
     },
-    onError: (e) => toast.error(e.message || 'Ошибка создания')
+    onError: (error) => toast.error(error.message || 'Ошибка создания')
   })
 
   const [updateNews, { loading: updating }] = useMutation(UPDATE_NEWS, {
-    onCompleted: (res) => {
+    onCompleted: () => {
       toast.success('Новость сохранена')
       // stay on page
     },
-    onError: (e) => toast.error(e.message || 'Ошибка сохранения')
+    onError: (error) => toast.error(error.message || 'Ошибка сохранения')
   })
 
   const busy = creating || updating
@@ -130,7 +131,8 @@ export default function NewsForm({ initial }: { initial?: Partial<NewsItem> }) {
       }
       setState(s => ({ ...s, title }))
       toast.success('Готово', { id: loadingId })
-    } catch (e) {
+    } catch (error) {
+      console.error(error)
       toast.error('Не удалось сгенерировать заголовок', { id: loadingId })
     } finally {
       setGenBusy((b) => ({ ...b, title: false }))
@@ -155,7 +157,8 @@ export default function NewsForm({ initial }: { initial?: Partial<NewsItem> }) {
       }
       setState(s => ({ ...s, shortDescription: summary }))
       toast.success('Готово', { id: loadingId })
-    } catch (e) {
+    } catch (error) {
+      console.error(error)
       toast.error('Не удалось сгенерировать описание', { id: loadingId })
     } finally {
       setGenBusy((b) => ({ ...b, summary: false }))
@@ -180,7 +183,8 @@ export default function NewsForm({ initial }: { initial?: Partial<NewsItem> }) {
       }
       setState(s => ({ ...s, contentHtml: html }))
       toast.success('Готово', { id: loadingId })
-    } catch (e) {
+    } catch (error) {
+      console.error(error)
       toast.error('Не удалось сгенерировать статью', { id: loadingId })
     } finally {
       setGenBusy((b) => ({ ...b, content: false }))
@@ -258,7 +262,16 @@ export default function NewsForm({ initial }: { initial?: Partial<NewsItem> }) {
       <div className="space-y-2">
         <Label>Обложка *</Label>
         {state.coverImageUrl && (
-          <img src={state.coverImageUrl} alt={state.coverImageAlt || 'cover'} className="w-full max-w-xl h-48 object-cover rounded-lg border" />
+          <div className="relative w-full max-w-xl overflow-hidden rounded-lg border">
+            <Image
+              src={state.coverImageUrl}
+              alt={state.coverImageAlt || 'Обложка новости'}
+              width={1024}
+              height={512}
+              sizes="(max-width: 768px) 100vw, 640px"
+              className="h-48 w-full object-cover"
+            />
+          </div>
         )}
         <FileUpload onUpload={(url) => setState(s => ({ ...s, coverImageUrl: url }))} prefix="news" />
       </div>

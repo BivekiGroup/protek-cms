@@ -50,7 +50,7 @@ export class InvoiceService {
     return `СЧ-${year}${month}${day}-${hours}${minutes}${seconds}`
   }
 
-  static async generateQRCode(amount: number, purpose: string, invoiceNumber: string): Promise<string> {
+  static async generateQRCode(amount: number, purpose: string): Promise<string> {
     // Генерируем QR-код для СБП (Система быстрых платежей)
     const sbpData = [
       'ST00012',                                    // Статичный QR-код
@@ -106,8 +106,7 @@ export class InvoiceService {
     console.log('📄 Генерируем QR-код для счета:', invoiceData.invoiceNumber)
     const qrCodeDataURL = await this.generateQRCode(
       invoiceData.amount,
-      invoiceData.description,
-      invoiceData.invoiceNumber
+      invoiceData.description
     )
 
     console.log('📄 Создаем PDF документ для счета:', invoiceData.invoiceNumber)

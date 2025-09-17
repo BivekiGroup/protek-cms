@@ -57,7 +57,7 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json({ meta: null }, { status: 200, headers: corsHeaders() })
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: 'Internal error' }, { status: 500, headers: corsHeaders() })
   }
 }
@@ -87,4 +87,3 @@ function corsHeaders() {
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
   }
 }
-

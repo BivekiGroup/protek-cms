@@ -106,15 +106,6 @@ async function pageContainsArticleBrand(
   }
 }
 
-function normalizePrice(text: string): number | null {
-  const cleaned = text
-    .replace(/[^0-9.,]/g, "")
-    .replace(/\s+/g, "")
-    .replace(",", ".");
-  const n = parseFloat(cleaned);
-  return Number.isFinite(n) ? n : null;
-}
-
 async function restoreSession(page: Page): Promise<boolean> {
   try {
     if (!fs.existsSync(COOKIE_FILE)) return false;
@@ -463,14 +454,12 @@ async function openSearch(page: Page, article: string, brand?: string) {
         pushAll(bySel('input[id*="Search" i][type="text" i]'))
         pushAll(bySel('input[type="search" i]'))
         pushAll(bySel('input[placeholder*="поиск" i], input[placeholder*="article" i], input[placeholder*="номер" i]'))
-        let used: HTMLInputElement | HTMLTextAreaElement | null = null
         for (const el of candidates) {
           try {
             el.focus();
             (el as any).value = art
             el.dispatchEvent(new Event('input', { bubbles: true }))
             el.dispatchEvent(new Event('change', { bubbles: true }))
-            used = el
             break
           } catch {}
         }
@@ -603,7 +592,6 @@ async function scrapeTop3Prices(
           const out: number[] = [];
           for (const tr of rows) {
             // Try common price locations inside row, with broader fallbacks
-            const texts: string[] = [];
             const candidates: { txt: string; inPriceCell: boolean; trusted: boolean }[] = [];
 
             // Known classes/attributes
@@ -829,7 +817,7 @@ function parsePricesFromDxPayload(payload: string): number[] {
   return out.slice(0, 3)
 }
 
-async function captureTop3PricesFromDX(page: Page, article: string, brand?: string): Promise<number[]> {
+async function captureTop3PricesFromDX(page: Page, _article: string, _brand?: string): Promise<number[]> {
   const captured: string[] = []
   let lastAt = 0
   const wantHost = new URL(ZZAP_BASE).host
@@ -933,17 +921,17 @@ async function openStats(page: Page): Promise<Page> {
 }
 
 function parseDxPayloadToPoints(payload: string): { label: string; count: number }[] {
+  let source = payload
   try {
     // Accept either full /*DX*/({...}) or inner objectModel string
-    let src = payload
     const m0 = payload.match(/\/\*DX\*\/\((\{[\s\S]*?\})\)/)
-    if (m0 && m0[1]) src = m0[1]
+    if (m0 && m0[1]) source = m0[1]
   } catch {}
   const out: { label: string; count: number }[] = []
   try {
     const rxPoint = /x:\s*new\s+Date\(\s*(\d{4})\s*,\s*(\d{1,2})\s*,\s*1\s*\)[^\]]*?y:\s*\[(\d+)\]/g
     let m: RegExpExecArray | null
-    while ((m = rxPoint.exec(payload))) {
+    while ((m = rxPoint.exec(source))) {
       const yy = parseInt(m[1], 10)
       const mm = parseInt(m[2], 10)
       const val = parseInt(m[3], 10)
@@ -1029,11 +1017,11 @@ async function captureDxFromSearch(page: Page, jobId: string, article: string): 
 
 async function scrapeMonthlyCounts(
   statsPage: Page,
-  monthLabels: string[]
+  _monthLabels: string[]
 ): Promise<{ label: string; count: number }[]> {
   try {
     // 1) Попытка прочитать данные напрямую из Highcharts
-    const data = await statsPage.evaluate((wanted: string[]) => {
+    const data = await statsPage.evaluate(() => {
       const res: { label: string; count: number }[] = [];
       const w = window as any;
       const charts = (w.Highcharts?.charts || []).filter(
@@ -1070,7 +1058,7 @@ async function scrapeMonthlyCounts(
       }
       if (res.length) return res;
       return [];
-    }, monthLabels);
+    });
     if (data?.length) return data;
 
     // 2) Фолбэк: по таблице

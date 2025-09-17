@@ -9,8 +9,6 @@ import Image from '@tiptap/extension-image'
 import TextAlign from '@tiptap/extension-text-align'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, Quote, AlignLeft, AlignCenter, AlignRight, Image as ImageIcon, Link as LinkIcon, Undo2, Redo2, Heading1, Heading2, Heading3 } from 'lucide-react'
 

@@ -296,7 +296,7 @@ export const OrderHistory = ({ client }: OrderHistoryProps) => {
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
-                        {order.items.slice(0, 2).map((item, index) => (
+                        {order.items.slice(0, 2).map((item) => (
                           <div key={item.id} className="text-sm">
                             <span className="font-medium">{item.name}</span>
                             {item.article && (

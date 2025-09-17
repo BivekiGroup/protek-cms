@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     let items
     try {
       items = await (prisma as any).zzapReportJob.findMany({ orderBy: { createdAt: 'desc' }, take, select: { id: true, status: true, processed: true, total: true, originalFilename: true, resultFile: true, error: true, createdAt: true, updatedAt: true } })
-    } catch (_e) {
+    } catch {
       items = await (prisma as any).zzapReportJob.findMany({ orderBy: { createdAt: 'desc' }, take, select: { id: true, status: true, processed: true, total: true, resultFile: true, error: true, createdAt: true, updatedAt: true } })
     }
     return new Response(JSON.stringify({ ok: true, items }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } })

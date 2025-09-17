@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
           results: Array.from({ length: rows.length }).fill(null)
         }
       })
-    } catch (_e) {
+    } catch {
       // Backward-compatible fallback if DB doesn't have originalFilename yet
       job = await (prisma as any).zzapReportJob.create({
         data: {

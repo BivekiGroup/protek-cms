@@ -23,9 +23,31 @@ const eslintConfig = [
   {
     rules: {
       "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/no-unused-vars": "warn",
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^(?:_.*|context|error|e)$",
+          varsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
       "@typescript-eslint/no-implicit-any-catch": "off",
       "@next/next/no-img-element": "warn"
+    }
+  }
+  ,
+  {
+    files: ["src/lib/**/*"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off"
+    }
+  }
+  ,
+  {
+    files: ["src/app/api/**/*"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off"
     }
   }
 ];

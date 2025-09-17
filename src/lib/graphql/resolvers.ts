@@ -1141,14 +1141,11 @@ export const resolvers = {
             where.type = filter.type
           }
           if (filter.registeredFrom || filter.registeredTo) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             where.createdAt = {} as any
             if (filter.registeredFrom) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               (where.createdAt as any).gte = filter.registeredFrom
             }
             if (filter.registeredTo) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               (where.createdAt as any).lte = filter.registeredTo
             }
           }
@@ -1247,14 +1244,11 @@ export const resolvers = {
             where.type = filter.type
           }
           if (filter.registeredFrom || filter.registeredTo) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             where.createdAt = {} as any
             if (filter.registeredFrom) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               (where.createdAt as any).gte = filter.registeredFrom
             }
             if (filter.registeredTo) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               (where.createdAt as any).lte = filter.registeredTo
             }
           }
@@ -6371,7 +6365,6 @@ export const resolvers = {
           await createAuditLog({
             userId: context.userId,
             action: AuditAction.PRODUCT_DELETE,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             details: `Массовое удаление товаров: ${products.map((p: any) => p.name).join(', ')} (${result.count} шт.)`,
             ipAddress,
             userAgent
@@ -6416,7 +6409,6 @@ export const resolvers = {
           await createAuditLog({
             userId: context.userId,
             action: AuditAction.PRODUCT_UPDATE,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             details: `Массовое изменение видимости товаров на ${isVisible ? 'видимые' : 'скрытые'}: ${products.map((p: any) => p.name).join(', ')} (${result.count} шт.)`,
             ipAddress,
             userAgent
@@ -6512,7 +6504,6 @@ export const resolvers = {
           await createAuditLog({
             userId: context.userId,
             action: AuditAction.PRODUCT_UPDATE,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             details: `Массовое перемещение товаров в категорию "${targetCategory.name}": ${products.map((p: any) => p.name).join(', ')} (${products.length} шт.)`,
             ipAddress,
             userAgent
@@ -9536,23 +9527,24 @@ export const resolvers = {
           throw new Error('Недостаточно прав для отмены заказа')
         }
 
-        const currentStatus = order.status as PrismaOrderStatus
+        const currentStatus = String(order.status)
+        const cancelStatuses = new Set<string>([PrismaOrderStatus.CANCELED, PrismaOrderStatus.REFUNDED])
 
-        if ([PrismaOrderStatus.CANCELED, PrismaOrderStatus.REFUNDED].includes(currentStatus)) {
+        if (cancelStatuses.has(currentStatus)) {
           return order
         }
 
-        const allowedClientStatuses: PrismaOrderStatus[] = [
+        const allowedClientStatuses = new Set<string>([
           PrismaOrderStatus.PENDING,
           PrismaOrderStatus.PAID,
           PrismaOrderStatus.PROCESSING
-        ]
+        ])
 
-        if (isClientRequest && !allowedClientStatuses.includes(currentStatus)) {
+        if (isClientRequest && !allowedClientStatuses.has(currentStatus)) {
           throw new Error('Заказ нельзя отменить на текущем этапе')
         }
 
-        if (![PrismaOrderStatus.CANCELED, PrismaOrderStatus.REFUNDED].includes(currentStatus)) {
+        if (!cancelStatuses.has(currentStatus)) {
           await restockOrderItems(order.items)
         }
 
@@ -9622,7 +9614,7 @@ export const resolvers = {
           throw new Error('Недостаточно прав для возврата заказа')
         }
 
-        const currentStatus = order.status as PrismaOrderStatus
+        const currentStatus = String(order.status)
 
         if (currentStatus === PrismaOrderStatus.CANCELED) {
           throw new Error('Отмененный заказ нельзя вернуть')
@@ -9660,11 +9652,11 @@ export const resolvers = {
           return updatedOrder
         }
 
-        const allowedStatuses: PrismaOrderStatus[] = [
+        const allowedStatuses = new Set<string>([
           PrismaOrderStatus.DELIVERED
-        ]
+        ])
 
-        if (!allowedStatuses.includes(currentStatus)) {
+        if (!allowedStatuses.has(currentStatus)) {
           throw new Error('Возврат доступен только для доставленных заказов')
         }
 
@@ -9725,14 +9717,14 @@ export const resolvers = {
         }
 
         const nextStatus = status
-        const currentStatus = order.status as PrismaOrderStatus
+        const currentStatus = String(order.status)
+        const cancelStatuses = new Set<string>([PrismaOrderStatus.CANCELED, PrismaOrderStatus.REFUNDED])
 
         if (currentStatus === nextStatus) {
           return order
         }
 
-        if (![PrismaOrderStatus.CANCELED, PrismaOrderStatus.REFUNDED].includes(currentStatus) &&
-            [PrismaOrderStatus.CANCELED, PrismaOrderStatus.REFUNDED].includes(nextStatus)) {
+        if (!cancelStatuses.has(currentStatus) && cancelStatuses.has(nextStatus)) {
           await restockOrderItems(order.items)
         }
 

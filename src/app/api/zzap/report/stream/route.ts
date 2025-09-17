@@ -70,7 +70,6 @@ export async function GET(req: NextRequest) {
           // Если ФС-логов нет, периодически подгружаем свежие строки из БД
           try {
             if (!fs.existsSync(logPath)) {
-              const sinceIso = lastUpdated || ''
               const rows: any[] = await (prisma as any).$queryRawUnsafe(`SELECT line, "createdAt" FROM "zzap_report_job_logs" WHERE "jobId"='${id.replace(/'/g, "''")}' ORDER BY "createdAt" ASC LIMIT 100`)
               for (const r of rows) sendLog(String(r?.line || ''))
             }

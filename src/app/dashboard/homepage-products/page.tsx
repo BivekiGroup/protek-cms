@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import NextImage from 'next/image'
 import { useQuery, useMutation } from '@apollo/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +15,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { 
@@ -145,7 +145,6 @@ export default function HomepageProductsPage() {
 
   // Состояния для топ продаж
   const [showTopSalesProductSelector, setShowTopSalesProductSelector] = useState(false)
-  const [editingTopSalesProduct, setEditingTopSalesProduct] = useState<TopSalesProduct | null>(null)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
 
   // Состояния для новых поступлений
@@ -596,12 +595,15 @@ export default function HomepageProductsPage() {
                     <div key={dailyProduct.id} className="border rounded-lg p-4 flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         {/* Изображение товара */}
-                        <div className="w-16 h-16 bg-gray-100 rounded border flex items-center justify-center">
+                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
                           {dailyProduct.product.images?.[0]?.url ? (
-                            <img 
-                              src={dailyProduct.product.images[0].url} 
+                            <NextImage
+                              src={dailyProduct.product.images[0].url}
                               alt={dailyProduct.product.name}
-                              className="w-full h-full object-cover rounded"
+                              fill
+                              className="object-cover rounded"
+                              sizes="64px"
+                              unoptimized
                             />
                           ) : (
                             <Package className="w-6 h-6 text-gray-400" />
@@ -694,12 +696,15 @@ export default function HomepageProductsPage() {
                     <div key={bestPriceProduct.id} className="border rounded-lg p-4 flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         {/* Изображение товара */}
-                        <div className="w-16 h-16 bg-gray-100 rounded border flex items-center justify-center">
+                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
                           {bestPriceProduct.product.images?.[0]?.url ? (
-                            <img 
-                              src={bestPriceProduct.product.images[0].url} 
+                            <NextImage
+                              src={bestPriceProduct.product.images[0].url}
                               alt={bestPriceProduct.product.name}
-                              className="w-full h-full object-cover rounded"
+                              fill
+                              className="object-cover rounded"
+                              sizes="64px"
+                              unoptimized
                             />
                           ) : (
                             <Package className="w-6 h-6 text-gray-400" />
@@ -788,12 +793,15 @@ export default function HomepageProductsPage() {
                     <div key={topSalesProduct.id} className="border rounded-lg p-4 flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         {/* Изображение товара */}
-                        <div className="w-16 h-16 bg-gray-100 rounded border flex items-center justify-center">
+                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
                           {topSalesProduct.product.images?.[0]?.url ? (
-                            <img 
-                              src={topSalesProduct.product.images[0].url} 
+                            <NextImage
+                              src={topSalesProduct.product.images[0].url}
                               alt={topSalesProduct.product.name}
-                              className="w-full h-full object-cover rounded"
+                              fill
+                              className="object-cover rounded"
+                              sizes="64px"
+                              unoptimized
                             />
                           ) : (
                             <Package className="w-6 h-6 text-gray-400" />
@@ -890,12 +898,15 @@ export default function HomepageProductsPage() {
                   {newArrivalProducts.map((item) => (
                     <div key={item.id} className="border rounded-lg p-4 flex items-center justify-between">
                       <div className="flex items-center space-x-4">
-                        <div className="w-16 h-16 bg-gray-100 rounded border flex items-center justify-center">
+                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
                           {item.product.images?.[0]?.url ? (
-                            <img 
-                              src={item.product.images[0].url} 
+                            <NextImage
+                              src={item.product.images[0].url}
                               alt={item.product.name}
-                              className="w-full h-full object-cover rounded"
+                              fill
+                              className="object-cover rounded"
+                              sizes="64px"
+                              unoptimized
                             />
                           ) : (
                             <Package className="w-6 h-6 text-gray-400" />
@@ -1003,11 +1014,14 @@ export default function HomepageProductsPage() {
                     <div className="flex items-center space-x-3">
                       <div className="w-12 h-12 bg-gray-100 rounded border flex items-center justify-center">
                         {product.images?.[0]?.url ? (
-                          <img 
-                            src={product.images[0].url} 
-                            alt={product.name}
-                            className="w-full h-full object-cover rounded"
-                          />
+                          <NextImage
+                              src={product.images[0].url}
+                              alt={product.name}
+                              fill
+                              className="object-cover rounded"
+                              sizes="64px"
+                              unoptimized
+                            />
                         ) : (
                           <Package className="w-4 h-4 text-gray-400" />
                         )}
@@ -1081,11 +1095,14 @@ export default function HomepageProductsPage() {
                     <div className="flex items-center space-x-3">
                       <div className="w-12 h-12 bg-gray-100 rounded border flex items-center justify-center">
                         {product.images?.[0]?.url ? (
-                          <img 
-                            src={product.images[0].url} 
-                            alt={product.name}
-                            className="w-full h-full object-cover rounded"
-                          />
+                          <NextImage
+                              src={product.images[0].url}
+                              alt={product.name}
+                              fill
+                              className="object-cover rounded"
+                              sizes="64px"
+                              unoptimized
+                            />
                         ) : (
                           <Package className="w-4 h-4 text-gray-400" />
                         )}
@@ -1162,11 +1179,14 @@ export default function HomepageProductsPage() {
                     <div className="flex items-center space-x-3">
                       <div className="w-12 h-12 bg-gray-100 rounded border flex items-center justify-center">
                         {product.images?.[0]?.url ? (
-                          <img 
-                            src={product.images[0].url} 
-                            alt={product.name}
-                            className="w-full h-full object-cover rounded"
-                          />
+                          <NextImage
+                              src={product.images[0].url}
+                              alt={product.name}
+                              fill
+                              className="object-cover rounded"
+                              sizes="64px"
+                              unoptimized
+                            />
                         ) : (
                           <Package className="w-4 h-4 text-gray-400" />
                         )}
@@ -1236,11 +1256,14 @@ export default function HomepageProductsPage() {
                     <div className="flex items-center space-x-3">
                       <div className="w-12 h-12 bg-gray-100 rounded border flex items-center justify-center">
                         {product.images?.[0]?.url ? (
-                          <img 
-                            src={product.images[0].url} 
-                            alt={product.name}
-                            className="w-full h-full object-cover rounded"
-                          />
+                          <NextImage
+                              src={product.images[0].url}
+                              alt={product.name}
+                              fill
+                              className="object-cover rounded"
+                              sizes="64px"
+                              unoptimized
+                            />
                         ) : (
                           <Package className="w-4 h-4 text-gray-400" />
                         )}

@@ -76,7 +76,7 @@ const PaymentTest = () => {
         }
       })
 
-      const { payment, confirmationUrl } = result.data.createPayment
+      const { confirmationUrl } = result.data.createPayment
       toast.success('Платеж создан успешно!')
       
       // Перенаправляем на страницу оплаты

@@ -4,6 +4,8 @@ import React, { useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import clsx from 'clsx'
+import Image from 'next/image'
+import type { Components } from 'react-markdown'
 
 type Attachment = {
   url: string
@@ -23,12 +25,20 @@ function isImage(att?: Attachment) {
 }
 
 // Inline code (внутри абзаца)
-const CodeInline: React.FC<{ children?: React.ReactNode }> = ({ children }) => (
-  <code className="px-1 py-0.5 rounded bg-muted text-foreground/90">{children}</code>
+type MarkdownCodeProps = React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+  inline?: boolean
+  node?: unknown
+}
+
+const CodeInline: React.FC<MarkdownCodeProps> = ({ children, className, ...rest }) => (
+  <code className={clsx('px-1 py-0.5 rounded bg-muted text-foreground/90', className)} {...rest}>
+    {children}
+  </code>
 )
 
 // Блочный код: кастомизируем именно <pre>, чтобы не ломать семантику (избежать <pre> внутри <p>)
-const PreBlock: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
+const PreBlock: React.FC<React.HTMLAttributes<HTMLPreElement> & { node?: unknown }> = ({ children, className, node: _node, ...rest }) => {
+  void _node
   const [copied, setCopied] = useState(false)
   const preRef = useRef<HTMLPreElement>(null)
   const onCopy = async () => {
@@ -40,7 +50,11 @@ const PreBlock: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
     } catch {}
   }
   return (
-    <pre ref={preRef} className={clsx('relative p-3 rounded bg-zinc-900 text-zinc-100 overflow-auto text-sm')}>
+    <pre
+      ref={preRef}
+      className={clsx('relative p-3 rounded bg-zinc-900 text-zinc-100 overflow-auto text-sm', className)}
+      {...rest}
+    >
       <button
         type="button"
         onClick={onCopy}
@@ -53,13 +67,34 @@ const PreBlock: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
   )
 }
 
-const LinkRenderer: React.FC<React.AnchorHTMLAttributes<HTMLAnchorElement>> = (props) => (
-  <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" />
+const LinkRenderer: React.FC<React.AnchorHTMLAttributes<HTMLAnchorElement>> = ({ className, ...props }) => (
+  <a
+    {...props}
+    target="_blank"
+    rel="noopener noreferrer"
+    className={clsx('text-blue-600 hover:underline', className)}
+  />
 )
 
-const ImgRenderer: React.FC<React.ImgHTMLAttributes<HTMLImageElement>> = (props) => (
-  <img {...props} className={clsx('max-w-full rounded border', props.className)} />
-)
+const ImgRenderer = ({ node, src, alt = '', className, width, height, ...rest }: { node?: unknown } & React.ImgHTMLAttributes<HTMLImageElement>) => {
+  void node
+  if (!src) return null
+  const numericWidth = typeof width === 'number' ? width : 800
+  const numericHeight = typeof height === 'number' ? height : 450
+  return (
+    <span className="block">
+      <Image
+        src={src as string}
+        alt={alt}
+        width={numericWidth}
+        height={numericHeight}
+        sizes="(max-width: 768px) 100vw, 800px"
+        className={clsx('h-auto w-full max-w-full rounded border', className)}
+        {...rest}
+      />
+    </span>
+  )
+}
 
 export default function ChatMessageRenderer({ msg }: { msg: Msg }) {
   const isUser = msg.role === 'user'
@@ -76,13 +111,30 @@ export default function ChatMessageRenderer({ msg }: { msg: Msg }) {
 
   const containerCls = clsx('flex w-full', isUser ? 'justify-end' : 'justify-start')
 
-  const components = useMemo(() => ({
-    // Встраиваемый код
-    code: ({ inline, children }: any) => inline ? <CodeInline>{children}</CodeInline> : <code>{children}</code>,
-    // Блочный код
-    pre: PreBlock as any,
-    a: LinkRenderer as any,
-    img: ImgRenderer as any,
+  const components = useMemo<Components>(() => ({
+    code: ({ inline, children, className, node: codeNode, ...props }: MarkdownCodeProps) => {
+      void codeNode
+      const rest = props
+      if (inline) {
+        return (
+          <CodeInline
+            inline
+            className={className}
+            {...rest}
+          >
+            {children}
+          </CodeInline>
+        )
+      }
+      return (
+        <code className={className} {...rest}>
+          {children}
+        </code>
+      )
+    },
+    pre: (props) => <PreBlock {...props} />,
+    a: (props) => <LinkRenderer {...props} />,
+    img: (props) => <ImgRenderer {...props} />,
   }), [])
 
   const images = (msg.attachments || []).filter(isImage)
@@ -102,7 +154,14 @@ export default function ChatMessageRenderer({ msg }: { msg: Msg }) {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {images.map((img, i) => (
               <a key={i} href={img.url} target="_blank" rel="noopener noreferrer" className="block">
-                <img src={img.url} alt={img.fileName || 'image'} className="w-full h-28 object-cover rounded border" />
+                <Image
+                  src={img.url}
+                  alt={img.fileName || 'Вложенное изображение'}
+                  width={320}
+                  height={160}
+                  sizes="(max-width: 640px) 50vw, 320px"
+                  className="h-28 w-full rounded border object-cover"
+                />
               </a>
             ))}
           </div>

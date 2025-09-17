@@ -228,9 +228,6 @@ export async function GET(req: NextRequest) {
       const devxEmailFull = '#ctl00_BodyPlace_LogonFormCallbackPanel_LogonFormLayout_AddrEmail1TextBox_I'
       const devxPassFull = '#ctl00_BodyPlace_LogonFormCallbackPanel_LogonFormLayout_PasswordTextBox_I'
 
-      // Prefer known DevExpress IDs first, then legacy ASP.NET, then generic
-      const userSelPriority = [devxEmailFull, devxEmail, devxEmailName, '#ctl00_ContentPlaceHolder1_Login1_UserName', '#ctl00_ContentPlaceHolder1_tbLogin', 'input[name*="login" i]', 'input[type="email"]', 'input[name*="email" i]']
-      const passSelPriority = [devxPassFull, devxPass, devxPassName, '#ctl00_ContentPlaceHolder1_Login1_Password', '#ctl00_ContentPlaceHolder1_tbPass', 'input[type="password"]', 'input[name*="pass" i]']
       const submitSelPriority = [
         // DevExpress button ids (guesses based on control names)
         '#ctl00_BodyPlace_LogonFormCallbackPanel_LogonFormLayout_LoginButton',

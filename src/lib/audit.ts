@@ -1,4 +1,7 @@
 import { prisma } from './prisma'
+import type { $Enums } from '@/generated/prisma'
+
+type PrismaAuditAction = $Enums.AuditAction
 
 export enum AuditAction {
   USER_LOGIN = 'USER_LOGIN',
@@ -33,7 +36,7 @@ export const createAuditLog = async (data: AuditLogData) => {
     await prisma.auditLog.create({
       data: {
         userId: data.userId,
-        action: data.action,
+        action: data.action as PrismaAuditAction,
         details: data.details,
         ipAddress: data.ipAddress,
         userAgent: data.userAgent,

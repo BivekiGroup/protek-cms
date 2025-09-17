@@ -38,16 +38,44 @@ export default function ModelPicker({ value, onChange }: { value?: string; onCha
         setLoading(true)
         const res = await fetch('/api/ai/models', { cache: 'no-store' })
         const data = await res.json().catch(() => null)
-        const list: any[] = Array.isArray(data?.data) ? data.data : (Array.isArray(data?.data?.data) ? data.data.data : [])
-        const mapped: ModelInfo[] = list.map((m) => ({
-          id: m?.id,
-          name: m?.name,
-          context_length: m?.context_length,
-          architecture: m?.architecture,
-          pricing: m?.pricing,
-          supported_parameters: m?.supported_parameters,
-        })).filter((m) => m.id)
-        setModels(mapped)
+        const extract = (value: unknown): ModelInfo[] => {
+          if (!Array.isArray(value)) return []
+          const result: ModelInfo[] = []
+          for (const raw of value) {
+            if (typeof raw !== 'object' || raw === null) continue
+            const record = raw as Record<string, unknown>
+            const id = typeof record.id === 'string' ? record.id : undefined
+            if (!id) continue
+            const name = typeof record.name === 'string' ? record.name : undefined
+            const contextLength = typeof record.context_length === 'number' ? record.context_length : undefined
+            const architecture = typeof record.architecture === 'object' && record.architecture !== null
+              ? (record.architecture as ModelInfo['architecture'])
+              : undefined
+            const pricing = typeof record.pricing === 'object' && record.pricing !== null
+              ? (record.pricing as ModelInfo['pricing'])
+              : undefined
+            const supportedParameters = Array.isArray(record.supported_parameters)
+              ? record.supported_parameters.filter((v): v is string => typeof v === 'string')
+              : undefined
+
+            result.push({
+              id,
+              name,
+              context_length: contextLength,
+              architecture,
+              pricing,
+              supported_parameters: supportedParameters,
+            })
+          }
+          return result
+        }
+
+        const payload = data?.data
+        const direct = extract(payload)
+        const nested = !direct.length && payload && typeof payload === 'object' && 'data' in (payload as Record<string, unknown>)
+          ? extract((payload as { data?: unknown }).data)
+          : []
+        setModels(direct.length ? direct : nested)
       } catch {}
       try {
         const fav = JSON.parse(localStorage.getItem('ai_favorites') || '[]')

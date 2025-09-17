@@ -1,7 +1,3 @@
-interface YandexLocationDetectRequest {
-  location: string;
-}
-
 interface YandexLocationDetectResponse {
   variants: {
     address: string;

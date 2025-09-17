@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   let body: any
   try {
     body = await req.json()
-  } catch (e) {
+  } catch {
     return new Response(JSON.stringify({ ok: false, error: 'Invalid JSON' }), { status: 400, headers })
   }
 
@@ -71,4 +71,3 @@ function normalizeArticle(article?: string | null) {
   if (!article) return ''
   return article.replace(/\s+/g, '').replace(/[-–—]+/g, '').trim().toUpperCase()
 }
-

@@ -1,3 +1,19 @@
+import type { SentMessageInfo } from 'nodemailer'
+
+type NodemailerModule = typeof import('nodemailer')
+type SmtpGlobal = typeof globalThis & { __smtp_verified?: boolean }
+
+const getErrorDetails = (error: unknown): { code: string; message: string } => {
+  if (typeof error !== 'object' || error === null) {
+    return { code: '', message: typeof error === 'string' ? error : '' }
+  }
+  const withProps = error as { code?: unknown; errno?: unknown; message?: unknown }
+  const codeValue = withProps.code ?? withProps.errno
+  const code = typeof codeValue === 'string' || typeof codeValue === 'number' ? String(codeValue).toUpperCase() : ''
+  const message = typeof withProps.message === 'string' ? withProps.message : ''
+  return { code, message }
+}
+
 export type SendEmailInput = {
   to: string
   subject: string
@@ -17,11 +33,14 @@ export async function sendEmail({ to, subject, html, text }: SendEmailInput) {
   }
 
   // Dynamic import to avoid hard dependency if not installed locally
-  let nodemailer: any
+  let nodemailer: NodemailerModule | null = null
   try {
     nodemailer = await import('nodemailer')
-  } catch (e) {
+  } catch (error) {
     throw new Error('nodemailer is not installed. Run: npm i nodemailer')
+  }
+  if (!nodemailer) {
+    throw new Error('nodemailer module did not load')
   }
 
   // Try the configured port first, then smart fallbacks (465 SSL, 2525, 25 STARTTLS)
@@ -31,7 +50,8 @@ export async function sendEmail({ to, subject, html, text }: SendEmailInput) {
   candidates.push({ port, secure: port === 465 })
   ;[465, 2525, 25].forEach((p) => { if (!seen.has(p) && p !== port) { candidates.push({ port: p, secure: p === 465 }); seen.add(p) } })
 
-  let lastErr: any = null
+  let lastErr: unknown = null
+  const globalState = globalThis as SmtpGlobal
   for (const c of candidates) {
     tried.push(`${c.port}${c.secure ? ':ssl' : ''}`)
     const transporter = nodemailer.createTransport({
@@ -44,22 +64,23 @@ export async function sendEmail({ to, subject, html, text }: SendEmailInput) {
       socketTimeout: 30_000,
     })
     try {
-      if (!(global as any).__smtp_verified) {
+      if (!globalState.__smtp_verified) {
         await transporter.verify()
-        ;(global as any).__smtp_verified = true
+        globalState.__smtp_verified = true
         console.log('[smtp] verified', { host, port: c.port, secure: c.secure })
       }
-      const info = await transporter.sendMail({ from, to, subject, html, text })
+      const info: SentMessageInfo = await transporter.sendMail({ from, to, subject, html, text })
       return info
-    } catch (e: any) {
-      lastErr = e
-      const code = String((e && (e.code || e.errno)) || '').toUpperCase()
-      const msg = String(e?.message || e)
-      const canRetry = ['ETIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND', 'ESOCKET'].includes(code) || /timed out|getaddrinfo|socket/i.test(msg)
-      console.warn('[smtp] attempt failed', { host, port: c.port, secure: c.secure, code, msg })
+    } catch (error) {
+      lastErr = error
+      const { code, message } = getErrorDetails(error)
+      const canRetry = ['ETIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND', 'ESOCKET'].includes(code) || /timed out|getaddrinfo|socket/i.test(message)
+      console.warn('[smtp] attempt failed', { host, port: c.port, secure: c.secure, code, message })
       if (!canRetry) break
       // else try next candidate
     }
   }
-  throw new Error(`SMTP send failed via ports [${tried.join(', ')}]: ${String(lastErr?.message || lastErr)}`)
+  const { message: lastMessage } = getErrorDetails(lastErr)
+  const finalMessage = lastMessage || String(lastErr ?? '') || 'Unknown error'
+  throw new Error(`SMTP send failed via ports [${tried.join(', ')}]: ${finalMessage}`)
 }

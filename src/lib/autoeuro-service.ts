@@ -389,7 +389,7 @@ class AutoEuroService {
             'Content-Type': 'application/json'
           }
         });
-      } catch (postError) {
+      } catch (_postError) {
         console.log('⚠️ AutoEuro: POST запрос не удался, пробуем GET...');
         // Если POST не работает, пробуем GET запрос
         const getUrl = `${this.baseUrl}/search_brands/${this.apiKey}?code=${encodeURIComponent(code.trim())}`;

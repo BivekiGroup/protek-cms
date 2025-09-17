@@ -1,6 +1,7 @@
 "use client"
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import Image from 'next/image'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { format } from 'date-fns'
@@ -8,6 +9,52 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
+
+type ZzapHistoryItem = {
+  id: string
+  createdAt?: string
+  article?: string
+  ok?: boolean
+  prices?: Array<string | number>
+  stats?: Record<string, unknown>
+  statsUrl?: string
+  imageUrl?: string
+}
+
+type ZzapReportHistoryItem = {
+  id: string
+  createdAt?: string
+  status?: string
+  processed?: number
+  total?: number
+  resultFile?: string
+  originalFilename?: string
+}
+
+type ZzapStreamPayload = {
+  processed?: number
+  total?: number
+  status?: string
+  resultFile?: string
+  line?: string
+  etaText?: string
+}
+
+const getErrorMessage = (error: unknown, fallback = 'Произошла ошибка'): string => {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error) return error
+  return fallback
+}
+
+const parseEventData = <T,>(event: MessageEvent, fallback: T): T => {
+  const raw = typeof event.data === 'string' ? event.data : ''
+  if (!raw) return fallback
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
 
 export default function ZzapStatsPage() {
   const [article, setArticle] = useState('')
@@ -18,8 +65,8 @@ export default function ZzapStatsPage() {
   const [error, setError] = useState<string | null>(null)
   const [debug, setDebug] = useState(false)
   const [openDirect, setOpenDirect] = useState(true)
-  const [debugInfo, setDebugInfo] = useState<any>(null)
-  const [history, setHistory] = useState<any[]>([])
+  const [debugInfo, setDebugInfo] = useState<unknown>(null)
+  const [history, setHistory] = useState<ZzapHistoryItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [historyPage, setHistoryPage] = useState(1)
@@ -40,8 +87,7 @@ export default function ZzapStatsPage() {
   const [reportRunning, setReportRunning] = useState(false)
   const [stopping, setStopping] = useState(false)
   const [jobEtaText, setJobEtaText] = useState<string>('')
-  const [reportHistory, setReportHistory] = useState<any[]>([])
-  const [stoppingId, setStoppingId] = useState<string>('')
+  const [reportHistory, setReportHistory] = useState<ZzapReportHistoryItem[]>([])
   const [jobLogs, setJobLogs] = useState<string[]>([])
   const [showLogs, setShowLogs] = useState<boolean>(true)
   const sseRef = useRef<EventSource | null>(null)
@@ -69,17 +115,13 @@ export default function ZzapStatsPage() {
       const es = new EventSource(`/api/zzap/report/stream?id=${encodeURIComponent(jobId)}`)
       esRef.current = es
       es.onmessage = (ev) => {
-        try {
-          const j = JSON.parse(ev.data || '{}')
-          // ignore status messages here; logs come via event: log
-        } catch {}
+        parseEventData<Record<string, unknown>>(ev, {})
+        // игнорируем обычные сообщения; логируем только события log
       }
       es.addEventListener('log', (ev: MessageEvent) => {
-        try {
-          const j = JSON.parse((ev as any).data || '{}')
-          const line = typeof j?.line === 'string' ? j.line : ''
-          if (line) setLines((prev) => (prev.length > 400 ? [...prev.slice(-400), line] : [...prev, line]))
-        } catch {}
+        const payload = parseEventData<{ line?: string }>(ev, {})
+        const line = typeof payload.line === 'string' ? payload.line : ''
+        if (line) setLines((prev) => (prev.length > 400 ? [...prev.slice(-400), line] : [...prev, line]))
       })
       es.addEventListener('error', () => {})
       return () => { try { es.close() } catch {}; esRef.current = null }
@@ -119,8 +161,27 @@ export default function ZzapStatsPage() {
   const loadReportHistory = useCallback(async () => {
     try {
       const res = await fetch('/api/zzap/report/history?limit=20', { cache: 'no-store' })
-      const j = await res.json().catch(() => null)
-      if (j?.ok && Array.isArray(j.items)) setReportHistory(j.items)
+      const payload = (await res.json().catch(() => null)) as { ok?: unknown; items?: unknown } | null
+      if (!payload || payload.ok === false) return
+      if (Array.isArray(payload.items)) {
+        const items: ZzapReportHistoryItem[] = []
+        for (const raw of payload.items) {
+          if (typeof raw !== 'object' || raw === null) continue
+          const record = raw as Record<string, unknown>
+          const id = typeof record.id === 'string' ? record.id : undefined
+          if (!id) continue
+          items.push({
+            id,
+            createdAt: typeof record.createdAt === 'string' ? record.createdAt : undefined,
+            status: typeof record.status === 'string' ? record.status : undefined,
+            processed: typeof record.processed === 'number' ? record.processed : undefined,
+            total: typeof record.total === 'number' ? record.total : undefined,
+            resultFile: typeof record.resultFile === 'string' ? record.resultFile : undefined,
+            originalFilename: typeof record.originalFilename === 'string' ? record.originalFilename : undefined,
+          })
+        }
+        setReportHistory(items)
+      }
     } catch {}
   }, [])
 
@@ -134,11 +195,30 @@ export default function ZzapStatsPage() {
       if (query.trim()) params.set('q', query.trim())
       const res = await fetch(`/api/zzap/history?${params.toString()}`, { cache: 'no-store' })
       if (!res.ok) throw new Error(`History error ${res.status}`)
-      const data = await res.json()
-      setHistory(data.items || [])
-      setHistoryTotal(data.total || 0)
-    } catch (e: any) {
-      setHistoryError(e?.message || 'Не удалось получить историю')
+      const payload = (await res.json().catch(() => null)) as { items?: unknown; total?: unknown } | null
+      const items: ZzapHistoryItem[] = []
+      if (payload && Array.isArray(payload.items)) {
+        for (const raw of payload.items) {
+          if (typeof raw !== 'object' || raw === null) continue
+          const record = raw as Record<string, unknown>
+          const id = typeof record.id === 'string' ? record.id : undefined
+          if (!id) continue
+          items.push({
+            id,
+            createdAt: typeof record.createdAt === 'string' ? record.createdAt : undefined,
+            article: typeof record.article === 'string' ? record.article : undefined,
+            ok: typeof record.ok === 'boolean' ? record.ok : undefined,
+            prices: Array.isArray(record.prices) ? record.prices.filter((p): p is string | number => typeof p === 'string' || typeof p === 'number') : undefined,
+            stats: typeof record.stats === 'object' && record.stats !== null ? record.stats as Record<string, unknown> : undefined,
+            statsUrl: typeof record.statsUrl === 'string' ? record.statsUrl : undefined,
+            imageUrl: typeof record.imageUrl === 'string' ? record.imageUrl : undefined,
+          })
+        }
+      }
+      setHistory(items)
+      setHistoryTotal(typeof payload?.total === 'number' ? payload.total : 0)
+    } catch (error: unknown) {
+      setHistoryError(getErrorMessage(error, 'Не удалось получить историю'))
     } finally {
       setHistoryLoading(false)
     }
@@ -165,30 +245,33 @@ export default function ZzapStatsPage() {
     setReportRunning(true)
     setJobLogs([])
     es.onmessage = (ev) => {
-      try {
-        const j = JSON.parse(ev.data || '{}')
-        if (typeof j.processed === 'number') setJobProcessed(j.processed)
-        if (typeof j.total === 'number') setJobTotal(j.total)
-        if (typeof j.total === 'number') setJobEtaText((prev) => prev || calcEtaText(Number(j.total)))
-        if (typeof j.status === 'string') setJobStatus(j.status)
-        if (typeof j.resultFile === 'string' && j.resultFile) setJobResultUrl(j.resultFile)
-        if (['done','failed','error','canceled'].includes((j.status || '').toLowerCase())) {
-          loadReportHistory()
-          setReportRunning(false)
-          try { es.close() } catch {}
-          sseRef.current = null
-          sseJobRef.current = ''
-        }
-        if (typeof j.line === 'string' && j.line) setJobLogs((prev) => (prev.length > 400 ? [...prev.slice(-400), j.line] : [...prev, j.line]))
-      } catch {}
+      const payload = parseEventData<ZzapStreamPayload>(ev, {})
+      if (typeof payload.processed === 'number') setJobProcessed(payload.processed)
+      if (typeof payload.total === 'number') setJobTotal(payload.total)
+      if (typeof payload.total === 'number') setJobEtaText((prev) => prev || calcEtaText(Number(payload.total)))
+      if (typeof payload.status === 'string') setJobStatus(payload.status)
+      if (typeof payload.resultFile === 'string' && payload.resultFile) setJobResultUrl(payload.resultFile)
+      if (['done','failed','error','canceled'].includes((payload.status || '').toLowerCase())) {
+        loadReportHistory()
+        setReportRunning(false)
+        try { es.close() } catch {}
+        sseRef.current = null
+        sseJobRef.current = ''
+      }
+      if (typeof payload.line === 'string' && payload.line) {
+        const line = payload.line
+        setJobLogs((prev) => (prev.length > 400 ? [...prev.slice(-400), line] : [...prev, line]))
+      }
+      if (typeof payload.etaText === 'string' && payload.etaText) {
+        setJobEtaText(payload.etaText)
+      }
     }
     es.addEventListener('log', (ev: MessageEvent) => {
-      try {
-        const j = JSON.parse((ev as any).data || '{}')
-        if (typeof j.line === 'string' && j.line) {
-          setJobLogs((prev) => (prev.length > 400 ? [...prev.slice(-400), j.line] : [...prev, j.line]))
-        }
-      } catch {}
+      const payload = parseEventData<ZzapStreamPayload>(ev, {})
+      if (typeof payload.line === 'string' && payload.line) {
+        const line = payload.line
+        setJobLogs((prev) => (prev.length > 400 ? [...prev.slice(-400), line] : [...prev, line]))
+      }
     })
     es.addEventListener('error', () => {})
     return () => { try { es.close() } catch {}; sseRef.current = null }
@@ -222,19 +305,22 @@ export default function ZzapStatsPage() {
         setDebugInfo(null)
         loadHistory()
       } else {
-        const data = await res.json().catch(() => ({}))
+        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
         if (debug) {
           setDebugInfo(data)
           // В режиме отладки не считаем 200 ошибкой
-          if (!res.ok || data?.ok === false) {
-            throw new Error(data?.error || `Ошибка ${res.status}`)
+          const ok = typeof data.ok === 'boolean' ? data.ok : undefined
+          const errMsg = typeof data.error === 'string' ? data.error : `Ошибка ${res.status}`
+          if (!res.ok || ok === false) {
+            throw new Error(errMsg)
           }
         } else {
-          throw new Error(data?.error || `Ошибка ${res.status}`)
+          const errMsg = typeof data.error === 'string' ? data.error : `Ошибка ${res.status}`
+          throw new Error(errMsg)
         }
       }
-    } catch (err: any) {
-      setError(err.message || 'Не удалось получить скриншот')
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, 'Не удалось получить скриншот'))
     } finally {
       setLoading(false)
     }
@@ -295,8 +381,8 @@ export default function ZzapStatsPage() {
                   loadReportHistory()
                   // SSE subscription will pick it up and update progress
                   setReportRunning(true)
-                } catch (e: any) {
-                  setJobError(e?.message || String(e))
+                } catch (error: unknown) {
+                  setJobError(getErrorMessage(error))
                 }
               }}
               disabled={!reportFile || !periodFrom || !periodTo || reportRunning}
@@ -312,8 +398,8 @@ export default function ZzapStatsPage() {
                   try {
                     // Пинаем процесс один раз — фоновой воркер продолжит
                     await fetch(`/api/zzap/report/process?id=${jobId}`, { method: 'POST' })
-                  } catch (e: any) {
-                    setJobError(e?.message || String(e))
+                  } catch (error: unknown) {
+                    setJobError(getErrorMessage(error))
                   } finally {
                     // Дальше состояние обновит SSE; история подхватится при изменении статуса
                   }
@@ -394,8 +480,8 @@ export default function ZzapStatsPage() {
                             if (j?.resultFile) setJobResultUrl(j.resultFile)
                             setJobStatus('done')
                             await loadReportHistory()
-                          } catch (e: any) {
-                            setJobError(e?.message || String(e))
+                          } catch (error: unknown) {
+                            setJobError(getErrorMessage(error, 'Не удалось сформировать XLSX'))
                           }
                         }}
                       >
@@ -526,10 +612,17 @@ export default function ZzapStatsPage() {
           {error && <div className="text-red-600 text-sm">{error}</div>}
           {imgSrc && (
             <div className="mt-2">
-              <img src={imgSrc} alt="Скриншот графика ZZAP" className="max-w-full border rounded-md" />
+              <Image
+                src={imgSrc}
+                alt="Скриншот графика ZZAP"
+                width={960}
+                height={540}
+                className="h-auto w-full max-w-full border rounded-md"
+                unoptimized
+              />
             </div>
           )}
-          {debug && debugInfo && (
+          {debug && debugInfo != null && (
             <pre className="text-xs bg-muted p-3 rounded border overflow-auto max-h-80">{JSON.stringify(debugInfo, null, 2)}</pre>
           )}
         </CardContent>
@@ -572,7 +665,11 @@ export default function ZzapStatsPage() {
                   <TableCell>{item.ok ? 'OK' : 'ERR'}</TableCell>
                   <TableCell>
                     {Array.isArray(item.prices) && item.prices.length > 0 ? (
-                      <div className="text-xs">{item.prices.slice(0,3).map((p:any,i:number)=>(<span key={i} className="mr-2">{p}</span>))}</div>
+                      <div className="text-xs">
+                        {item.prices.slice(0, 3).map((price, index) => (
+                          <span key={index} className="mr-2">{price}</span>
+                        ))}
+                      </div>
                     ) : '—'}
                   </TableCell>
                   <TableCell>

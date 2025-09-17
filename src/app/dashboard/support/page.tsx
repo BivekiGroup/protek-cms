@@ -1,6 +1,5 @@
 "use client"
-import React, { useMemo, useState } from 'react'
-import Link from 'next/link'
+import React, { useState } from 'react'
 import { useQuery, gql } from '@apollo/client'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select'
@@ -38,12 +37,22 @@ const priorityRu: Record<string, string> = {
   URGENT: 'Срочный',
 }
 
+type SupportTicket = {
+  id: string
+  subject: string
+  status: keyof typeof statusRu | string
+  priority: keyof typeof priorityRu | string
+  lastMessageAt: string
+  client?: { id?: string; name?: string; phone?: string | null } | null
+  assignedTo?: { id?: string; firstName?: string | null; lastName?: string | null } | null
+}
+
 export default function SupportTicketsPage() {
   const [status, setStatus] = useState<string | undefined>(undefined)
   const [search, setSearch] = useState('')
   const { data, loading, error, refetch } = useQuery(SUPPORT_TICKETS, { variables: { filter: { status, search: search || undefined }, limit: 50, offset: 0 } })
 
-  const tickets = data?.supportTickets || []
+  const tickets: SupportTicket[] = data?.supportTickets ?? []
 
   return (
     <div className="p-6">
@@ -82,24 +91,49 @@ export default function SupportTicketsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {tickets.map((t: any) => (
-                    <TableRow key={t.id} className="cursor-pointer" onClick={() => (window.location.href = `/dashboard/support/${t.id}`)}>
-                      <TableCell className="font-medium">{t.subject}</TableCell>
-                      <TableCell>{t.client?.name || 'Клиент'}<div className="text-xs text-muted-foreground">{t.client?.phone}</div></TableCell>
+                  {tickets.map((ticket) => (
+                    <TableRow
+                      key={ticket.id}
+                      className="cursor-pointer"
+                      onClick={() => (window.location.href = `/dashboard/support/${ticket.id}`)}
+                    >
+                      <TableCell className="font-medium">{ticket.subject}</TableCell>
                       <TableCell>
-                        <Badge variant={t.status === 'OPEN' ? 'secondary' : t.status === 'IN_PROGRESS' ? 'default' : t.status === 'RESOLVED' ? 'outline' : 'destructive'}>
-                          {statusRu[t.status] || t.status}
+                        {ticket.client?.name || 'Клиент'}
+                        <div className="text-xs text-muted-foreground">{ticket.client?.phone || ''}</div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            ticket.status === 'OPEN'
+                              ? 'secondary'
+                              : ticket.status === 'IN_PROGRESS'
+                                ? 'default'
+                                : ticket.status === 'RESOLVED'
+                                  ? 'outline'
+                                  : 'destructive'
+                          }
+                        >
+                          {statusRu[ticket.status] || ticket.status}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={t.priority === 'URGENT' ? 'destructive' : t.priority === 'HIGH' ? 'default' : 'secondary'}>
-                          {priorityRu[t.priority] || t.priority}
+                        <Badge
+                          variant={
+                            ticket.priority === 'URGENT'
+                              ? 'destructive'
+                              : ticket.priority === 'HIGH'
+                                ? 'default'
+                                : 'secondary'
+                          }
+                        >
+                          {priorityRu[ticket.priority] || ticket.priority}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {t.assignedTo ? `${t.assignedTo.firstName} ${t.assignedTo.lastName}` : '—'}
+                        {ticket.assignedTo ? `${ticket.assignedTo.firstName ?? ''} ${ticket.assignedTo.lastName ?? ''}`.trim() || '—' : '—'}
                       </TableCell>
-                      <TableCell>{new Date(t.lastMessageAt).toLocaleString()}</TableCell>
+                      <TableCell>{new Date(ticket.lastMessageAt).toLocaleString()}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

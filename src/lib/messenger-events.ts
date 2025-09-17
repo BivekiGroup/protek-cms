@@ -1,13 +1,18 @@
 import { EventEmitter } from 'events'
 
-type MessengerEventType = 'conversation.created' | 'message.created' | 'read.updated' | 'ping'
+type MessengerEventType =
+  | 'conversation.created'
+  | 'conversation.updated'
+  | 'message.created'
+  | 'read.updated'
+  | 'ping'
 
 export interface MessengerEventPayload {
   type: MessengerEventType
   conversationId?: string
   messageId?: string
   actorUserId?: string
-  data?: any
+  data?: unknown
 }
 
 type Subscriber = (event: MessengerEventPayload) => void
@@ -18,39 +23,49 @@ interface MessengerBus {
   emitToUsers: (userIds: string[], payload: MessengerEventPayload) => void
 }
 
-const globalAny = globalThis as any
+const globalScope = globalThis as { __MESSENGER_BUS__?: MessengerBus }
 
-if (!globalAny.__MESSENGER_BUS__) {
+if (!globalScope.__MESSENGER_BUS__) {
   const emitter = new EventEmitter()
   emitter.setMaxListeners(1000)
 
+  type InternalUserPayload = MessengerEventPayload & { userId: string }
+  type BroadcastPayload = MessengerEventPayload & { targets: string[] }
+
   const subscribe = (userId: string, cb: Subscriber) => {
     const channel = `user:${userId}`
-    const handler = (payload: MessengerEventPayload & { userId: string }) => {
-      if (payload && payload.userId === userId) cb(payload)
+    const userListener = (payload: InternalUserPayload) => {
+      if (payload.userId === userId) {
+        const { userId: _userId, ...rest } = payload
+        void _userId
+        cb(rest)
+      }
     }
-    const generalHandler = (payload: MessengerEventPayload & { userId?: string; targets?: string[] }) => {
-      if (Array.isArray(payload?.targets) && payload.targets.includes(userId)) cb(payload)
+    const broadcastListener = (payload: BroadcastPayload) => {
+      if (payload.targets.includes(userId)) {
+        const { targets: _targets, ...rest } = payload
+        void _targets
+        cb(rest)
+      }
     }
-    emitter.on(channel, handler as any)
-    emitter.on('broadcast', generalHandler as any)
+    emitter.on(channel, userListener)
+    emitter.on('broadcast', broadcastListener)
     return () => {
-      emitter.off(channel, handler as any)
-      emitter.off('broadcast', generalHandler as any)
+      emitter.off(channel, userListener)
+      emitter.off('broadcast', broadcastListener)
     }
   }
 
   const emitToUsers = (userIds: string[], payload: MessengerEventPayload) => {
     for (const uid of userIds) {
-      emitter.emit(`user:${uid}`, { ...payload, userId: uid })
+      const userPayload: InternalUserPayload = { ...payload, userId: uid }
+      emitter.emit(`user:${uid}`, userPayload)
     }
-    emitter.emit('broadcast', { ...payload, targets: userIds })
+    const broadcastPayload: BroadcastPayload = { ...payload, targets: userIds }
+    emitter.emit('broadcast', broadcastPayload)
   }
 
-  globalAny.__MESSENGER_BUS__ = { emitter, subscribe, emitToUsers } as MessengerBus
+  globalScope.__MESSENGER_BUS__ = { emitter, subscribe, emitToUsers }
 }
 
-export const messengerBus: MessengerBus = globalAny.__MESSENGER_BUS__
-
-
-
+export const messengerBus: MessengerBus = globalScope.__MESSENGER_BUS__!
