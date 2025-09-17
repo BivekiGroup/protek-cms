@@ -26,7 +26,8 @@ import {
   Package,
   Star,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Sparkles
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -34,6 +35,7 @@ import {
   GET_DAILY_PRODUCTS, 
   GET_BEST_PRICE_PRODUCTS, 
   GET_TOP_SALES_PRODUCTS, 
+  GET_NEW_ARRIVAL_PRODUCTS,
   GET_PRODUCTS 
 } from '@/lib/graphql/queries'
 import { 
@@ -45,7 +47,10 @@ import {
   DELETE_BEST_PRICE_PRODUCT,
   CREATE_TOP_SALES_PRODUCT,
   UPDATE_TOP_SALES_PRODUCT,
-  DELETE_TOP_SALES_PRODUCT
+  DELETE_TOP_SALES_PRODUCT,
+  CREATE_NEW_ARRIVAL_PRODUCT,
+  UPDATE_NEW_ARRIVAL_PRODUCT,
+  DELETE_NEW_ARRIVAL_PRODUCT
 } from '@/lib/graphql/mutations'
 import toast from 'react-hot-toast'
 
@@ -100,6 +105,23 @@ interface TopSalesProduct {
   updatedAt: string
 }
 
+interface NewArrivalProduct {
+  id: string
+  productId: string
+  isActive: boolean
+  sortOrder: number
+  product: {
+    id: string
+    name: string
+    article?: string
+    brand?: string
+    retailPrice?: number
+    images: { url: string; alt?: string }[]
+  }
+  createdAt: string
+  updatedAt: string
+}
+
 interface Product {
   id: string
   name: string
@@ -126,6 +148,10 @@ export default function HomepageProductsPage() {
   const [editingTopSalesProduct, setEditingTopSalesProduct] = useState<TopSalesProduct | null>(null)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
 
+  // Состояния для новых поступлений
+  const [showNewArrivalProductSelector, setShowNewArrivalProductSelector] = useState(false)
+  const [selectedNewArrivalProduct, setSelectedNewArrivalProduct] = useState<Product | null>(null)
+
   // Общие состояния
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
@@ -149,12 +175,14 @@ export default function HomepageProductsPage() {
 
   const { data: topSalesProductsData, loading: topSalesProductsLoading, refetch: refetchTopSalesProducts } = useQuery(GET_TOP_SALES_PRODUCTS)
 
+  const { data: newArrivalProductsData, loading: newArrivalProductsLoading, refetch: refetchNewArrivalProducts } = useQuery(GET_NEW_ARRIVAL_PRODUCTS)
+
   const { data: productsData, loading: productsLoading } = useQuery(GET_PRODUCTS, {
     variables: { 
       search: debouncedSearchQuery || undefined,
       limit: 100 
     },
-    skip: !showDailyProductSelector && !showBestPriceProductSelector && !showTopSalesProductSelector
+    skip: !showDailyProductSelector && !showBestPriceProductSelector && !showTopSalesProductSelector && !showNewArrivalProductSelector
   })
 
   // Мутации для товаров дня
@@ -172,10 +200,16 @@ export default function HomepageProductsPage() {
   const [updateTopSalesProduct] = useMutation(UPDATE_TOP_SALES_PRODUCT)
   const [deleteTopSalesProduct] = useMutation(DELETE_TOP_SALES_PRODUCT)
 
+  // Мутации для новых поступлений
+  const [createNewArrivalProduct] = useMutation(CREATE_NEW_ARRIVAL_PRODUCT)
+  const [updateNewArrivalProduct] = useMutation(UPDATE_NEW_ARRIVAL_PRODUCT)
+  const [deleteNewArrivalProduct] = useMutation(DELETE_NEW_ARRIVAL_PRODUCT)
+
   // Данные
   const dailyProducts: DailyProduct[] = dailyProductsData?.dailyProducts || []
   const bestPriceProducts: BestPriceProduct[] = bestPriceProductsData?.bestPriceProducts || []
   const topSalesProducts: TopSalesProduct[] = topSalesProductsData?.topSalesProducts || []
+  const newArrivalProducts: NewArrivalProduct[] = newArrivalProductsData?.newArrivalProducts || []
   const products: Product[] = productsData?.products || []
 
   // Обработчики для товаров дня
@@ -390,6 +424,79 @@ export default function HomepageProductsPage() {
     })
   }
 
+  // Обработчики для новых поступлений
+  const handleAddNewArrivalProduct = () => {
+    if (!selectedNewArrivalProduct) {
+      toast.error('Выберите товар')
+      return
+    }
+
+    createNewArrivalProduct({
+      variables: {
+        input: {
+          productId: selectedNewArrivalProduct.id,
+          isActive: true,
+          sortOrder: newArrivalProducts.length
+        }
+      },
+      onCompleted: () => {
+        toast.success('Товар добавлен в новые поступления')
+        refetchNewArrivalProducts()
+        setShowNewArrivalProductSelector(false)
+        setSelectedNewArrivalProduct(null)
+      },
+      onError: (error) => {
+        toast.error(`Ошибка: ${error.message}`)
+      }
+    })
+  }
+
+  const handleDeleteNewArrivalProduct = (id: string) => {
+    if (confirm('Вы уверены, что хотите удалить этот товар из новых поступлений?')) {
+      deleteNewArrivalProduct({
+        variables: { id },
+        onCompleted: () => {
+          toast.success('Товар удален из новых поступлений')
+          refetchNewArrivalProducts()
+        },
+        onError: (error) => {
+          toast.error(`Ошибка: ${error.message}`)
+        }
+      })
+    }
+  }
+
+  const handleToggleNewArrivalActive = (item: NewArrivalProduct) => {
+    updateNewArrivalProduct({
+      variables: {
+        id: item.id,
+        input: {
+          isActive: !item.isActive,
+          sortOrder: item.sortOrder
+        }
+      },
+      onCompleted: () => {
+        refetchNewArrivalProducts()
+      }
+    })
+  }
+
+  const handleNewArrivalSortOrderChange = (item: NewArrivalProduct, direction: 'up' | 'down') => {
+    const newSortOrder = direction === 'up' ? item.sortOrder - 1 : item.sortOrder + 1
+    updateNewArrivalProduct({
+      variables: {
+        id: item.id,
+        input: {
+          isActive: item.isActive,
+          sortOrder: Math.max(0, newSortOrder)
+        }
+      },
+      onCompleted: () => {
+        refetchNewArrivalProducts()
+      }
+    })
+  }
+
   // Утилиты
   const formatPrice = (price?: number) => {
     if (!price) return '—'
@@ -409,7 +516,7 @@ export default function HomepageProductsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="daily" className="flex items-center">
             <Calendar className="w-4 h-4 mr-2" />
             Товары дня
@@ -421,6 +528,10 @@ export default function HomepageProductsPage() {
           <TabsTrigger value="top-sales" className="flex items-center">
             <Package className="w-4 h-4 mr-2" />
             Топ продаж
+          </TabsTrigger>
+          <TabsTrigger value="new-arrivals" className="flex items-center">
+            <Sparkles className="w-4 h-4 mr-2" />
+            Новые поступления
           </TabsTrigger>
         </TabsList>
 
@@ -746,6 +857,105 @@ export default function HomepageProductsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="new-arrivals" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center">
+                  <Sparkles className="w-5 h-5 mr-2" />
+                  Новые поступления
+                </CardTitle>
+                <Button
+                  onClick={() => {
+                    setSelectedNewArrivalProduct(null)
+                    setShowNewArrivalProductSelector(true)
+                  }}
+                  className="flex items-center"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Добавить товар
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {newArrivalProductsLoading ? (
+                <div className="text-center py-8 text-gray-500">Загрузка товаров...</div>
+              ) : newArrivalProducts.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  Новые поступления пока не выбраны
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {newArrivalProducts.map((item) => (
+                    <div key={item.id} className="border rounded-lg p-4 flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-16 h-16 bg-gray-100 rounded border flex items-center justify-center">
+                          {item.product.images?.[0]?.url ? (
+                            <img 
+                              src={item.product.images[0].url} 
+                              alt={item.product.name}
+                              className="w-full h-full object-cover rounded"
+                            />
+                          ) : (
+                            <Package className="w-6 h-6 text-gray-400" />
+                          )}
+                        </div>
+
+                        <div className="flex-1">
+                          <h3 className="font-medium text-gray-900">{item.product.name}</h3>
+                          <div className="text-sm text-gray-500 space-y-1">
+                            {item.product.article && (
+                              <p>Артикул: {item.product.article}</p>
+                            )}
+                            {item.product.brand && (
+                              <p>Бренд: {item.product.brand}</p>
+                            )}
+                            <p>Цена: {formatPrice(item.product.retailPrice)}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            checked={item.isActive}
+                            onCheckedChange={() => handleToggleNewArrivalActive(item)}
+                          />
+                          <span className="text-sm text-gray-500">
+                            {item.isActive ? 'Активен' : 'Неактивен'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleNewArrivalSortOrderChange(item, 'up')}
+                        >
+                          <ChevronUp className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleNewArrivalSortOrderChange(item, 'down')}
+                        >
+                          <ChevronDown className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteNewArrivalProduct(item.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Диалог добавления товара дня */}
@@ -905,6 +1115,86 @@ export default function HomepageProductsPage() {
                 ))
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Диалог добавления товара в новые поступления */}
+      <Dialog
+        open={showNewArrivalProductSelector}
+        onOpenChange={(open) => {
+          setShowNewArrivalProductSelector(open)
+          if (!open) {
+            setSelectedNewArrivalProduct(null)
+          }
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Добавить товар в новые поступления</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Search className="w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="Поиск товаров..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1"
+              />
+            </div>
+
+            <div className="max-h-96 overflow-y-auto space-y-2">
+              {productsLoading ? (
+                <div className="text-center py-4 text-gray-500">Загрузка товаров...</div>
+              ) : products.length === 0 ? (
+                <div className="text-center py-4 text-gray-500">Товары не найдены</div>
+              ) : (
+                products.map((product) => (
+                  <div
+                    key={product.id}
+                    className={`border rounded p-3 flex items-center justify-between cursor-pointer transition ${
+                      selectedNewArrivalProduct?.id === product.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'
+                    }`}
+                    onClick={() => setSelectedNewArrivalProduct(product)}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 bg-gray-100 rounded border flex items-center justify-center">
+                        {product.images?.[0]?.url ? (
+                          <img 
+                            src={product.images[0].url} 
+                            alt={product.name}
+                            className="w-full h-full object-cover rounded"
+                          />
+                        ) : (
+                          <Package className="w-4 h-4 text-gray-400" />
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="font-medium">{product.name}</h4>
+                        <div className="text-sm text-gray-500">
+                          {product.article && <span>Артикул: {product.article} | </span>}
+                          {product.brand && <span>Бренд: {product.brand} | </span>}
+                          <span>Цена: {formatPrice(product.retailPrice)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {selectedNewArrivalProduct?.id === product.id && (
+                      <Badge variant="secondary">Выбран</Badge>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {selectedNewArrivalProduct && (
+              <div className="pt-4 border-t">
+                <Button onClick={handleAddNewArrivalProduct} className="w-full">
+                  Добавить выбранный товар в новые поступления
+                </Button>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

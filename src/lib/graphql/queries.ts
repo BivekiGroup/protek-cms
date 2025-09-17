@@ -394,6 +394,64 @@ export const GET_TOP_SALES_PRODUCT = gql`
   }
 `
 
+export const GET_NEW_ARRIVAL_PRODUCTS = gql`
+  query GetNewArrivalProducts {
+    newArrivalProducts {
+      id
+      productId
+      isActive
+      sortOrder
+      product {
+        id
+        name
+        slug
+        article
+        brand
+        retailPrice
+        wholesalePrice
+        images {
+          id
+          url
+          alt
+          order
+        }
+        categories {
+          id
+          name
+          slug
+        }
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`
+
+export const GET_NEW_ARRIVAL_PRODUCT = gql`
+  query GetNewArrivalProduct($id: ID!) {
+    newArrivalProduct(id: $id) {
+      id
+      productId
+      isActive
+      sortOrder
+      product {
+        id
+        name
+        article
+        brand
+        retailPrice
+        images {
+          url
+          alt
+          order
+        }
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`
+
 export const UPLOAD_AVATAR = gql`
   mutation UploadAvatar($file: String!) {
     uploadAvatar(file: $file) {
@@ -1239,6 +1297,15 @@ export const GET_ORDERS = gql`
         discountAmount
         finalAmount
         currency
+        deliveryAddress
+        comment
+        cancelReason
+        canceledAt
+        returnReason
+        returnRequestedAt
+        returnedAt
+        createdAt
+        updatedAt
         items {
           id
           productId

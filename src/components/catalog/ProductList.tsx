@@ -1,13 +1,15 @@
 "use client"
 
-import React, { useMemo, useState } from 'react'
-import { Loader2, Package, Plus, Edit, Trash2, FolderOpen, ExternalLink } from 'lucide-react'
+import React, { useMemo, useState, useEffect } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Package, Plus, Edit, Trash2, FolderOpen, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
 import { useMutation } from '@apollo/client'
-import { DELETE_PRODUCT, DELETE_PRODUCTS, UPDATE_PRODUCT_VISIBILITY, UPDATE_PRODUCTS_VISIBILITY, MOVE_PRODUCTS_TO_CATEGORY } from '@/lib/graphql/mutations'
+import { DELETE_PRODUCT, DELETE_PRODUCTS, UPDATE_PRODUCT_VISIBILITY, UPDATE_PRODUCTS_VISIBILITY, MOVE_PRODUCTS_TO_CATEGORY, UPDATE_PRODUCT_PRICE } from '@/lib/graphql/mutations'
 import { CategorySelector } from './CategorySelector'
+import toast from 'react-hot-toast'
 
 interface Product {
   id: string
@@ -41,17 +43,25 @@ interface ProductListProps {
   categories?: Category[]
 }
 
+type SortField = 'photo' | 'name' | 'category' | 'article' | 'stock' | 'wholesalePrice' | 'retailPrice' | 'isVisible' | 'actions'
+
 export const ProductList = ({ products, loading, onProductEdit, onProductCreated, categories = [] }: ProductListProps) => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [selectAll, setSelectAll] = useState(false)
   const [bulkLoading, setBulkLoading] = useState(false)
   const [showCategorySelector, setShowCategorySelector] = useState(false)
+  const hasSelection = selectedProducts.length > 0
+  const [sortConfig, setSortConfig] = useState<{ field: SortField; direction: 'asc' | 'desc' } | null>(null)
 
   const [deleteProduct] = useMutation(DELETE_PRODUCT)
   const [deleteProducts] = useMutation(DELETE_PRODUCTS)
   const [updateProductVisibility] = useMutation(UPDATE_PRODUCT_VISIBILITY)
   const [updateProductsVisibility] = useMutation(UPDATE_PRODUCTS_VISIBILITY)
   const [moveProductsToCategory] = useMutation(MOVE_PRODUCTS_TO_CATEGORY)
+  const [updateProductPrice] = useMutation(UPDATE_PRODUCT_PRICE)
+
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, { wholesale?: string; retail?: string }>>({})
+  const [priceSaving, setPriceSaving] = useState<Record<string, boolean>>({})
 
   const frontendOrigin = useMemo(() => {
     const envOrigin = process.env.NEXT_PUBLIC_FRONTEND_ORIGIN
@@ -175,7 +185,233 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
     }
   }
 
-  if (loading) {
+  const isInitialLoading = loading && products.length === 0
+  const isRefreshing = loading && products.length > 0
+
+  const handleSort = (field: SortField) => {
+    setSortConfig((prev) => {
+      if (prev && prev.field === field) {
+        return {
+          field,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        }
+      }
+      return { field, direction: 'asc' }
+    })
+  }
+
+  const getSortValue = (product: Product, field: SortField): string | number => {
+    switch (field) {
+      case 'photo':
+        return product.images.length > 0 ? 1 : 0
+      case 'name':
+        return product.name?.toLowerCase() ?? ''
+      case 'category':
+        return product.categories.map(cat => cat.name).join(', ').toLowerCase()
+      case 'article':
+        return product.article?.toLowerCase() ?? ''
+      case 'stock':
+        return product.stock ?? 0
+      case 'wholesalePrice':
+        return product.wholesalePrice ?? 0
+      case 'retailPrice':
+        return product.retailPrice ?? 0
+      case 'isVisible':
+        return product.isVisible ? 1 : 0
+      case 'actions':
+        return product.name?.toLowerCase() ?? ''
+      default:
+        return ''
+    }
+  }
+
+  const sortedProducts = useMemo(() => {
+    if (!sortConfig) return products
+
+    const sorted = [...products]
+    sorted.sort((a, b) => {
+      const aValue = getSortValue(a, sortConfig.field)
+      const bValue = getSortValue(b, sortConfig.field)
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue
+      }
+
+      const aString = String(aValue)
+      const bString = String(bValue)
+      return sortConfig.direction === 'asc'
+        ? aString.localeCompare(bString, 'ru')
+        : bString.localeCompare(aString, 'ru')
+    })
+    return sorted
+  }, [products, sortConfig])
+
+  const renderSortIcon = (field: SortField) => {
+    if (!sortConfig || sortConfig.field !== field) {
+      return <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />
+    }
+
+    return sortConfig.direction === 'asc'
+      ? <ArrowUp className="w-3.5 h-3.5 text-blue-600" />
+      : <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
+  }
+
+  const renderSortableHeader = (field: SortField, label: string) => (
+    <button
+      type="button"
+      onClick={() => handleSort(field)}
+      className="flex items-center gap-1 text-left font-medium text-gray-700 hover:text-gray-900 focus:outline-none"
+    >
+      <span>{label}</span>
+      {renderSortIcon(field)}
+    </button>
+  )
+
+  useEffect(() => {
+    setPriceDrafts((prev) => {
+      const next: Record<string, { wholesale?: string; retail?: string }> = {}
+      for (const product of products) {
+        if (prev[product.id]) {
+          next[product.id] = prev[product.id]
+        }
+      }
+      return next
+    })
+    setPriceSaving((prev) => {
+      const next: Record<string, boolean> = {}
+      for (const product of products) {
+        if (prev[product.id]) {
+          next[product.id] = prev[product.id]
+        }
+      }
+      return next
+    })
+  }, [products])
+
+  const getPriceValue = (product: Product, field: 'wholesale' | 'retail') => {
+    const draft = priceDrafts[product.id]
+    if (draft && draft[field] !== undefined) {
+      const value = draft[field]
+      return value ?? ''
+    }
+
+    const sourceValue = field === 'wholesale' ? product.wholesalePrice : product.retailPrice
+    return sourceValue !== undefined && sourceValue !== null ? String(sourceValue) : ''
+  }
+
+  const handlePriceChange = (productId: string, field: 'wholesale' | 'retail', value: string) => {
+    setPriceDrafts((prev) => ({
+      ...prev,
+      [productId]: {
+        ...prev[productId],
+        [field]: value
+      }
+    }))
+  }
+
+  const clearPriceDraft = (productId: string) => {
+    setPriceDrafts((prev) => {
+      if (!prev[productId]) {
+        return prev
+      }
+      const next = { ...prev }
+      delete next[productId]
+      return next
+    })
+  }
+
+  const parsePriceValue = (value: string): number | null | typeof NaN => {
+    const normalized = value.replace(/\s+/g, '').replace(',', '.').trim()
+    if (normalized === '') {
+      return null
+    }
+
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) ? parsed : NaN
+  }
+
+  const handlePriceSubmit = async (product: Product) => {
+    if (priceSaving[product.id]) {
+      return
+    }
+
+    const draft = priceDrafts[product.id]
+    if (!draft || Object.keys(draft).length === 0) {
+      return
+    }
+
+    const input: { wholesalePrice?: number | null; retailPrice?: number | null } = {}
+    let hasChanges = false
+
+    if (draft.wholesale !== undefined) {
+      const parsedWholesale = parsePriceValue(draft.wholesale)
+      if (Number.isNaN(parsedWholesale)) {
+        toast.error('Некорректная оптовая цена')
+        return
+      }
+      const currentWholesale = product.wholesalePrice ?? null
+      if (parsedWholesale !== currentWholesale) {
+        input.wholesalePrice = parsedWholesale
+        hasChanges = true
+      }
+    }
+
+    if (draft.retail !== undefined) {
+      const parsedRetail = parsePriceValue(draft.retail)
+      if (Number.isNaN(parsedRetail)) {
+        toast.error('Некорректная цена на сайте')
+        return
+      }
+      const currentRetail = product.retailPrice ?? null
+      if (parsedRetail !== currentRetail) {
+        input.retailPrice = parsedRetail
+        hasChanges = true
+      }
+    }
+
+    if (!hasChanges) {
+      clearPriceDraft(product.id)
+      return
+    }
+
+    setPriceSaving((prev) => ({ ...prev, [product.id]: true }))
+    try {
+      await updateProductPrice({
+        variables: {
+          id: product.id,
+          input
+        }
+      })
+      toast.success('Цены обновлены')
+      clearPriceDraft(product.id)
+      onProductCreated()
+    } catch (error) {
+      console.error('Ошибка обновления цен:', error)
+      toast.error('Не удалось обновить цены')
+    } finally {
+      setPriceSaving((prev) => {
+        const next = { ...prev }
+        delete next[product.id]
+        return next
+      })
+    }
+  }
+
+  const handlePriceKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, product: Product) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      handlePriceSubmit(product)
+      event.currentTarget.blur()
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      clearPriceDraft(product.id)
+      event.currentTarget.blur()
+    }
+  }
+
+  if (isInitialLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
@@ -202,20 +438,26 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
   }
 
   return (
-    <div className="space-y-4">
-      {/* Массовые действия */}
-      {selectedProducts.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-blue-700">
-              Выбрано товаров: {selectedProducts.length}
+    <div className="relative">
+      {isRefreshing ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 backdrop-blur-sm">
+          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+        </div>
+      ) : null}
+
+      <div className="space-y-4">
+        {/* Массовые действия */}
+        <div className={`rounded-lg p-4 border transition-colors ${hasSelection ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-200 text-gray-600'}`}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm">
+              {hasSelection ? `Выбрано товаров: ${selectedProducts.length}` : 'Выберите товары для массовых действий'}
             </span>
-            <div className="flex space-x-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => handleToggleSelectedVisibility(true)}
-                disabled={bulkLoading}
+                disabled={!hasSelection || bulkLoading}
               >
                 {bulkLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 Показать на сайте
@@ -224,7 +466,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                 variant="outline"
                 size="sm"
                 onClick={() => handleToggleSelectedVisibility(false)}
-                disabled={bulkLoading}
+                disabled={!hasSelection || bulkLoading}
               >
                 {bulkLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 Скрыть с сайта
@@ -233,7 +475,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                 variant="outline"
                 size="sm"
                 onClick={() => setShowCategorySelector(true)}
-                disabled={bulkLoading}
+                disabled={!hasSelection || bulkLoading}
               >
                 {bulkLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FolderOpen className="w-4 h-4 mr-2" />}
                 Переместить в категорию
@@ -242,7 +484,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                 variant="outline"
                 size="sm"
                 onClick={handleDeleteSelected}
-                disabled={bulkLoading}
+                disabled={!hasSelection || bulkLoading}
               >
                 {bulkLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 Удалить выбранные
@@ -250,152 +492,194 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
             </div>
           </div>
         </div>
-      )}
 
-      {/* Заголовок таблицы */}
-      <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
-        <div className="min-w-[1000px]">
-          <div className="grid grid-cols-12 gap-4 items-center text-sm font-medium text-gray-700">
-            <div className="col-span-1">
-              <Checkbox
-                checked={selectAll}
-                onCheckedChange={handleSelectAll}
-              />
-            </div>
-            <div className="col-span-1">Фото</div>
-            <div className="col-span-2">Название</div>
-            <div className="col-span-2">Категория</div>
-            <div className="col-span-1">Артикул</div>
-            <div className="col-span-1">Остаток</div>
-            <div className="col-span-1">Цена опт</div>
-            <div className="col-span-1">Цена сайт</div>
-            <div className="col-span-1">На сайте</div>
-            <div className="col-span-2">Действия</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Список товаров */}
-      <div className="space-y-2 overflow-x-auto">
-        {products.map((product) => (
-          <div key={product.id} className="bg-white border rounded-lg p-4 hover:shadow-sm transition-shadow">
-            <div className="min-w-[1000px]">
-              <div className="grid grid-cols-12 gap-4 items-center">
-                {/* Чекбокс */}
-                <div className="col-span-1">
-                  <Checkbox
-                    checked={selectedProducts.includes(product.id)}
-                    onCheckedChange={(checked: boolean) => handleSelectProduct(product.id, checked)}
-                  />
-                </div>
-
-                {/* Фото */}
-                <div className="col-span-1">
-                  {product.images.length > 0 ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={product.images[0].url}
-                      alt={product.images[0].alt || product.name}
-                      className="w-12 h-12 object-cover rounded-lg border"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 bg-gray-100 rounded-lg border flex items-center justify-center">
-                      <Package className="w-6 h-6 text-gray-400" />
-                    </div>
-                  )}
-                </div>
-
-                {/* Название */}
-                <div className="col-span-2">
-                  <h3 className="font-medium text-gray-900 truncate">{product.name}</h3>
-                </div>
-
-                {/* Категория */}
-                <div className="col-span-2">
-                  <span className="text-sm text-gray-700 truncate">
-                    {product.categories.length > 0 ? product.categories.map(cat => cat.name).join(', ') : '—'}
-                  </span>
-                </div>
-
-                {/* Артикул */}
-                <div className="col-span-1">
-                  <span className="text-sm text-gray-600">{product.article || '—'}</span>
-                </div>
-
-                {/* Остаток */}
-                <div className="col-span-1">
-                  <span className={`text-sm ${product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {product.stock} шт
-                  </span>
-                </div>
-
-                {/* Цена опт */}
-                <div className="col-span-1">
-                  <span className="text-sm text-gray-900">
-                    {product.wholesalePrice ? `${product.wholesalePrice} ₽` : '—'}
-                  </span>
-                </div>
-
-                {/* Цена на сайте */}
-                <div className="col-span-1">
-                  <span className="text-sm text-gray-900">
-                    {product.retailPrice ? `${product.retailPrice} ₽` : '—'}
-                  </span>
-                </div>
-
-                              {/* Показывать на сайте */}
+        {/* Заголовок таблицы */}
+        <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
+          <div className="min-w-[1000px]">
+            <div className="grid grid-cols-12 gap-4 items-center text-sm font-medium text-gray-700">
               <div className="col-span-1">
-                <Switch
-                  checked={product.isVisible}
-                  onCheckedChange={(checked) => handleToggleVisibility(product.id, checked)}
+                <Checkbox
+                  checked={selectAll}
+                  onCheckedChange={handleSelectAll}
                 />
               </div>
-
-                {/* Действия */}
-                <div className="col-span-2 flex space-x-2 pr-6">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onProductEdit(product)}
-                    className="flex-shrink-0"
-                  >
-                    <Edit className="w-4 h-4 mr-1" />
-                    Редактировать
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(buildFrontendProductUrl(product), '_blank')}
-                    className="flex-shrink-0"
-                  >
-                    <ExternalLink className="w-4 h-4 mr-1" />
-                    Открыть на сайте
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDeleteProduct(product.id)}
-                    className="flex-shrink-0"
-                  >
-                    <Trash2 className="w-4 h-4 mr-1" />
-                    Удалить
-                  </Button>
-                </div>
+              <div className="col-span-1">
+                {renderSortableHeader('photo', 'Фото')}
+              </div>
+              <div className="col-span-2">
+                {renderSortableHeader('name', 'Название')}
+              </div>
+              <div className="col-span-2">
+                {renderSortableHeader('category', 'Категория')}
+              </div>
+              <div className="col-span-1">
+                {renderSortableHeader('article', 'Артикул')}
+              </div>
+              <div className="col-span-1">
+                {renderSortableHeader('stock', 'Остаток')}
+              </div>
+              <div className="col-span-1">
+                {renderSortableHeader('wholesalePrice', 'Цена опт')}
+              </div>
+              <div className="col-span-1">
+                {renderSortableHeader('retailPrice', 'Цена сайт')}
+              </div>
+              <div className="col-span-1">
+                {renderSortableHeader('isVisible', 'На сайте')}
+              </div>
+              <div className="col-span-2">
+                {renderSortableHeader('actions', 'Действия')}
               </div>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
 
-      {/* Модальное окно выбора категории */}
-      <CategorySelector
-        open={showCategorySelector}
-        onOpenChange={setShowCategorySelector}
-        categories={categories}
-        onCategorySelect={handleMoveToCategory}
-        title="Переместить товары в категорию"
-        description={`Выберите категорию для перемещения ${selectedProducts.length} товаров`}
-      />
+        {/* Список товаров */}
+        <div className="space-y-2 overflow-x-auto">
+          {sortedProducts.map((product) => (
+            <div key={product.id} className="bg-white border rounded-lg p-4 hover:shadow-sm transition-shadow">
+              <div className="min-w-[1000px]">
+                <div className="grid grid-cols-12 gap-4 items-center">
+                  {/* Чекбокс */}
+                  <div className="col-span-1">
+                    <Checkbox
+                      checked={selectedProducts.includes(product.id)}
+                      onCheckedChange={(checked: boolean) => handleSelectProduct(product.id, checked)}
+                    />
+                  </div>
+
+                  {/* Фото */}
+                  <div className="col-span-1">
+                    {product.images.length > 0 ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={product.images[0].url}
+                        alt={product.images[0].alt || product.name}
+                        className="w-12 h-12 object-cover rounded-lg border"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-100 rounded-lg border flex items-center justify-center">
+                        <Package className="w-6 h-6 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Название */}
+                  <div className="col-span-2">
+                    <h3 className="font-medium text-gray-900 truncate">{product.name}</h3>
+                  </div>
+
+                  {/* Категория */}
+                  <div className="col-span-2">
+                    <span className="text-sm text-gray-700 truncate">
+                      {product.categories.length > 0 ? product.categories.map(cat => cat.name).join(', ') : '—'}
+                    </span>
+                  </div>
+
+                  {/* Артикул */}
+                  <div className="col-span-1">
+                    <span className="text-sm text-gray-600">{product.article || '—'}</span>
+                  </div>
+
+                  {/* Остаток */}
+                  <div className="col-span-1">
+                    <span className={`text-sm ${product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {product.stock} шт
+                    </span>
+                  </div>
+
+                  {/* Цена опт */}
+                  <div className="col-span-1">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={getPriceValue(product, 'wholesale')}
+                        onChange={(event) => handlePriceChange(product.id, 'wholesale', event.target.value)}
+                        onBlur={() => handlePriceSubmit(product)}
+                        onKeyDown={(event) => handlePriceKeyDown(event, product)}
+                        placeholder="—"
+                        inputMode="decimal"
+                        disabled={!!priceSaving[product.id]}
+                        className="h-9"
+                      />
+                      {priceSaving[product.id] ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Цена на сайте */}
+                  <div className="col-span-1">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={getPriceValue(product, 'retail')}
+                        onChange={(event) => handlePriceChange(product.id, 'retail', event.target.value)}
+                        onBlur={() => handlePriceSubmit(product)}
+                        onKeyDown={(event) => handlePriceKeyDown(event, product)}
+                        placeholder="—"
+                        inputMode="decimal"
+                        disabled={!!priceSaving[product.id]}
+                        className="h-9"
+                      />
+                      {priceSaving[product.id] ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Показывать на сайте */}
+                  <div className="col-span-1">
+                    <Switch
+                      checked={product.isVisible}
+                      onCheckedChange={(checked) => handleToggleVisibility(product.id, checked)}
+                    />
+                  </div>
+
+                  {/* Действия */}
+                  <div className="col-span-2 flex space-x-2 pr-6">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onProductEdit(product)}
+                      className="flex-shrink-0"
+                    >
+                      <Edit className="w-4 h-4 mr-1" />
+                      Редактировать
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(buildFrontendProductUrl(product), '_blank')}
+                      className="flex-shrink-0"
+                    >
+                      <ExternalLink className="w-4 h-4 mr-1" />
+                      Открыть на сайте
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteProduct(product.id)}
+                      className="flex-shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Удалить
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Модальное окно выбора категории */}
+        <CategorySelector
+          open={showCategorySelector}
+          onOpenChange={setShowCategorySelector}
+          categories={categories}
+          onCategorySelect={handleMoveToCategory}
+          title="Переместить товары в категорию"
+          description={`Выберите категорию для перемещения ${selectedProducts.length} товаров`}
+        />
+      </div>
     </div>
   )
-} 
+}

@@ -43,6 +43,7 @@ export default function OneCCatalogDocs() {
   -d '{
   "items": [
     {
+      "id": "cku123example",
       "externalId": "941024_dayco",
       "article": "941024",
       "brand": "DAYCO",
@@ -62,6 +63,7 @@ export default function OneCCatalogDocs() {
 }'`
 
   const itemSchema = `{
+  id?: string,
   externalId?: string,
   article: string,
   brand: string,
@@ -159,6 +161,7 @@ export default function OneCCatalogDocs() {
         return JSON.stringify({
           items: [
             {
+              id: 'cku123example',
               externalId: '941024_dayco',
               article: '941024',
               brand: 'DAYCO',

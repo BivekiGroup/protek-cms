@@ -167,6 +167,7 @@ model Product {
   bestPriceProducts            BestPriceProduct?
   dailyProducts                DailyProduct[]
   topSalesProducts             TopSalesProduct?
+  newArrivalProducts           NewArrivalProduct?
   orderItems                   OrderItem[]
   characteristics              ProductCharacteristic[]
   history                      ProductHistory[]
@@ -789,6 +790,11 @@ model Order {
   currency        String      @default("RUB")
   deliveryAddress String?
   comment         String?
+  cancelReason    String?
+  canceledAt      DateTime?
+  returnReason    String?
+  returnRequestedAt DateTime?
+  returnedAt      DateTime?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   items           OrderItem[]
@@ -874,6 +880,18 @@ model TopSalesProduct {
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@map("top_sales_products")
+}
+
+model NewArrivalProduct {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("new_arrival_products")
 }
 
 model HeroBanner {
@@ -1035,6 +1053,7 @@ enum OrderStatus {
   PROCESSING
   SHIPPED
   DELIVERED
+  RETURN_REQUESTED
   CANCELED
   REFUNDED
 }

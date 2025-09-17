@@ -696,6 +696,11 @@ export const typeDefs = gql`
     categoryIds: [String!]
   }
 
+  input ProductPriceInput {
+    wholesalePrice: Float
+    retailPrice: Float
+  }
+
   input ProductImageInput {
     url: String!
     alt: String
@@ -1171,6 +1176,10 @@ export const typeDefs = gql`
     topSalesProducts: [TopSalesProduct!]!
     topSalesProduct(id: ID!): TopSalesProduct
     
+    # Новые поступления (ручное управление)
+    newArrivalProducts: [NewArrivalProduct!]!
+    newArrivalProduct(id: ID!): NewArrivalProduct
+    
     # Баннеры героя
     heroBanners: [HeroBanner!]!
     heroBanner(id: String!): HeroBanner
@@ -1373,7 +1382,8 @@ export const typeDefs = gql`
     updateOrderStatus(id: ID!, status: OrderStatus!): Order!
     confirmPayment(orderId: ID!): Order!
     updateOrderClient(id: ID!, clientId: String!): Order!
-    cancelOrder(id: ID!): Order!
+    cancelOrder(id: ID!, reason: String): Order!
+    requestOrderReturn(id: ID!, reason: String): Order!
     deleteOrder(id: ID!): Boolean!
     createPayment(input: CreatePaymentInput!): CreatePaymentResult!
     cancelPayment(id: ID!): Payment!
@@ -1405,6 +1415,14 @@ export const typeDefs = gql`
     createTopSalesProduct(input: TopSalesProductInput!): TopSalesProduct!
     updateTopSalesProduct(id: ID!, input: TopSalesProductUpdateInput!): TopSalesProduct!
     deleteTopSalesProduct(id: ID!): Boolean!
+    
+    # Цены товаров
+    updateProductPrice(id: ID!, input: ProductPriceInput!): Product!
+
+    # Новые поступления
+    createNewArrivalProduct(input: NewArrivalProductInput!): NewArrivalProduct!
+    updateNewArrivalProduct(id: ID!, input: NewArrivalProductUpdateInput!): NewArrivalProduct!
+    deleteNewArrivalProduct(id: ID!): Boolean!
     
     # Баннеры героя
     createHeroBanner(input: HeroBannerInput!): HeroBanner!
@@ -2071,6 +2089,7 @@ export const typeDefs = gql`
     PROCESSING
     SHIPPED
     DELIVERED
+    RETURN_REQUESTED
     CANCELED
     REFUNDED
   }
@@ -2100,6 +2119,11 @@ export const typeDefs = gql`
     payments: [Payment!]!
     deliveryAddress: String
     comment: String
+    cancelReason: String
+    canceledAt: DateTime
+    returnReason: String
+    returnRequestedAt: DateTime
+    returnedAt: DateTime
     createdAt: DateTime!
     updatedAt: DateTime!
   }
@@ -2580,6 +2604,28 @@ export const typeDefs = gql`
   }
 
   input TopSalesProductUpdateInput {
+    isActive: Boolean
+    sortOrder: Int
+  }
+
+  # Типы для новых поступлений
+  type NewArrivalProduct {
+    id: ID!
+    productId: String!
+    product: Product!
+    isActive: Boolean!
+    sortOrder: Int!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  input NewArrivalProductInput {
+    productId: String!
+    isActive: Boolean
+    sortOrder: Int
+  }
+
+  input NewArrivalProductUpdateInput {
     isActive: Boolean
     sortOrder: Int
   }

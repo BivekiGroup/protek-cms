@@ -88,6 +88,7 @@ const base64ImageObjectSchema = z.object({
 })
 
 const productItemSchema = z.object({
+  id: z.string().trim().min(1).optional(),
   externalId: z.string().trim().min(1).optional(),
   article: z.string().trim().min(1),
   brand: z.string().trim().min(1),
@@ -161,11 +162,17 @@ export async function POST(req: NextRequest) {
   let created = 0
   let updated = 0
   const errors: any[] = []
+  const productInclude = {
+    images: true,
+    categories: true,
+    characteristics: { include: { characteristic: true } },
+  } as const
 
   for (let idx = 0; idx < items.length; idx++) {
     const raw = items[idx]
     // normalization
     const norm = {
+      id: raw.id?.trim(),
       externalId: raw.externalId?.trim(),
       article: normalizeArticle(raw.article),
       brand: normalizeBrand(raw.brand),
@@ -187,17 +194,33 @@ export async function POST(req: NextRequest) {
       norm.externalId = `${norm.article.toLowerCase()}_${norm.brand.toLowerCase()}`
     }
 
-    const itemKey = norm.externalId ? { externalId: norm.externalId } : { article: norm.article, brand: norm.brand }
+    const itemKey = norm.id
+      ? { id: norm.id }
+      : norm.externalId
+        ? { externalId: norm.externalId }
+        : { article: norm.article, brand: norm.brand }
 
     try {
-      // find product by preferred key: externalId -> (article,brand)
-      let product = norm.externalId
-        ? await prisma.product.findUnique({ where: { externalId: norm.externalId }, include: { images: true, categories: true, characteristics: { include: { characteristic: true } } } })
-        : null
+      // find product by preferred key: id -> externalId -> (article,brand)
+      let product: Awaited<ReturnType<typeof prisma.product.findUnique>> | Awaited<ReturnType<typeof prisma.product.findFirst>> | null = null
+      if (norm.id) {
+        product = await prisma.product.findUnique({
+          where: { id: norm.id },
+          include: productInclude,
+        })
+      }
+
+      if (!product && norm.externalId) {
+        product = await prisma.product.findUnique({
+          where: { externalId: norm.externalId },
+          include: productInclude,
+        })
+      }
+
       if (!product) {
         product = await prisma.product.findFirst({
           where: { article: norm.article || undefined, brand: norm.brand || undefined },
-          include: { images: true, categories: true, characteristics: { include: { characteristic: true } } },
+          include: productInclude,
         })
       }
 
@@ -221,7 +244,7 @@ export async function POST(req: NextRequest) {
             dimensions: norm.dimensions,
             isVisible: norm.isVisible ?? true,
           },
-          include: { images: true, categories: true, characteristics: { include: { characteristic: true } } },
+          include: productInclude,
         })
       } else {
         // partial update
@@ -236,7 +259,7 @@ export async function POST(req: NextRequest) {
         if (norm.isVisible !== undefined) updateData.isVisible = norm.isVisible
 
         if (Object.keys(updateData).length) {
-          product = await prisma.product.update({ where: { id: product.id }, data: updateData, include: { images: true, categories: true, characteristics: { include: { characteristic: true } } } })
+          product = await prisma.product.update({ where: { id: product.id }, data: updateData, include: productInclude })
         }
       }
 

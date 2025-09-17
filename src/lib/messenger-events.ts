@@ -1,13 +1,13 @@
 import { EventEmitter } from 'events'
 
-type MessengerEventType = 'conversation.created' | 'conversation.updated' | 'message.created' | 'read.updated' | 'ping'
+type MessengerEventType = 'conversation.created' | 'message.created' | 'read.updated' | 'ping'
 
 export interface MessengerEventPayload {
   type: MessengerEventType
   conversationId?: string
   messageId?: string
   actorUserId?: string
-  data?: Record<string, unknown>
+  data?: any
 }
 
 type Subscriber = (event: MessengerEventPayload) => void
@@ -18,9 +18,9 @@ interface MessengerBus {
   emitToUsers: (userIds: string[], payload: MessengerEventPayload) => void
 }
 
-const globalRef = globalThis as unknown as { __MESSENGER_BUS__?: MessengerBus }
+const globalAny = globalThis as any
 
-if (!globalRef.__MESSENGER_BUS__) {
+if (!globalAny.__MESSENGER_BUS__) {
   const emitter = new EventEmitter()
   emitter.setMaxListeners(1000)
 
@@ -32,11 +32,11 @@ if (!globalRef.__MESSENGER_BUS__) {
     const generalHandler = (payload: MessengerEventPayload & { userId?: string; targets?: string[] }) => {
       if (Array.isArray(payload?.targets) && payload.targets.includes(userId)) cb(payload)
     }
-    emitter.on(channel, handler)
-    emitter.on('broadcast', generalHandler)
+    emitter.on(channel, handler as any)
+    emitter.on('broadcast', generalHandler as any)
     return () => {
-      emitter.off(channel, handler)
-      emitter.off('broadcast', generalHandler)
+      emitter.off(channel, handler as any)
+      emitter.off('broadcast', generalHandler as any)
     }
   }
 
@@ -47,9 +47,10 @@ if (!globalRef.__MESSENGER_BUS__) {
     emitter.emit('broadcast', { ...payload, targets: userIds })
   }
 
-  globalRef.__MESSENGER_BUS__ = { emitter, subscribe, emitToUsers }
+  globalAny.__MESSENGER_BUS__ = { emitter, subscribe, emitToUsers } as MessengerBus
 }
 
-export const messengerBus: MessengerBus = globalRef.__MESSENGER_BUS__ as MessengerBus
+export const messengerBus: MessengerBus = globalAny.__MESSENGER_BUS__
+
 
 

@@ -1,5 +1,5 @@
 import { prisma } from '../prisma'
-import { SearchType } from '../../generated/prisma'
+import { SearchType, OrderStatus as PrismaOrderStatus } from '../../generated/prisma'
 import { createToken, comparePasswords, hashPassword } from '../auth'
 import { createAuditLog, AuditAction, getClientInfo } from '../audit'
 import { uploadBuffer, generateFileKey } from '../s3'
@@ -195,6 +195,37 @@ const saveSearchHistory = async (
     console.log('✅ Сохранена запись в истории поиска:', { searchQuery, searchType, resultCount })
   } catch (error) {
     console.error('❌ Ошибка сохранения истории поиска:', error)
+  }
+}
+
+const normalizeClientId = (rawId?: string | null): string | null => {
+  if (!rawId) return null
+  if (rawId.startsWith('client_')) {
+    const parts = rawId.split('_')
+    if (parts.length >= 2 && parts[1]) {
+      return parts[1]
+    }
+    return rawId.substring(7)
+  }
+  return rawId
+}
+
+const restockOrderItems = async (items: { productId?: string | null; quantity: number }[]) => {
+  const updates = items
+    .filter(item => item.productId)
+    .map(item =>
+      prisma.product.update({
+        where: { id: item.productId! },
+        data: {
+          stock: {
+            increment: item.quantity
+          }
+        }
+      })
+    )
+
+  if (updates.length > 0) {
+    await prisma.$transaction(updates)
   }
 }
 
@@ -564,6 +595,22 @@ interface TopSalesProductInput {
 interface TopSalesProductUpdateInput {
   isActive?: boolean
   sortOrder?: number
+}
+
+interface NewArrivalProductInput {
+  productId: string
+  isActive?: boolean
+  sortOrder?: number
+}
+
+interface NewArrivalProductUpdateInput {
+  isActive?: boolean
+  sortOrder?: number
+}
+
+interface ProductPriceInput {
+  wholesalePrice?: number | null
+  retailPrice?: number | null
 }
 
 interface HeroBannerInput {
@@ -4402,40 +4449,31 @@ export const resolvers = {
       }
     },
 
-    // Новые поступления
-    newArrivals: async (_: unknown, { limit = 8 }: { limit?: number }) => {
+    // New Arrival Products queries
+    newArrivalProducts: async () => {
       try {
-        const products = await prisma.product.findMany({
-          where: {
-            isVisible: true,
-            AND: [
-              {
-                OR: [
-                  { article: { not: null } },
-                  { brand: { not: null } }
-                ]
-              }
-            ]
-          },
+        const newArrivalProducts = await prisma.newArrivalProduct.findMany({
           include: {
-            images: {
-              orderBy: { order: 'asc' }
-            },
-            categories: true
+            product: {
+              include: {
+                images: {
+                  orderBy: { order: 'asc' }
+                },
+                categories: true
+              }
+            }
           },
-          orderBy: { createdAt: 'desc' },
-          take: limit
+          orderBy: { sortOrder: 'asc' }
         })
 
-        // Для товаров без изображений пытаемся получить их из PartsIndex
         const productsWithImages = await Promise.all(
-          products.map(async (product) => {
-            // Если у товара уже есть изображения, возвращаем как есть
+          newArrivalProducts.map(async (newArrivalProduct) => {
+            const product = newArrivalProduct.product
+
             if (product.images && product.images.length > 0) {
-              return product
+              return newArrivalProduct
             }
 
-            // Если нет изображений и есть артикул и бренд, пытаемся получить из PartsIndex
             if (product.article && product.brand) {
               try {
                 const partsIndexEnabled = (process.env.PARTSINDEX_ENABLED === 'true') || false
@@ -4447,7 +4485,119 @@ export const resolvers = {
                   : null
 
                 if (partsIndexEntity && partsIndexEntity.images && partsIndexEntity.images.length > 0) {
-                  // Создаем временные изображения для отображения (не сохраняем в БД)
+                  const partsIndexImages = partsIndexEntity.images.slice(0, 3).map((imageUrl, index) => ({
+                    id: `partsindex-${product.id}-${index}`,
+                    url: imageUrl,
+                    alt: product.name,
+                    order: index,
+                    productId: product.id
+                  }))
+
+                  return {
+                    ...newArrivalProduct,
+                    product: {
+                      ...product,
+                      images: partsIndexImages
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error(`Ошибка получения изображений из PartsIndex для товара ${product.id}:`, error)
+              }
+            }
+
+            return newArrivalProduct
+          })
+        )
+
+        return productsWithImages
+      } catch (error) {
+        console.error('Ошибка получения новых поступлений (админ):', error)
+        throw new Error('Не удалось получить новые поступления')
+      }
+    },
+
+    newArrivalProduct: async (_: unknown, { id }: { id: string }) => {
+      try {
+        return await prisma.newArrivalProduct.findUnique({
+          where: { id },
+          include: {
+            product: {
+              include: {
+                images: {
+                  orderBy: { order: 'asc' }
+                },
+                categories: true
+              }
+            }
+          }
+        })
+      } catch (error) {
+        console.error('Ошибка получения нового поступления (админ):', error)
+        throw new Error('Не удалось получить новое поступление')
+      }
+    },
+
+    // Новые поступления
+    newArrivals: async (_: unknown, { limit = 8 }: { limit?: number }) => {
+      try {
+        const manualNewArrivals = await prisma.newArrivalProduct.findMany({
+          where: { isActive: true },
+          include: {
+            product: {
+              include: {
+                images: {
+                  orderBy: { order: 'asc' }
+                },
+                categories: true
+              }
+            }
+          },
+          orderBy: { sortOrder: 'asc' },
+          take: limit
+        })
+
+        const sourceProducts = manualNewArrivals.length > 0
+          ? manualNewArrivals.map((item) => item.product)
+          : await prisma.product.findMany({
+              where: {
+                isVisible: true,
+                AND: [
+                  {
+                    OR: [
+                      { article: { not: null } },
+                      { brand: { not: null } }
+                    ]
+                  }
+                ]
+              },
+              include: {
+                images: {
+                  orderBy: { order: 'asc' }
+                },
+                categories: true
+              },
+              orderBy: { createdAt: 'desc' },
+              take: limit
+            })
+
+        const productsWithImages = await Promise.all(
+          sourceProducts.map(async (product) => {
+            if (product.images && product.images.length > 0) {
+              return product
+            }
+
+            if (product.article && product.brand) {
+              try {
+                const partsIndexEnabled = (process.env.PARTSINDEX_ENABLED === 'true') || false
+                const partsIndexEntity = partsIndexEnabled
+                  ? await partsIndexService.searchEntityByCode(
+                      product.article,
+                      product.brand
+                    )
+                  : null
+
+                if (partsIndexEntity && partsIndexEntity.images && partsIndexEntity.images.length > 0) {
                   const partsIndexImages = partsIndexEntity.images.slice(0, 3).map((imageUrl, index) => ({
                     id: `partsindex-${product.id}-${index}`,
                     url: imageUrl,
@@ -6018,7 +6168,95 @@ export const resolvers = {
         throw new Error('Не удалось обновить товар')
       }
     },
-    
+
+    updateProductPrice: async (_: unknown, { id, input }: { id: string; input: ProductPriceInput }, context: Context) => {
+      try {
+        if (!context.userId) {
+          throw new Error('Пользователь не авторизован')
+        }
+
+        const existingProduct = await prisma.product.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            name: true,
+            wholesalePrice: true,
+            retailPrice: true
+          }
+        })
+
+        if (!existingProduct) {
+          throw new Error('Товар не найден')
+        }
+
+        const updateData: Record<string, any> = {}
+        const priceChanges: Record<string, { old: number | null; new: number | null }> = {}
+
+        if (Object.prototype.hasOwnProperty.call(input, 'wholesalePrice')) {
+          const newWholesale = input.wholesalePrice ?? null
+          const currentWholesale = existingProduct.wholesalePrice ?? null
+
+          if (newWholesale !== currentWholesale) {
+            updateData.wholesalePrice = newWholesale
+            priceChanges.wholesalePrice = { old: currentWholesale, new: newWholesale }
+          }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'retailPrice')) {
+          const newRetail = input.retailPrice ?? null
+          const currentRetail = existingProduct.retailPrice ?? null
+
+          if (newRetail !== currentRetail) {
+            updateData.retailPrice = newRetail
+            priceChanges.retailPrice = { old: currentRetail, new: newRetail }
+          }
+        }
+
+        if (Object.keys(updateData).length === 0) {
+          const product = await prisma.product.findUnique({ where: { id } })
+          if (!product) {
+            throw new Error('Товар не найден')
+          }
+          return product
+        }
+
+        const updatedProduct = await prisma.product.update({
+          where: { id },
+          data: updateData
+        })
+
+        if (context.userId) {
+          await prisma.productHistory.create({
+            data: {
+              productId: id,
+              action: 'UPDATE_PRICE',
+              changes: priceChanges,
+              userId: context.userId
+            }
+          })
+        }
+
+        if (context.headers) {
+          const { ipAddress, userAgent } = getClientInfo(context.headers)
+          await createAuditLog({
+            userId: context.userId,
+            action: AuditAction.PRODUCT_UPDATE,
+            details: `Обновление цен товара "${existingProduct.name}"`,
+            ipAddress,
+            userAgent
+          })
+        }
+
+        return updatedProduct
+      } catch (error) {
+        console.error('Ошибка обновления цен товара:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось обновить цены товара')
+      }
+    },
+
     deleteProduct: async (_: unknown, { id }: { id: string }, context: Context) => {
       try {
         if (!context.userId) {
@@ -9270,18 +9508,306 @@ export const resolvers = {
       }
     },
 
+    cancelOrder: async (_: unknown, { id, reason }: { id: string; reason?: string }, context: Context) => {
+      try {
+        const actualContext = context || getContext()
+
+        if (!actualContext.clientId && !actualContext.userId) {
+          throw new Error('Пользователь не авторизован')
+        }
+
+        const order = await prisma.order.findUnique({
+          where: { id },
+          include: {
+            items: true,
+            client: true,
+            payments: true
+          }
+        })
+
+        if (!order) {
+          throw new Error('Заказ не найден')
+        }
+
+        const normalizedClientId = normalizeClientId(actualContext.clientId)
+        const isClientRequest = !!normalizedClientId && !actualContext.userId
+
+        if (isClientRequest && order.clientId !== normalizedClientId) {
+          throw new Error('Недостаточно прав для отмены заказа')
+        }
+
+        const currentStatus = order.status as PrismaOrderStatus
+
+        if ([PrismaOrderStatus.CANCELED, PrismaOrderStatus.REFUNDED].includes(currentStatus)) {
+          return order
+        }
+
+        const allowedClientStatuses: PrismaOrderStatus[] = [
+          PrismaOrderStatus.PENDING,
+          PrismaOrderStatus.PAID,
+          PrismaOrderStatus.PROCESSING
+        ]
+
+        if (isClientRequest && !allowedClientStatuses.includes(currentStatus)) {
+          throw new Error('Заказ нельзя отменить на текущем этапе')
+        }
+
+        if (![PrismaOrderStatus.CANCELED, PrismaOrderStatus.REFUNDED].includes(currentStatus)) {
+          await restockOrderItems(order.items)
+        }
+
+        const updatedOrder = await prisma.order.update({
+          where: { id },
+          data: {
+            status: PrismaOrderStatus.CANCELED,
+            cancelReason: reason || null,
+            canceledAt: new Date(),
+            returnReason: null,
+            returnRequestedAt: null,
+            returnedAt: null
+          },
+          include: {
+            items: true,
+            client: true,
+            payments: true
+          }
+        })
+
+        if (actualContext.userId && actualContext.headers) {
+          const { ipAddress, userAgent } = getClientInfo(actualContext.headers)
+          await createAuditLog({
+            userId: actualContext.userId,
+            action: AuditAction.ORDER_CANCEL,
+            details: `Заказ ${updatedOrder.orderNumber}`,
+            ipAddress,
+            userAgent
+          })
+        }
+
+        return updatedOrder
+      } catch (error) {
+        console.error('Ошибка отмены заказа:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось отменить заказ')
+      }
+    },
+
+    requestOrderReturn: async (_: unknown, { id, reason }: { id: string; reason?: string }, context: Context) => {
+      try {
+        const actualContext = context || getContext()
+
+        if (!actualContext.clientId && !actualContext.userId) {
+          throw new Error('Клиент не авторизован')
+        }
+
+        const order = await prisma.order.findUnique({
+          where: { id },
+          include: {
+            items: true,
+            client: true,
+            payments: true
+          }
+        })
+
+        if (!order) {
+          throw new Error('Заказ не найден')
+        }
+
+        const normalizedClientId = normalizeClientId(actualContext.clientId)
+        const isClientRequest = !!normalizedClientId && !actualContext.userId
+
+        if (isClientRequest && order.clientId !== normalizedClientId) {
+          throw new Error('Недостаточно прав для возврата заказа')
+        }
+
+        const currentStatus = order.status as PrismaOrderStatus
+
+        if (currentStatus === PrismaOrderStatus.CANCELED) {
+          throw new Error('Отмененный заказ нельзя вернуть')
+        }
+
+        if (currentStatus === PrismaOrderStatus.REFUNDED) {
+          return order
+        }
+
+        if (currentStatus === PrismaOrderStatus.RETURN_REQUESTED) {
+          const updatedOrder = await prisma.order.update({
+            where: { id },
+            data: {
+              returnReason: reason || order.returnReason,
+              returnRequestedAt: new Date()
+            },
+            include: {
+              items: true,
+              client: true,
+              payments: true
+            }
+          })
+
+          if (actualContext.userId && actualContext.headers) {
+            const { ipAddress, userAgent } = getClientInfo(actualContext.headers)
+            await createAuditLog({
+              userId: actualContext.userId,
+              action: AuditAction.ORDER_RETURN_REQUEST,
+              details: `Заказ ${updatedOrder.orderNumber}`,
+              ipAddress,
+              userAgent
+            })
+          }
+
+          return updatedOrder
+        }
+
+        const allowedStatuses: PrismaOrderStatus[] = [
+          PrismaOrderStatus.DELIVERED
+        ]
+
+        if (!allowedStatuses.includes(currentStatus)) {
+          throw new Error('Возврат доступен только для доставленных заказов')
+        }
+
+        const updatedOrder = await prisma.order.update({
+          where: { id },
+          data: {
+            status: PrismaOrderStatus.RETURN_REQUESTED,
+            returnReason: reason || null,
+            returnRequestedAt: new Date()
+          },
+          include: {
+            items: true,
+            client: true,
+            payments: true
+          }
+        })
+
+        if (actualContext.userId && actualContext.headers) {
+          const { ipAddress, userAgent } = getClientInfo(actualContext.headers)
+          await createAuditLog({
+            userId: actualContext.userId,
+            action: AuditAction.ORDER_RETURN_REQUEST,
+            details: `Заказ ${updatedOrder.orderNumber}`,
+            ipAddress,
+            userAgent
+          })
+        }
+
+        return updatedOrder
+      } catch (error) {
+        console.error('Ошибка оформления возврата заказа:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось оформить возврат заказа')
+      }
+    },
+
+    updateOrderStatus: async (_: unknown, { id, status }: { id: string; status: PrismaOrderStatus }, context: Context) => {
+      try {
+        const actualContext = context || getContext()
+
+        if (!actualContext.userId) {
+          throw new Error('Пользователь не авторизован')
+        }
+
+        const order = await prisma.order.findUnique({
+          where: { id },
+          include: {
+            items: true,
+            client: true,
+            payments: true
+          }
+        })
+
+        if (!order) {
+          throw new Error('Заказ не найден')
+        }
+
+        const nextStatus = status
+        const currentStatus = order.status as PrismaOrderStatus
+
+        if (currentStatus === nextStatus) {
+          return order
+        }
+
+        if (![PrismaOrderStatus.CANCELED, PrismaOrderStatus.REFUNDED].includes(currentStatus) &&
+            [PrismaOrderStatus.CANCELED, PrismaOrderStatus.REFUNDED].includes(nextStatus)) {
+          await restockOrderItems(order.items)
+        }
+
+        const data: Record<string, any> = {
+          status: nextStatus
+        }
+
+        if (nextStatus === PrismaOrderStatus.CANCELED) {
+          data.cancelReason = order.cancelReason
+          data.canceledAt = new Date()
+          data.returnReason = null
+          data.returnRequestedAt = null
+          data.returnedAt = null
+        } else if (currentStatus === PrismaOrderStatus.CANCELED) {
+          data.canceledAt = null
+          data.cancelReason = null
+        }
+
+        if (nextStatus === PrismaOrderStatus.RETURN_REQUESTED) {
+          data.returnRequestedAt = order.returnRequestedAt ?? new Date()
+        } else if (nextStatus === PrismaOrderStatus.REFUNDED) {
+          data.returnedAt = new Date()
+        } else if (currentStatus === PrismaOrderStatus.RETURN_REQUESTED) {
+          data.returnReason = null
+          data.returnRequestedAt = null
+        }
+
+        if (nextStatus !== PrismaOrderStatus.REFUNDED && currentStatus === PrismaOrderStatus.REFUNDED) {
+          data.returnedAt = null
+        }
+
+        const updatedOrder = await prisma.order.update({
+          where: { id },
+          data,
+          include: {
+            items: true,
+            client: true,
+            payments: true
+          }
+        })
+
+        if (actualContext.headers) {
+          const { ipAddress, userAgent } = getClientInfo(actualContext.headers)
+          await createAuditLog({
+            userId: actualContext.userId,
+            action: AuditAction.ORDER_STATUS_UPDATE,
+            details: `Заказ ${updatedOrder.orderNumber}: ${currentStatus} → ${nextStatus}`,
+            ipAddress,
+            userAgent
+          })
+        }
+
+        return updatedOrder
+      } catch (error) {
+        console.error('Ошибка обновления статуса заказа:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось обновить статус заказа')
+      }
+    },
+
     // Мутации для избранного
     addToFavorites: async (_: unknown, { input }: { input: FavoriteInput }, context: Context) => {
       try {
         const actualContext = context || getContext()
-        if (!actualContext.clientId) {
-          throw new Error('Клиент не авторизован')
+        const cleanClientId = normalizeClientId(actualContext.clientId)
+        if (!cleanClientId) {
+          throw new Error('Необходимо авторизоваться для управления избранным')
         }
 
-        // Удаляем префикс client_ если он есть
-        const cleanClientId = actualContext.clientId.startsWith('client_') 
-          ? actualContext.clientId.substring(7) 
-          : actualContext.clientId
+        const clientExists = await prisma.client.findUnique({ where: { id: cleanClientId } })
+        if (!clientExists) {
+          throw new Error('Необходимо авторизоваться для управления избранным')
+        }
 
         // Проверяем, нет ли уже такого товара в избранном
         const existingFavorite = await prisma.favorite.findFirst({
@@ -9328,14 +9854,10 @@ export const resolvers = {
     removeFromFavorites: async (_: unknown, { id }: { id: string }, context: Context) => {
       try {
         const actualContext = context || getContext()
-        if (!actualContext.clientId) {
-          throw new Error('Клиент не авторизован')
+        const cleanClientId = normalizeClientId(actualContext.clientId)
+        if (!cleanClientId) {
+          throw new Error('Необходимо авторизоваться для управления избранным')
         }
-
-        // Удаляем префикс client_ если он есть
-        const cleanClientId = actualContext.clientId.startsWith('client_') 
-          ? actualContext.clientId.substring(7) 
-          : actualContext.clientId
 
         // Проверяем, что товар принадлежит текущему клиенту
         const existingFavorite = await prisma.favorite.findUnique({
@@ -9363,14 +9885,10 @@ export const resolvers = {
     clearFavorites: async (_: unknown, _args: unknown, context: Context) => {
       try {
         const actualContext = context || getContext()
-        if (!actualContext.clientId) {
-          throw new Error('Клиент не авторизован')
+        const cleanClientId = normalizeClientId(actualContext.clientId)
+        if (!cleanClientId) {
+          throw new Error('Необходимо авторизоваться для управления избранным')
         }
-
-        // Удаляем префикс client_ если он есть
-        const cleanClientId = actualContext.clientId.startsWith('client_') 
-          ? actualContext.clientId.substring(7) 
-          : actualContext.clientId
 
         await prisma.favorite.deleteMany({
           where: {
@@ -10260,6 +10778,127 @@ export const resolvers = {
           throw error
         }
         throw new Error('Не удалось удалить товар из топ продаж')
+      }
+    },
+
+    // New Arrival Products mutations
+    createNewArrivalProduct: async (_: unknown, { input }: { input: NewArrivalProductInput }, context: Context) => {
+      try {
+        if (!context.userId) {
+          throw new Error('Пользователь не авторизован')
+        }
+
+        const product = await prisma.product.findUnique({
+          where: { id: input.productId }
+        })
+
+        if (!product) {
+          throw new Error('Товар не найден')
+        }
+
+        const existingNewArrivalProduct = await prisma.newArrivalProduct.findUnique({
+          where: { productId: input.productId }
+        })
+
+        if (existingNewArrivalProduct) {
+          throw new Error('Товар уже добавлен в новые поступления')
+        }
+
+        const newArrivalProduct = await prisma.newArrivalProduct.create({
+          data: {
+            productId: input.productId,
+            isActive: input.isActive ?? true,
+            sortOrder: input.sortOrder ?? 0
+          },
+          include: {
+            product: {
+              include: {
+                images: {
+                  orderBy: { order: 'asc' }
+                },
+                categories: true
+              }
+            }
+          }
+        })
+
+        return newArrivalProduct
+      } catch (error) {
+        console.error('Ошибка создания нового поступления:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось создать новое поступление')
+      }
+    },
+
+    updateNewArrivalProduct: async (_: unknown, { id, input }: { id: string; input: NewArrivalProductUpdateInput }, context: Context) => {
+      try {
+        if (!context.userId) {
+          throw new Error('Пользователь не авторизован')
+        }
+
+        const existingNewArrivalProduct = await prisma.newArrivalProduct.findUnique({
+          where: { id }
+        })
+
+        if (!existingNewArrivalProduct) {
+          throw new Error('Новое поступление не найдено')
+        }
+
+        const newArrivalProduct = await prisma.newArrivalProduct.update({
+          where: { id },
+          data: {
+            ...(input.isActive !== undefined && { isActive: input.isActive }),
+            ...(input.sortOrder !== undefined && { sortOrder: input.sortOrder })
+          },
+          include: {
+            product: {
+              include: {
+                images: {
+                  orderBy: { order: 'asc' }
+                },
+                categories: true
+              }
+            }
+          }
+        })
+
+        return newArrivalProduct
+      } catch (error) {
+        console.error('Ошибка обновления нового поступления:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось обновить новое поступление')
+      }
+    },
+
+    deleteNewArrivalProduct: async (_: unknown, { id }: { id: string }, context: Context) => {
+      try {
+        if (!context.userId) {
+          throw new Error('Пользователь не авторизован')
+        }
+
+        const existingNewArrivalProduct = await prisma.newArrivalProduct.findUnique({
+          where: { id }
+        })
+
+        if (!existingNewArrivalProduct) {
+          throw new Error('Новое поступление не найдено')
+        }
+
+        await prisma.newArrivalProduct.delete({
+          where: { id }
+        })
+
+        return true
+      } catch (error) {
+        console.error('Ошибка удаления нового поступления:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось удалить новое поступление')
       }
     },
 

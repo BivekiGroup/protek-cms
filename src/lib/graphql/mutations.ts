@@ -112,6 +112,17 @@ export const UPDATE_PRODUCT = gql`
   }
 `
 
+export const UPDATE_PRODUCT_PRICE = gql`
+  mutation UpdateProductPrice($id: ID!, $input: ProductPriceInput!) {
+    updateProductPrice(id: $id, input: $input) {
+      id
+      wholesalePrice
+      retailPrice
+      updatedAt
+    }
+  }
+`
+
 export const DELETE_PRODUCT = gql`
   mutation DeleteProduct($id: ID!) {
     deleteProduct(id: $id)
@@ -1065,17 +1076,37 @@ export const UPDATE_ORDER_STATUS = gql`
       id
       orderNumber
       status
+      cancelReason
+      canceledAt
+      returnReason
+      returnRequestedAt
+      returnedAt
       updatedAt
     }
   }
 `
 
 export const CANCEL_ORDER = gql`
-  mutation CancelOrder($id: ID!) {
-    cancelOrder(id: $id) {
+  mutation CancelOrder($id: ID!, $reason: String) {
+    cancelOrder(id: $id, reason: $reason) {
       id
       orderNumber
       status
+      cancelReason
+      canceledAt
+      updatedAt
+    }
+  }
+`
+
+export const REQUEST_ORDER_RETURN = gql`
+  mutation RequestOrderReturn($id: ID!, $reason: String) {
+    requestOrderReturn(id: $id, reason: $reason) {
+      id
+      orderNumber
+      status
+      returnReason
+      returnRequestedAt
       updatedAt
     }
   }
@@ -1402,6 +1433,62 @@ export const UPDATE_TOP_SALES_PRODUCT = gql`
 export const DELETE_TOP_SALES_PRODUCT = gql`
   mutation DeleteTopSalesProduct($id: ID!) {
     deleteTopSalesProduct(id: $id)
+  }
+`
+
+export const CREATE_NEW_ARRIVAL_PRODUCT = gql`
+  mutation CreateNewArrivalProduct($input: NewArrivalProductInput!) {
+    createNewArrivalProduct(input: $input) {
+      id
+      productId
+      isActive
+      sortOrder
+      product {
+        id
+        name
+        article
+        brand
+        retailPrice
+        images {
+          url
+          alt
+          order
+        }
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`
+
+export const UPDATE_NEW_ARRIVAL_PRODUCT = gql`
+  mutation UpdateNewArrivalProduct($id: ID!, $input: NewArrivalProductUpdateInput!) {
+    updateNewArrivalProduct(id: $id, input: $input) {
+      id
+      productId
+      isActive
+      sortOrder
+      product {
+        id
+        name
+        article
+        brand
+        retailPrice
+        images {
+          url
+          alt
+          order
+        }
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`
+
+export const DELETE_NEW_ARRIVAL_PRODUCT = gql`
+  mutation DeleteNewArrivalProduct($id: ID!) {
+    deleteNewArrivalProduct(id: $id)
   }
 `
 
