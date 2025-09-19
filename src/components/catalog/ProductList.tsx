@@ -506,13 +506,13 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
               <div className="col-span-1">
                 {renderSortableHeader('photo', 'Фото')}
               </div>
-              <div className="col-span-2">
+              <div className="col-span-2 min-w-0">
                 {renderSortableHeader('name', 'Название')}
               </div>
-              <div className="col-span-2">
+              <div className="col-span-2 min-w-0">
                 {renderSortableHeader('category', 'Категория')}
               </div>
-              <div className="col-span-1">
+              <div className="col-span-1 min-w-0">
                 {renderSortableHeader('article', 'Артикул')}
               </div>
               <div className="col-span-1">
@@ -565,20 +565,25 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                   </div>
 
                   {/* Название */}
-                  <div className="col-span-2">
-                    <h3 className="font-medium text-gray-900 truncate">{product.name}</h3>
+                  <div className="col-span-2 min-w-0">
+                    <h3 className="font-medium text-gray-900 truncate" title={product.name}>{product.name}</h3>
                   </div>
 
                   {/* Категория */}
-                  <div className="col-span-2">
-                    <span className="text-sm text-gray-700 truncate">
+                  <div className="col-span-2 min-w-0">
+                    <span
+                      className="block text-sm text-gray-700 truncate"
+                      title={product.categories.length > 0 ? product.categories.map(cat => cat.name).join(', ') : undefined}
+                    >
                       {product.categories.length > 0 ? product.categories.map(cat => cat.name).join(', ') : '—'}
                     </span>
                   </div>
 
                   {/* Артикул */}
-                  <div className="col-span-1">
-                    <span className="text-sm text-gray-600">{product.article || '—'}</span>
+                  <div className="col-span-1 min-w-0">
+                    <span className="block text-sm text-gray-600 truncate" title={product.article || undefined}>
+                      {product.article || '—'}
+                    </span>
                   </div>
 
                   {/* Остаток */}

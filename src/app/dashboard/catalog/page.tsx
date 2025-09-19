@@ -10,9 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { 
-  Plus, 
-  Search, 
+import {
+  Plus,
+  Search,
   Upload,
   Download
 } from 'lucide-react'
@@ -25,6 +25,13 @@ import { Pagination } from '@/components/ui/pagination'
 import { GET_CATEGORIES, GET_PRODUCTS, GET_PRODUCTS_COUNT } from '@/lib/graphql/queries'
 import { EXPORT_PRODUCTS } from '@/lib/graphql/mutations'
 import toast from 'react-hot-toast'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 
 
 
@@ -38,7 +45,8 @@ export default function CatalogPage() {
   const [editingProduct, setEditingProduct] = useState(undefined)
   const [exportLoading, setExportLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 20
+  const [itemsPerPage, setItemsPerPage] = useState(20)
+  const itemsPerPageOptions = [20, 50, 100]
 
   const { data: categoriesData, loading: categoriesLoading, refetch: refetchCategories } = useQuery(GET_CATEGORIES)
   
@@ -77,6 +85,15 @@ export default function CatalogPage() {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
+  }
+
+  const handleItemsPerPageChange = (value: string) => {
+    const nextValue = Number(value)
+    if (Number.isNaN(nextValue)) {
+      return
+    }
+    setItemsPerPage(nextValue)
+    setCurrentPage(1)
   }
 
   const handleCategoryCreated = () => {
@@ -191,14 +208,32 @@ export default function CatalogPage() {
           </div>
 
           {/* Поиск */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <Input
-              placeholder="Поиск товаров по названию, артикулу..."
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="pl-10"
-            />
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="relative w-full lg:max-w-sm">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Input
+                placeholder="Поиск товаров по названию, артикулу..."
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <span>На странице:</span>
+              <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+                <SelectTrigger className="w-[90px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {itemsPerPageOptions.map((option) => (
+                    <SelectItem key={option} value={option.toString()}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 

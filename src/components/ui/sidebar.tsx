@@ -25,7 +25,8 @@ import {
   ChevronRight,
   ChevronDown,
   MessageSquare,
-  LifeBuoy
+  LifeBuoy,
+  RotateCcw
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -59,6 +60,7 @@ const navigationGroups: NavGroup[] = [
     title: 'Продажи и клиенты',
     items: [
       { title: 'Заказы', href: '/dashboard/orders', icon: ShoppingCart },
+      { title: 'Возвраты', href: '/dashboard/returns', icon: RotateCcw },
       { title: 'Счета', href: '/dashboard/invoices', icon: Receipt },
       { title: 'Клиенты', href: '/dashboard/clients', icon: UserCheck },
       { title: 'Менеджеры', href: '/dashboard/managers', icon: Users },
