@@ -1871,6 +1871,47 @@ export async function POST(req: NextRequest) {
             await sleep(1200)
             hasTarget = await pageContainsArticleBrand(page, article, brand)
           }
+          if (!hasTarget) {
+            appendJobLog(id, `not-found: ${article}${brand ? ` / ${brand}` : ''} — skip item`)
+            const emptyResult = {
+              article,
+              brand,
+              error: 'not found on ZZAP',
+              prices: [],
+              stats: {},
+              imageUrl: null,
+              notFound: true,
+            } as const;
+            results[realIndex] = emptyResult as any;
+            const safeResults = results.map((v: any) => (v === undefined ? null : v));
+            await (prisma as any).zzapReportJob.update({
+              where: { id },
+              data: { processed: realIndex + 1, results: safeResults },
+            });
+            const j2 = await (prisma as any).zzapReportJob.findUnique({
+              where: { id },
+              select: { status: true, total: true },
+            });
+            const s = j2?.status;
+            if (s === 'canceled') {
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  status: 'canceled',
+                  processed: realIndex + 1,
+                  total: j2?.total || rows.length,
+                }),
+                {
+                  status: 200,
+                  headers: { 'content-type': 'application/json; charset=utf-8' },
+                }
+              );
+            }
+            if (realIndex + 1 < rows.length) {
+              await sleep(jitter(ZZAP_DELAY_MS, ZZAP_DELAY_JITTER_MS));
+            }
+            continue;
+          }
           await debugShot(page, id, `search-before-scrape-${encodeURIComponent(article)}`)
           prices = await scrapeTop3Prices(page, brand, article);
         }
