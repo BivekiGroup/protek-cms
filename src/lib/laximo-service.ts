@@ -2255,7 +2255,7 @@ class LaximoService {
     }
 
     // Ищем категории (Category)
-    const categoryPattern = /<Category([^>]*?)(?:\s*\/>|>([\s\S]*?)<\/Category>)/g
+    const categoryPattern = /<Category\b((?:"[^"]*"|[^>])*)(?:\s*\/>|>([\s\S]*?)<\/Category>)/g
     let categoryMatch
 
     while ((categoryMatch = categoryPattern.exec(quickDetailMatch[1])) !== null) {
@@ -2266,7 +2266,7 @@ class LaximoService {
       console.log('📂 Найдена категория:', categoryName)
 
       // В каждой категории ищем узлы (Unit)
-      const unitPattern = /<Unit([^>]*?)(?:\s*\/>|>([\s\S]*?)<\/Unit>)/g
+      const unitPattern = /<Unit\b((?:"[^"]*"|[^>])*)(?:\s*\/>|>([\s\S]*?)<\/Unit>)/g
       let unitMatch
 
       while ((unitMatch = unitPattern.exec(categoryContent)) !== null) {
