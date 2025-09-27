@@ -68,7 +68,9 @@ interface Order {
     | 'PENDING'
     | 'PAID'
     | 'PROCESSING'
-    | 'SHIPPED'
+    | 'ASSEMBLING'
+    | 'IN_DELIVERY'
+    | 'AWAITING_PICKUP'
     | 'DELIVERED'
     | 'CANCELED'
   totalAmount: number
@@ -89,7 +91,7 @@ const returnStatuses: Array<Order['status']> = ['RETURN_REQUESTED', 'REFUNDED']
 
 const statusLabels: Record<'RETURN_REQUESTED' | 'REFUNDED', string> = {
   RETURN_REQUESTED: 'Возврат запрошен',
-  REFUNDED: 'Возвращен',
+  REFUNDED: 'Возврат оформлен',
 }
 
 const statusColors: Record<'RETURN_REQUESTED' | 'REFUNDED', string> = {
@@ -233,7 +235,7 @@ export default function ReturnsPage() {
                 <SelectContent>
                   <SelectItem value="ALL">Все возвраты</SelectItem>
                   <SelectItem value="RETURN_REQUESTED">Возврат запрошен</SelectItem>
-                  <SelectItem value="REFUNDED">Возвращен</SelectItem>
+                  <SelectItem value="REFUNDED">Возврат оформлен</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -352,7 +354,7 @@ export default function ReturnsPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="RETURN_REQUESTED">Возврат запрошен</SelectItem>
-                          <SelectItem value="REFUNDED">Возвращен</SelectItem>
+                          <SelectItem value="REFUNDED">Возврат оформлен</SelectItem>
                         </SelectContent>
                       </Select>
                       <AlertDialog>

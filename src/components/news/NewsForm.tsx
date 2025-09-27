@@ -40,6 +40,22 @@ const defaultState: NewsItem = {
 
 import { useRouter } from 'next/navigation'
 
+const toLocalInputValue = (iso?: string | null) => {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const offset = date.getTimezoneOffset()
+  const local = new Date(date.getTime() - offset * 60 * 1000)
+  return local.toISOString().slice(0, 16)
+}
+
+const fromLocalInputValue = (value: string) => {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString()
+}
+
 export default function NewsForm({ initial }: { initial?: Partial<NewsItem> }) {
   const router = useRouter()
   const [state, setState] = useState<NewsItem>({ ...defaultState, ...initial })
@@ -193,6 +209,7 @@ export default function NewsForm({ initial }: { initial?: Partial<NewsItem> }) {
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (busy) return
     if (!state.title.trim()) return toast.error('Введите заголовок')
     if (!state.shortDescription.trim()) return toast.error('Короткое описание обязательно')
     if (!state.coverImageUrl.trim()) return toast.error('Загрузите обложку')
@@ -283,13 +300,33 @@ export default function NewsForm({ initial }: { initial?: Partial<NewsItem> }) {
 
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <Switch id="published" checked={state.status === 'PUBLISHED'} onCheckedChange={(checked) => setState(s => ({ ...s, status: checked ? 'PUBLISHED' : 'DRAFT' }))} />
+          <Switch
+            id="published"
+            checked={state.status === 'PUBLISHED'}
+            onCheckedChange={(checked) =>
+              setState((s) => ({
+                ...s,
+                status: checked ? 'PUBLISHED' : 'DRAFT',
+                publishedAt: checked ? (s.publishedAt || new Date().toISOString()) : null,
+              }))
+            }
+          />
           <Label htmlFor="published">Опубликовать</Label>
         </div>
         {state.status === 'PUBLISHED' && (
           <div className="flex items-center gap-2">
             <Label>Дата публикации:</Label>
-            <Input type="datetime-local" value={state.publishedAt ? new Date(state.publishedAt).toISOString().slice(0,16) : ''} onChange={e => setState(s => ({ ...s, publishedAt: e.target.value ? new Date(e.target.value).toISOString() : null }))} className="w-56" />
+            <Input
+              type="datetime-local"
+              value={toLocalInputValue(state.publishedAt)}
+              onChange={(e) =>
+                setState((s) => ({
+                  ...s,
+                  publishedAt: fromLocalInputValue(e.target.value),
+                }))
+              }
+              className="w-56"
+            />
           </div>
         )}
       </div>

@@ -9445,7 +9445,7 @@ export const resolvers = {
           }
         })
 
-        // Если оплата с баланса, списываем средства и устанавливаем статус "Оплачен"
+        // Если оплата с баланса, списываем средства и переводим заказ в обработку
         if (input.paymentMethod === 'balance') {
           console.log('createOrder: списываем средства с баланса')
           
@@ -9481,13 +9481,13 @@ export const resolvers = {
             
             console.log(`createOrder: списано ${totalAmount} ₽ с баланса контракта ${contractToUpdate.contractNumber}`)
             
-            // Обновляем статус заказа на "Оплачен"
+            // Обновляем статус заказа на "В обработке"
             await prisma.order.update({
               where: { id: order.id },
-              data: { status: 'PAID' }
+              data: { status: PrismaOrderStatus.PROCESSING }
             })
-            
-            console.log('createOrder: статус заказа изменен на PAID')
+
+            console.log('createOrder: статус заказа изменен на PROCESSING')
           }
         }
 
@@ -9537,7 +9537,8 @@ export const resolvers = {
         const allowedClientStatuses = new Set<string>([
           PrismaOrderStatus.PENDING,
           PrismaOrderStatus.PAID,
-          PrismaOrderStatus.PROCESSING
+          PrismaOrderStatus.PROCESSING,
+          PrismaOrderStatus.ASSEMBLING
         ])
 
         if (isClientRequest && !allowedClientStatuses.has(currentStatus)) {
@@ -9653,7 +9654,8 @@ export const resolvers = {
         }
 
         const allowedStatuses = new Set<string>([
-          PrismaOrderStatus.DELIVERED
+          PrismaOrderStatus.DELIVERED,
+          PrismaOrderStatus.AWAITING_PICKUP
         ])
 
         if (!allowedStatuses.has(currentStatus)) {
@@ -9921,16 +9923,16 @@ export const resolvers = {
           throw new Error('Заказ не найден')
         }
         
-        // Если заказ уже оплачен, просто возвращаем его
-        if (order.status === 'PAID') {
-          console.log('confirmPayment: заказ уже оплачен')
+        // Если заказ уже находится не в ожидании оплаты, просто возвращаем его
+        if (order.status !== PrismaOrderStatus.PENDING) {
+          console.log('confirmPayment: статус заказа уже обновлён, текущий статус:', order.status)
           return order
         }
-        
-        // Обновляем статус заказа на "Оплачен"
+
+        // Обновляем статус заказа на "В обработке"
         const updatedOrder = await prisma.order.update({
           where: { id: orderId },
-          data: { status: 'PAID' },
+          data: { status: PrismaOrderStatus.PROCESSING },
           include: { 
             client: true,
             items: {
@@ -9941,8 +9943,8 @@ export const resolvers = {
             payments: true
           }
         })
-        
-        console.log('confirmPayment: статус заказа изменен на PAID')
+
+        console.log('confirmPayment: статус заказа изменен на PROCESSING')
         return updatedOrder
         
       } catch (error) {
@@ -9969,15 +9971,15 @@ export const resolvers = {
           throw new Error('Заказ не найден')
         }
         
-        // Если заказ уже оплачен с баланса, не создаем платеж в ЮКассе
-        if (order.status === 'PAID') {
-          console.log('createPayment: заказ уже оплачен с баланса')
+        // Если заказ уже не ожидает оплаты, не создаем платеж в ЮКассе
+        if (order.status !== PrismaOrderStatus.PENDING) {
+          console.log('createPayment: заказ уже не в статусе PENDING, текущий статус:', order.status)
           // Возвращаем успешный результат без создания платежа в ЮКассе
           return {
             payment: null,
             confirmationUrl: null,
             success: true,
-            message: 'Заказ уже оплачен с баланса'
+            message: 'Заказ уже находится в обработке'
           }
         }
         

@@ -107,8 +107,11 @@ function mapOrderToOneCSchema(order: any) {
     PENDING: 'awaiting_packaging',
     PAID: 'awaiting_packaging',
     PROCESSING: 'awaiting_packaging',
-    SHIPPED: 'shipped',
+    ASSEMBLING: 'awaiting_packaging',
+    IN_DELIVERY: 'shipped',
+    AWAITING_PICKUP: 'shipped',
     DELIVERED: 'delivered',
+    RETURN_REQUESTED: 'return_requested',
     CANCELED: 'cancelled',
     REFUNDED: 'cancelled',
   }
@@ -182,4 +185,3 @@ function mapOrderToOneCSchema(order: any) {
     },
   }
 }
-

@@ -86,11 +86,14 @@ const getOrderStatusText = (status: string): string => {
   const statusMap: Record<string, string> = {
     PENDING: 'Ожидает оплаты',
     PAID: 'Оплачен',
-    PROCESSING: 'В обработке',
-    SHIPPED: 'Отправлен',
+    PROCESSING: 'Обрабатывается',
+    ASSEMBLING: 'На сборке',
+    IN_DELIVERY: 'В доставке',
+    AWAITING_PICKUP: 'Ждет выдачи',
     DELIVERED: 'Доставлен',
-    CANCELED: 'Отменен',
-    REFUNDED: 'Возвращен'
+    RETURN_REQUESTED: 'Возврат запрошен',
+    CANCELED: 'Отказ',
+    REFUNDED: 'Возврат оформлен'
   }
   return statusMap[status] || status
 }
@@ -100,8 +103,11 @@ const getOrderStatusColor = (status: string): 'default' | 'secondary' | 'destruc
     PENDING: 'outline',
     PAID: 'default',
     PROCESSING: 'secondary',
-    SHIPPED: 'secondary',
+    ASSEMBLING: 'secondary',
+    IN_DELIVERY: 'secondary',
+    AWAITING_PICKUP: 'secondary',
     DELIVERED: 'default',
+    RETURN_REQUESTED: 'secondary',
     CANCELED: 'destructive',
     REFUNDED: 'destructive'
   }
@@ -231,11 +237,14 @@ export const OrderHistory = ({ client }: OrderHistoryProps) => {
                 <SelectItem value="all">Все статусы</SelectItem>
                 <SelectItem value="PENDING">Ожидает оплаты</SelectItem>
                 <SelectItem value="PAID">Оплачен</SelectItem>
-                <SelectItem value="PROCESSING">В обработке</SelectItem>
-                <SelectItem value="SHIPPED">Отправлен</SelectItem>
+                <SelectItem value="PROCESSING">Обрабатывается</SelectItem>
+                <SelectItem value="ASSEMBLING">На сборке</SelectItem>
+                <SelectItem value="IN_DELIVERY">В доставке</SelectItem>
+                <SelectItem value="AWAITING_PICKUP">Ждет выдачи</SelectItem>
                 <SelectItem value="DELIVERED">Доставлен</SelectItem>
-                <SelectItem value="CANCELED">Отменен</SelectItem>
-                <SelectItem value="REFUNDED">Возвращен</SelectItem>
+                <SelectItem value="RETURN_REQUESTED">Возврат запрошен</SelectItem>
+                <SelectItem value="CANCELED">Отказ</SelectItem>
+                <SelectItem value="REFUNDED">Возврат оформлен</SelectItem>
               </SelectContent>
             </Select>
           </div>

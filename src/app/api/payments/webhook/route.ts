@@ -108,13 +108,13 @@ async function handlePaymentNotification(webhookData: any) {
     if (event === 'payment.succeeded') {
       await prisma.order.update({
         where: { id: existingPayment.orderId },
-        data: { 
-          status: 'PAID',
+        data: {
+          status: 'PROCESSING',
           updatedAt: new Date()
         }
       })
 
-      console.log(`Заказ ${existingPayment.orderId} помечен как оплаченный`)
+      console.log(`Заказ ${existingPayment.orderId} переведён в обработку`)
     }
 
     // Если платеж отменен, обновляем статус заказа

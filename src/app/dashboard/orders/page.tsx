@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@apollo/client'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -30,6 +30,18 @@ import { Loader2, Search, Eye, Trash2, Package, Truck, CheckCircle, XCircle } fr
 import { GET_ORDERS } from '@/lib/graphql/queries'
 import { UPDATE_ORDER_STATUS, DELETE_ORDER } from '@/lib/graphql/mutations'
 
+type OrderStatus =
+  | 'PENDING'
+  | 'PAID'
+  | 'PROCESSING'
+  | 'ASSEMBLING'
+  | 'IN_DELIVERY'
+  | 'AWAITING_PICKUP'
+  | 'DELIVERED'
+  | 'RETURN_REQUESTED'
+  | 'CANCELED'
+  | 'REFUNDED'
+
 interface Order {
   id: string
   orderNumber: string
@@ -43,7 +55,7 @@ interface Order {
   clientEmail?: string
   clientPhone?: string
   clientName?: string
-  status: 'PENDING' | 'PAID' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'RETURN_REQUESTED' | 'CANCELED' | 'REFUNDED'
+  status: OrderStatus
   totalAmount: number
   discountAmount: number
   finalAmount: number
@@ -73,22 +85,26 @@ interface Order {
   updatedAt: string
 }
 
-const statusLabels = {
+const statusLabels: Record<OrderStatus, string> = {
   PENDING: 'Ожидает оплаты',
   PAID: 'Оплачен',
-  PROCESSING: 'В обработке',
-  SHIPPED: 'Отправлен',
+  PROCESSING: 'Обрабатывается',
+  ASSEMBLING: 'На сборке',
+  IN_DELIVERY: 'В доставке',
+  AWAITING_PICKUP: 'Ждет выдачи',
   DELIVERED: 'Доставлен',
   RETURN_REQUESTED: 'Возврат запрошен',
-  CANCELED: 'Отменен',
-  REFUNDED: 'Возвращен'
+  CANCELED: 'Отказ',
+  REFUNDED: 'Возврат оформлен'
 }
 
-const statusColors = {
+const statusColors: Record<OrderStatus, string> = {
   PENDING: 'bg-yellow-100 text-yellow-800',
   PAID: 'bg-green-100 text-green-800',
   PROCESSING: 'bg-blue-100 text-blue-800',
-  SHIPPED: 'bg-purple-100 text-purple-800',
+  ASSEMBLING: 'bg-indigo-100 text-indigo-800',
+  IN_DELIVERY: 'bg-purple-100 text-purple-800',
+  AWAITING_PICKUP: 'bg-teal-100 text-teal-800',
   DELIVERED: 'bg-green-100 text-green-800',
   RETURN_REQUESTED: 'bg-orange-100 text-orange-800',
   CANCELED: 'bg-red-100 text-red-800',
@@ -264,7 +280,7 @@ export default function OrdersPage() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">В обработке</p>
                 <p className="text-2xl font-bold">
-                  {orders.filter(o => ['PAID', 'PROCESSING', 'SHIPPED'].includes(o.status)).length}
+                  {orders.filter(o => ['PAID', 'PROCESSING', 'ASSEMBLING', 'IN_DELIVERY', 'AWAITING_PICKUP'].includes(o.status)).length}
                 </p>
               </div>
             </div>

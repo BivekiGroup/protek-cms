@@ -9,16 +9,42 @@ import { useQuery } from '@apollo/client'
 import { GET_DASHBOARD_CLIENTS, GET_DASHBOARD_ORDERS } from '@/lib/graphql/queries'
 import { useMemo } from 'react'
 
+const statusLabels: Record<string, string> = {
+  PENDING: 'Ожидает оплаты',
+  PAID: 'Оплачен',
+  PROCESSING: 'Обрабатывается',
+  ASSEMBLING: 'На сборке',
+  IN_DELIVERY: 'В доставке',
+  AWAITING_PICKUP: 'Ждет выдачи',
+  DELIVERED: 'Доставлен',
+  RETURN_REQUESTED: 'Возврат запрошен',
+  CANCELED: 'Отказ',
+  REFUNDED: 'Возврат оформлен',
+}
+
 function statusBadgeColor(status?: string) {
   switch (status) {
-    case 'PENDING': return 'bg-yellow-100 text-yellow-800'
-    case 'PAID': return 'bg-green-100 text-green-800'
-    case 'PROCESSING': return 'bg-blue-100 text-blue-800'
-    case 'SHIPPED': return 'bg-indigo-100 text-indigo-800'
-    case 'DELIVERED': return 'bg-emerald-100 text-emerald-800'
+    case 'PENDING':
+      return 'bg-yellow-100 text-yellow-800'
+    case 'PAID':
+      return 'bg-green-100 text-green-800'
+    case 'PROCESSING':
+      return 'bg-blue-100 text-blue-800'
+    case 'ASSEMBLING':
+      return 'bg-indigo-100 text-indigo-800'
+    case 'IN_DELIVERY':
+      return 'bg-purple-100 text-purple-800'
+    case 'AWAITING_PICKUP':
+      return 'bg-teal-100 text-teal-800'
+    case 'DELIVERED':
+      return 'bg-emerald-100 text-emerald-800'
+    case 'RETURN_REQUESTED':
+      return 'bg-orange-100 text-orange-800'
     case 'CANCELED':
-    case 'REFUNDED': return 'bg-red-100 text-red-700'
-    default: return 'bg-gray-100 text-gray-700'
+    case 'REFUNDED':
+      return 'bg-red-100 text-red-700'
+    default:
+      return 'bg-gray-100 text-gray-700'
   }
 }
 
@@ -136,7 +162,9 @@ export default function DashboardPage() {
                     <div className="font-semibold">{formatCurrency(order.finalAmount, order.currency)}</div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Badge variant="secondary" className={statusBadgeColor(order.status)}>{order.status}</Badge>
+                    <Badge variant="secondary" className={statusBadgeColor(order.status)}>
+                      {statusLabels[order.status] || order.status}
+                    </Badge>
                     {order.status === 'CANCELED' && (<AlertCircle className="h-4 w-4 text-red-500" />)}
                   </div>
                 </div>

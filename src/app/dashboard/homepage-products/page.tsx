@@ -1012,7 +1012,7 @@ export default function HomepageProductsPage() {
                 products.map((product) => (
                   <div key={product.id} className="border rounded p-3 flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-gray-100 rounded border flex items-center justify-center">
+                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
                         {product.images?.[0]?.url ? (
                           <NextImage
                               src={product.images[0].url}
@@ -1093,7 +1093,7 @@ export default function HomepageProductsPage() {
                 products.map((product) => (
                   <div key={product.id} className="border rounded p-3 flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-gray-100 rounded border flex items-center justify-center">
+                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
                         {product.images?.[0]?.url ? (
                           <NextImage
                               src={product.images[0].url}
@@ -1177,7 +1177,7 @@ export default function HomepageProductsPage() {
                     onClick={() => setSelectedNewArrivalProduct(product)}
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-gray-100 rounded border flex items-center justify-center">
+                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
                         {product.images?.[0]?.url ? (
                           <NextImage
                               src={product.images[0].url}
@@ -1254,7 +1254,7 @@ export default function HomepageProductsPage() {
                     onClick={() => setSelectedProduct(product)}
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-gray-100 rounded border flex items-center justify-center">
+                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
                         {product.images?.[0]?.url ? (
                           <NextImage
                               src={product.images[0].url}
