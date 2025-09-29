@@ -142,6 +142,91 @@ const getIntegrationSettings = async () => {
   }
 }
 
+const normalizeArticleNumber = (value: string): string =>
+  value.replace(/[^0-9a-zA-Z]+/g, '').toLowerCase()
+
+const normalizeBrandName = (value?: string | null): string =>
+  (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+
+const findInternalProductsByArticle = async (
+  articleNumber: string,
+  brand?: string,
+  include?: Record<string, unknown>
+): Promise<{ products: any[]; usedNormalization: boolean }> => {
+  const cleanArticle = articleNumber.trim()
+  const normalizedArticle = normalizeArticleNumber(cleanArticle)
+  const normalizedBrand = normalizeBrandName(brand)
+
+  if (!cleanArticle) {
+    return { products: [], usedNormalization: false }
+  }
+
+  const directQueryArgs: Record<string, unknown> = {
+    where: {
+      article: {
+        equals: cleanArticle,
+        mode: 'insensitive',
+      },
+    },
+  }
+
+  if (include) {
+    directQueryArgs.include = include
+  }
+
+  let directMatches = await prisma.product.findMany(directQueryArgs as any)
+
+  if (normalizedBrand) {
+    directMatches = directMatches.filter(product => normalizeBrandName(product.brand) === normalizedBrand)
+  }
+
+  if (directMatches.length > 0) {
+    return { products: directMatches, usedNormalization: false }
+  }
+
+  if (!normalizedArticle) {
+    return { products: [], usedNormalization: false }
+  }
+
+  const rawMatches = await prisma.$queryRaw<Array<{ id: string; brand: string | null }>>`
+    SELECT id, brand
+    FROM "products"
+    WHERE article IS NOT NULL
+      AND LOWER(regexp_replace(article, '[^0-9A-Za-z]+', '', 'g')) = ${normalizedArticle}
+  `
+
+  const matchingIds = rawMatches
+    .filter(row => {
+      if (!normalizedBrand) return true
+      return normalizeBrandName(row.brand) === normalizedBrand
+    })
+    .map(row => row.id)
+
+  if (matchingIds.length === 0) {
+    return { products: [], usedNormalization: true }
+  }
+
+  const normalizedQueryArgs: Record<string, unknown> = {
+    where: {
+      id: {
+        in: matchingIds,
+      },
+    },
+  }
+
+  if (include) {
+    normalizedQueryArgs.include = include
+  }
+
+  let normalizedMatches = await prisma.product.findMany(normalizedQueryArgs as any)
+
+  if (normalizedBrand) {
+    normalizedMatches = normalizedMatches.filter(product => normalizeBrandName(product.brand) === normalizedBrand)
+  }
+
+  return { products: normalizedMatches, usedNormalization: true }
+}
+
 // Функция для сохранения истории поиска запчастей и автомобилей
 const saveSearchHistory = async (
   context: Context, 
@@ -2496,19 +2581,21 @@ export const resolvers = {
         };
 
         // 1. Поиск в нашей базе данных
-        const internalProducts = await prisma.product.findMany({
-          where: {
-            article: {
-              equals: cleanArticleNumber,
-              mode: 'insensitive'
-            }
-          },
-          include: {
-            categories: true,
-            images: { orderBy: { order: 'asc' } },
-            characteristics: { include: { characteristic: true } }
-          }
-        })
+        const productInclude = {
+          categories: true,
+          images: { orderBy: { order: 'asc' } },
+          characteristics: { include: { characteristic: true } }
+        }
+
+        const { products: internalProducts, usedNormalization: usedNormalizedArticleMatch } =
+          await findInternalProductsByArticle(cleanArticleNumber, cleanBrand, productInclude)
+
+        if (usedNormalizedArticleMatch) {
+          console.log('ℹ️ GraphQL Resolver - внутренняя база: найдено по нормализованному артикулу', {
+            articleNumber: cleanArticleNumber,
+            brand: cleanBrand
+          })
+        }
 
         console.log(`📦 Найдено ${internalProducts.length} товаров в нашей базе`)
 
@@ -2918,9 +3005,15 @@ export const resolvers = {
           const { articleNumber, brand } = analog
 
           // Поиск в нашей базе
-          const analogInternalProducts = await prisma.product.findMany({
-            where: { article: { equals: articleNumber, mode: 'insensitive' } },
-          })
+          const { products: analogInternalProducts, usedNormalization: analogUsedNormalization } =
+            await findInternalProductsByArticle(articleNumber, brand)
+
+          if (analogUsedNormalization) {
+            console.log('ℹ️ GraphQL Resolver - аналог найден по нормализованному артикулу', {
+              articleNumber,
+              brand,
+            })
+          }
 
           // Формируем внутренние предложения
           const internalOffers = analogInternalProducts.map(product => ({
