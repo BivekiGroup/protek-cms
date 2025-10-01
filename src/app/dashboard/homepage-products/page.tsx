@@ -592,10 +592,10 @@ export default function HomepageProductsPage() {
               ) : (
                 <div className="space-y-4">
                   {dailyProducts.map((dailyProduct) => (
-                    <div key={dailyProduct.id} className="border rounded-lg p-4 flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
+                    <div key={dailyProduct.id} className="border rounded-lg p-4 flex items-start gap-4">
+                      <div className="flex flex-1 items-start gap-4 min-w-0">
                         {/* Изображение товара */}
-                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
+                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                           {dailyProduct.product.images?.[0]?.url ? (
                             <NextImage
                               src={dailyProduct.product.images[0].url}
@@ -611,7 +611,7 @@ export default function HomepageProductsPage() {
                         </div>
 
                         {/* Информация о товаре */}
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <h3 className="font-medium text-gray-900">{dailyProduct.product.name}</h3>
                           <div className="text-sm text-gray-500 space-y-1">
                             {dailyProduct.product.article && (
@@ -633,14 +633,14 @@ export default function HomepageProductsPage() {
 
                         {/* Скидка */}
                         {dailyProduct.discount && (
-                          <Badge variant="secondary" className="bg-green-100 text-green-800">
+                          <Badge variant="secondary" className="bg-green-100 text-green-800 flex-shrink-0">
                             -{dailyProduct.discount}%
                           </Badge>
                         )}
                       </div>
 
                       {/* Действия */}
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-2 ml-auto flex-shrink-0">
                         <Button
                           variant="outline"
                           size="sm"
@@ -693,10 +693,10 @@ export default function HomepageProductsPage() {
               ) : (
                 <div className="space-y-4">
                   {bestPriceProducts.map((bestPriceProduct) => (
-                    <div key={bestPriceProduct.id} className="border rounded-lg p-4 flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
+                    <div key={bestPriceProduct.id} className="border rounded-lg p-4 flex items-start gap-4">
+                      <div className="flex flex-1 items-start gap-4 min-w-0">
                         {/* Изображение товара */}
-                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
+                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                           {bestPriceProduct.product.images?.[0]?.url ? (
                             <NextImage
                               src={bestPriceProduct.product.images[0].url}
@@ -712,7 +712,7 @@ export default function HomepageProductsPage() {
                         </div>
 
                         {/* Информация о товаре */}
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <h3 className="font-medium text-gray-900">{bestPriceProduct.product.name}</h3>
                           <div className="text-sm text-gray-500 space-y-1">
                             {bestPriceProduct.product.article && (
@@ -731,13 +731,13 @@ export default function HomepageProductsPage() {
                         </div>
 
                         {/* Скидка */}
-                        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+                        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 flex-shrink-0">
                           -{bestPriceProduct.discount}%
                         </Badge>
                       </div>
 
                       {/* Действия */}
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-2 ml-auto flex-shrink-0">
                         <Button
                           variant="outline"
                           size="sm"
@@ -790,10 +790,10 @@ export default function HomepageProductsPage() {
               ) : (
                 <div className="space-y-4">
                   {topSalesProducts.map((topSalesProduct) => (
-                    <div key={topSalesProduct.id} className="border rounded-lg p-4 flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
+                    <div key={topSalesProduct.id} className="border rounded-lg p-4 flex items-start gap-4">
+                      <div className="flex flex-1 items-start gap-4 min-w-0">
                         {/* Изображение товара */}
-                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
+                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                           {topSalesProduct.product.images?.[0]?.url ? (
                             <NextImage
                               src={topSalesProduct.product.images[0].url}
@@ -809,7 +809,7 @@ export default function HomepageProductsPage() {
                         </div>
 
                         {/* Информация о товаре */}
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <h3 className="font-medium text-gray-900">{topSalesProduct.product.name}</h3>
                           <div className="text-sm text-gray-500 space-y-1">
                             {topSalesProduct.product.article && (
@@ -823,7 +823,7 @@ export default function HomepageProductsPage() {
                         </div>
 
                         {/* Статус */}
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           <Switch
                             checked={topSalesProduct.isActive}
                             onCheckedChange={() => handleToggleTopSalesActive(topSalesProduct)}
@@ -835,7 +835,7 @@ export default function HomepageProductsPage() {
                       </div>
 
                       {/* Действия */}
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-2 ml-auto flex-shrink-0">
                         <Button
                           variant="outline"
                           size="sm"
@@ -896,9 +896,9 @@ export default function HomepageProductsPage() {
               ) : (
                 <div className="space-y-4">
                   {newArrivalProducts.map((item) => (
-                    <div key={item.id} className="border rounded-lg p-4 flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
+                    <div key={item.id} className="border rounded-lg p-4 flex items-start gap-4">
+                      <div className="flex flex-1 items-start gap-4 min-w-0">
+                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                           {item.product.images?.[0]?.url ? (
                             <NextImage
                               src={item.product.images[0].url}
@@ -913,7 +913,7 @@ export default function HomepageProductsPage() {
                           )}
                         </div>
 
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <h3 className="font-medium text-gray-900">{item.product.name}</h3>
                           <div className="text-sm text-gray-500 space-y-1">
                             {item.product.article && (
@@ -926,7 +926,7 @@ export default function HomepageProductsPage() {
                           </div>
                         </div>
 
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           <Switch
                             checked={item.isActive}
                             onCheckedChange={() => handleToggleNewArrivalActive(item)}
@@ -937,7 +937,7 @@ export default function HomepageProductsPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-2 ml-auto flex-shrink-0">
                         <Button
                           variant="outline"
                           size="sm"
@@ -1010,9 +1010,9 @@ export default function HomepageProductsPage() {
                 <div className="text-center py-4 text-gray-500">Товары не найдены</div>
               ) : (
                 products.map((product) => (
-                  <div key={product.id} className="border rounded p-3 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
+                  <div key={product.id} className="border rounded p-3 flex items-start gap-3">
+                    <div className="flex flex-1 items-start gap-3 min-w-0">
+                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                         {product.images?.[0]?.url ? (
                           <NextImage
                               src={product.images[0].url}
@@ -1026,7 +1026,7 @@ export default function HomepageProductsPage() {
                           <Package className="w-4 h-4 text-gray-400" />
                         )}
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <h4 className="font-medium">{product.name}</h4>
                         <div className="text-sm text-gray-500">
                           {product.article && <span>Артикул: {product.article} | </span>}
@@ -1039,6 +1039,7 @@ export default function HomepageProductsPage() {
                       onClick={() => handleAddDailyProduct(product.id)}
                       disabled={creatingDaily}
                       size="sm"
+                      className="ml-auto"
                     >
                       Добавить
                     </Button>
@@ -1091,9 +1092,9 @@ export default function HomepageProductsPage() {
                 <div className="text-center py-4 text-gray-500">Товары не найдены</div>
               ) : (
                 products.map((product) => (
-                  <div key={product.id} className="border rounded p-3 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
+                  <div key={product.id} className="border rounded p-3 flex items-start gap-3">
+                    <div className="flex flex-1 items-start gap-3 min-w-0">
+                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                         {product.images?.[0]?.url ? (
                           <NextImage
                               src={product.images[0].url}
@@ -1107,7 +1108,7 @@ export default function HomepageProductsPage() {
                           <Package className="w-4 h-4 text-gray-400" />
                         )}
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <h4 className="font-medium">{product.name}</h4>
                         <div className="text-sm text-gray-500">
                           {product.article && <span>Артикул: {product.article} | </span>}
@@ -1125,6 +1126,7 @@ export default function HomepageProductsPage() {
                       onClick={() => handleAddBestPriceProduct(product.id)}
                       disabled={creatingBestPrice}
                       size="sm"
+                      className="ml-auto"
                     >
                       Добавить
                     </Button>
@@ -1171,13 +1173,13 @@ export default function HomepageProductsPage() {
                 products.map((product) => (
                   <div
                     key={product.id}
-                    className={`border rounded p-3 flex items-center justify-between cursor-pointer transition ${
+                    className={`border rounded p-3 flex items-start gap-3 cursor-pointer transition ${
                       selectedNewArrivalProduct?.id === product.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'
                     }`}
                     onClick={() => setSelectedNewArrivalProduct(product)}
                   >
-                    <div className="flex items-center space-x-3">
-                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
+                    <div className="flex flex-1 items-start gap-3 min-w-0">
+                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                         {product.images?.[0]?.url ? (
                           <NextImage
                               src={product.images[0].url}
@@ -1191,7 +1193,7 @@ export default function HomepageProductsPage() {
                           <Package className="w-4 h-4 text-gray-400" />
                         )}
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <h4 className="font-medium">{product.name}</h4>
                         <div className="text-sm text-gray-500">
                           {product.article && <span>Артикул: {product.article} | </span>}
@@ -1201,7 +1203,9 @@ export default function HomepageProductsPage() {
                       </div>
                     </div>
                     {selectedNewArrivalProduct?.id === product.id && (
-                      <Badge variant="secondary">Выбран</Badge>
+                      <Badge variant="secondary" className="flex-shrink-0 ml-auto">
+                        Выбран
+                      </Badge>
                     )}
                   </div>
                 ))
@@ -1248,13 +1252,13 @@ export default function HomepageProductsPage() {
                 products.map((product) => (
                   <div 
                     key={product.id} 
-                    className={`border rounded p-3 flex items-center justify-between cursor-pointer transition-colors ${
+                    className={`border rounded p-3 flex items-start gap-3 cursor-pointer transition-colors ${
                       selectedProduct?.id === product.id ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50'
                     }`}
                     onClick={() => setSelectedProduct(product)}
                   >
-                    <div className="flex items-center space-x-3">
-                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
+                    <div className="flex flex-1 items-start gap-3 min-w-0">
+                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                         {product.images?.[0]?.url ? (
                           <NextImage
                               src={product.images[0].url}
@@ -1268,7 +1272,7 @@ export default function HomepageProductsPage() {
                           <Package className="w-4 h-4 text-gray-400" />
                         )}
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <h4 className="font-medium">{product.name}</h4>
                         <div className="text-sm text-gray-500">
                           {product.article && <span>Артикул: {product.article} | </span>}
@@ -1278,7 +1282,9 @@ export default function HomepageProductsPage() {
                       </div>
                     </div>
                     {selectedProduct?.id === product.id && (
-                      <Badge variant="secondary">Выбран</Badge>
+                      <Badge variant="secondary" className="flex-shrink-0 ml-auto">
+                        Выбран
+                      </Badge>
                     )}
                   </div>
                 ))
