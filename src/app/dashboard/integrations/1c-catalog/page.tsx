@@ -124,7 +124,7 @@ export default function OneCCatalogDocs() {
   const curlClients = `curl -sS "${CURL_BASE}/api/1c/catalog/clients" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" | jq`
 
-  const curlOrders = `curl -sS "${CURL_BASE}/api/1c/orders?limit=50" \\
+  const curlOrders = `curl -sS "${CURL_BASE}/api/1c/orders?since=2025-01-01&to=2025-01-31" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" | jq`
 
   // Live Tester state
@@ -137,6 +137,8 @@ export default function OneCCatalogDocs() {
   const [status, setStatus] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [multiCount, setMultiCount] = useState<number>(3)
+  const [ordersSince, setOrdersSince] = useState('')
+  const [ordersTo, setOrdersTo] = useState('')
 
   const method: 'GET' | 'POST' = useMemo(() => (
     endpoint === 'health' || endpoint === 'visits' || endpoint === 'clients' || endpoint === 'orders' ? 'GET' : 'POST'
@@ -151,9 +153,16 @@ export default function OneCCatalogDocs() {
       case 'stocks': return '/api/1c/catalog/stocks'
       case 'visits': return '/api/1c/catalog/visits?limit=50'
       case 'clients': return '/api/1c/catalog/clients'
-      case 'orders': return '/api/1c/orders?limit=50'
+      case 'orders': {
+        const params = new URLSearchParams()
+        params.set('limit', '50')
+        if (ordersSince) params.set('since', ordersSince)
+        if (ordersTo) params.set('to', ordersTo)
+        const query = params.toString()
+        return query ? `/api/1c/orders?${query}` : '/api/1c/orders'
+      }
     }
-  }, [endpoint])
+  }, [endpoint, ordersSince, ordersTo])
 
   const exampleBody = useMemo(() => {
     switch (endpoint) {
@@ -384,7 +393,7 @@ export default function OneCCatalogDocs() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Заказы (list)</CardTitle>
-          <CardDescription>Получение заказов. Поддерживает `limit/offset`, `status`, `from/to`, `orderNumber`.</CardDescription>
+          <CardDescription>Получение заказов. Поддерживает `limit/offset`, `status`, `orderNumber`, `since/to` (формат YYYY-MM-DD).</CardDescription>
         </CardHeader>
         <CardContent>
           <CodeBlock title="curl" code={curlOrders} />
@@ -445,6 +454,29 @@ export default function OneCCatalogDocs() {
               </div>
             )}
           </div>
+
+          {endpoint === 'orders' && (
+            <div className="grid md:grid-cols-4 gap-3">
+              <div>
+                <label className="text-xs text-gray-600">since (дата с)</label>
+                <Input
+                  type="date"
+                  value={ordersSince}
+                  onChange={(e) => setOrdersSince(e.target.value)}
+                  placeholder="YYYY-MM-DD"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">to (дата по)</label>
+                <Input
+                  type="date"
+                  value={ordersTo}
+                  onChange={(e) => setOrdersTo(e.target.value)}
+                  placeholder="YYYY-MM-DD"
+                />
+              </div>
+            </div>
+          )}
 
           {method === 'POST' && (
             <div>

@@ -57,15 +57,17 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(Number(searchParams.get('limit') || 50) || 50, 500)
   const offset = Number(searchParams.get('offset') || 0) || 0
   const statusFilter = (searchParams.get('status') || '').trim().toUpperCase()
-  const from = searchParams.get('from') // ISO date
-  const to = searchParams.get('to') // ISO date
+  const since = (searchParams.get('since') || '').trim() || undefined
+  const from = (searchParams.get('from') || '').trim() || undefined
+  const rangeStart = since || from
+  const to = (searchParams.get('to') || '').trim() || undefined
   const searchOrderNumber = searchParams.get('orderNumber') || undefined
 
   const where: any = {}
   if (statusFilter) where.status = statusFilter
-  if (from || to) {
+  if (rangeStart || to) {
     where.createdAt = {}
-    if (from) (where.createdAt as any).gte = new Date(from)
+    if (rangeStart) (where.createdAt as any).gte = new Date(rangeStart)
     if (to) (where.createdAt as any).lte = new Date(to)
   }
   if (searchOrderNumber) where.orderNumber = searchOrderNumber
