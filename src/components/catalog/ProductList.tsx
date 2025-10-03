@@ -450,7 +450,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
 
       <div className="space-y-4">
         {/* Массовые действия */}
-        <div className={`rounded-lg p-3.5 border transition-colors ${hasSelection ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-200 text-gray-600'}`}>
+        <div className={`rounded-lg px-3.5 py-3 border transition-colors ${hasSelection ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-200 text-gray-600'}`}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-sm">
               {hasSelection ? `Выбрано товаров: ${selectedProducts.length}` : 'Выберите товары для массовых действий'}
@@ -497,9 +497,9 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
         </div>
 
         {/* Заголовок таблицы */}
-        <div className="bg-gray-50 rounded-lg p-2.5 overflow-x-auto">
+        <div className="bg-gray-50 rounded-lg px-2.5 py-0 overflow-x-auto">
           <div className="min-w-full">
-            <div className={`${gridTemplate} text-[9.5px] leading-[14px] font-medium text-gray-600 uppercase tracking-[0.05em] py-0.5`}>
+            <div className={`${gridTemplate} py-0 text-[11px] leading-[16px] font-medium text-gray-600 uppercase tracking-[0.05em]`}>
               <div className="flex justify-center">
                 <Checkbox
                   checked={selectAll}
@@ -522,11 +522,11 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
         </div>
 
         {/* Список товаров */}
-        <div className="space-y-1.5 overflow-x-auto">
+        <div className="space-y-0.5 overflow-x-auto">
           {sortedProducts.map((product) => (
-            <div key={product.id} className="bg-white border border-gray-200 rounded-md p-1.5 hover:shadow-sm transition-shadow">
+            <div key={product.id} className="bg-white border border-gray-200 rounded-md py-0.5 px-1 hover:shadow-sm transition-shadow">
               <div className="w-full">
-                <div className={`${gridTemplate} py-0.5 text-[10.5px] leading-tight`}>
+                <div className={`${gridTemplate} py-0.5 text-[11.5px] leading-snug`}>
                   {/* Чекбокс */}
                   <div className="flex justify-center">
                     <Checkbox
@@ -538,7 +538,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
 
                   {/* Внутренний код */}
                   <div className="min-w-0">
-                    <span className="block text-[10.5px] text-gray-600 truncate" title={product.externalId || product.id}>
+                    <span className="block text-[11px] text-gray-600 truncate" title={product.externalId || product.id}>
                       {product.externalId || product.id}
                     </span>
                   </div>
@@ -561,13 +561,13 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
 
                   {/* Название */}
                   <div className="min-w-0">
-                    <h3 className="font-medium text-gray-900 text-[11px] truncate" title={product.name}>{product.name}</h3>
+                    <h3 className="font-semibold text-gray-900 text-[12px] truncate" title={product.name}>{product.name}</h3>
                   </div>
 
                   {/* Категория */}
                   <div className="min-w-0">
                     <span
-                      className="block text-[10.5px] text-gray-700 truncate"
+                      className="block text-[11px] text-gray-700 truncate"
                       title={product.categories.length > 0 ? product.categories.map(cat => cat.name).join(', ') : undefined}
                     >
                       {product.categories.length > 0 ? product.categories.map(cat => cat.name).join(', ') : '—'}
@@ -576,14 +576,14 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
 
                   {/* Артикул */}
                   <div className="min-w-0">
-                    <span className="block text-[10.5px] text-gray-600 truncate" title={product.article || undefined}>
+                    <span className="block text-[11px] text-gray-600 truncate" title={product.article || undefined}>
                       {product.article || '—'}
                     </span>
                   </div>
 
                   {/* Остаток */}
                   <div>
-                    <span className={`text-[11px] ${product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <span className={`text-[12px] ${product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {product.stock} шт
                     </span>
                   </div>
@@ -599,7 +599,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                         placeholder="—"
                         inputMode="decimal"
                         disabled={!!priceSaving[product.id]}
-                        className="h-[22px] min-h-[22px] px-1.5 py-0 text-[10.5px]"
+                        className="h-[22px] min-h-[22px] px-1.5 py-0 text-[11.5px]"
                       />
                       {priceSaving[product.id] ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
@@ -618,7 +618,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                         placeholder="—"
                         inputMode="decimal"
                         disabled={!!priceSaving[product.id]}
-                        className="h-[22px] min-h-[22px] px-1.5 py-0 text-[10.5px]"
+                        className="h-[22px] min-h-[22px] px-1.5 py-0 text-[11.5px]"
                       />
                       {priceSaving[product.id] ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
