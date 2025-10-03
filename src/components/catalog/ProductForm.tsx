@@ -18,6 +18,7 @@ interface Product {
   id: string
   name: string
   slug: string
+  externalId?: string
   article?: string
   description?: string
   videoUrl?: string

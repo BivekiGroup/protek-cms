@@ -565,6 +565,7 @@ export const GET_PRODUCTS = gql`
       id
       name
       slug
+      externalId
       article
       brand
       description
@@ -627,6 +628,7 @@ export const GET_PRODUCT = gql`
       id
       name
       slug
+      externalId
       article
       description
       videoUrl

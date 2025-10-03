@@ -16,6 +16,7 @@ interface Product {
   name: string
   article?: string
   brand?: string
+  externalId?: string
   retailPrice?: number
   wholesalePrice?: number
   stock: number
@@ -43,7 +44,7 @@ interface ProductListProps {
   categories?: Category[]
 }
 
-type SortField = 'photo' | 'name' | 'category' | 'article' | 'stock' | 'wholesalePrice' | 'retailPrice' | 'isVisible' | 'actions'
+type SortField = 'photo' | 'internalCode' | 'name' | 'category' | 'article' | 'stock' | 'wholesalePrice' | 'retailPrice' | 'isVisible'
 
 export const ProductList = ({ products, loading, onProductEdit, onProductCreated, categories = [] }: ProductListProps) => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
@@ -202,6 +203,8 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
 
   const getSortValue = (product: Product, field: SortField): string | number => {
     switch (field) {
+      case 'internalCode':
+        return product.externalId?.toLowerCase() ?? product.id.toLowerCase()
       case 'photo':
         return product.images.length > 0 ? 1 : 0
       case 'name':
@@ -218,8 +221,6 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
         return product.retailPrice ?? 0
       case 'isVisible':
         return product.isVisible ? 1 : 0
-      case 'actions':
-        return product.name?.toLowerCase() ?? ''
       default:
         return ''
     }
@@ -248,12 +249,12 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
 
   const renderSortIcon = (field: SortField) => {
     if (!sortConfig || sortConfig.field !== field) {
-      return <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />
+      return <ArrowUpDown className="w-3 h-3 text-gray-400" />
     }
 
     return sortConfig.direction === 'asc'
-      ? <ArrowUp className="w-3.5 h-3.5 text-blue-600" />
-      : <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
+      ? <ArrowUp className="w-3 h-3 text-blue-600" />
+      : <ArrowDown className="w-3 h-3 text-blue-600" />
   }
 
   const renderSortableHeader = (field: SortField, label: string) => (
@@ -437,6 +438,8 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
     )
   }
 
+  const gridTemplate = 'grid grid-cols-[30px_minmax(62px,95px)_minmax(52px,80px)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(68px,100px)_minmax(52px,80px)_minmax(62px,96px)_minmax(62px,96px)_minmax(48px,72px)_minmax(70px,100px)] items-center gap-1'
+
   return (
     <div className="relative">
       {isRefreshing ? (
@@ -447,7 +450,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
 
       <div className="space-y-4">
         {/* Массовые действия */}
-        <div className={`rounded-lg p-4 border transition-colors ${hasSelection ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-200 text-gray-600'}`}>
+        <div className={`rounded-lg p-3.5 border transition-colors ${hasSelection ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-200 text-gray-600'}`}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-sm">
               {hasSelection ? `Выбрано товаров: ${selectedProducts.length}` : 'Выберите товары для массовых действий'}
@@ -494,85 +497,77 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
         </div>
 
         {/* Заголовок таблицы */}
-        <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
-          <div className="min-w-[1000px]">
-            <div className="grid grid-cols-12 gap-4 items-center text-sm font-medium text-gray-700">
-              <div className="col-span-1">
+        <div className="bg-gray-50 rounded-lg p-2.5 overflow-x-auto">
+          <div className="min-w-full">
+            <div className={`${gridTemplate} text-[9.5px] leading-[14px] font-medium text-gray-600 uppercase tracking-[0.05em] py-0.5`}>
+              <div className="flex justify-center">
                 <Checkbox
                   checked={selectAll}
                   onCheckedChange={handleSelectAll}
+                  className="h-3.5 w-3.5 [&_svg]:h-3 [&_svg]:w-3"
                 />
               </div>
-              <div className="col-span-1">
-                {renderSortableHeader('photo', 'Фото')}
-              </div>
-              <div className="col-span-2 min-w-0">
-                {renderSortableHeader('name', 'Название')}
-              </div>
-              <div className="col-span-2 min-w-0">
-                {renderSortableHeader('category', 'Категория')}
-              </div>
-              <div className="col-span-1 min-w-0">
-                {renderSortableHeader('article', 'Артикул')}
-              </div>
-              <div className="col-span-1">
-                {renderSortableHeader('stock', 'Остаток')}
-              </div>
-              <div className="col-span-1">
-                {renderSortableHeader('wholesalePrice', 'Цена опт')}
-              </div>
-              <div className="col-span-1">
-                {renderSortableHeader('retailPrice', 'Цена сайт')}
-              </div>
-              <div className="col-span-1">
-                {renderSortableHeader('isVisible', 'На сайте')}
-              </div>
-              <div className="col-span-2">
-                {renderSortableHeader('actions', 'Действия')}
-              </div>
+              <div className="whitespace-nowrap">{renderSortableHeader('internalCode', 'Внутр. код')}</div>
+              <div className="whitespace-nowrap">{renderSortableHeader('photo', 'Фото')}</div>
+              <div className="min-w-0 whitespace-nowrap">{renderSortableHeader('name', 'Название')}</div>
+              <div className="min-w-0 whitespace-nowrap">{renderSortableHeader('category', 'Категория')}</div>
+              <div className="min-w-0 whitespace-nowrap">{renderSortableHeader('article', 'Артикул')}</div>
+              <div className="whitespace-nowrap">{renderSortableHeader('stock', 'Остаток')}</div>
+              <div className="whitespace-nowrap">{renderSortableHeader('wholesalePrice', 'Цена опт')}</div>
+              <div className="whitespace-nowrap">{renderSortableHeader('retailPrice', 'Цена сайт')}</div>
+              <div className="whitespace-nowrap">{renderSortableHeader('isVisible', 'Сайт')}</div>
+              <div className="flex justify-end pr-4 text-gray-400 whitespace-nowrap normal-case">Действия</div>
             </div>
           </div>
         </div>
 
         {/* Список товаров */}
-        <div className="space-y-2 overflow-x-auto">
+        <div className="space-y-1.5 overflow-x-auto">
           {sortedProducts.map((product) => (
-            <div key={product.id} className="bg-white border rounded-lg p-4 hover:shadow-sm transition-shadow">
-              <div className="min-w-[1000px]">
-                <div className="grid grid-cols-12 gap-4 items-center">
+            <div key={product.id} className="bg-white border border-gray-200 rounded-md p-1.5 hover:shadow-sm transition-shadow">
+              <div className="w-full">
+                <div className={`${gridTemplate} py-0.5 text-[10.5px] leading-tight`}>
                   {/* Чекбокс */}
-                  <div className="col-span-1">
+                  <div className="flex justify-center">
                     <Checkbox
                       checked={selectedProducts.includes(product.id)}
-                      onCheckedChange={(checked: boolean) => handleSelectProduct(product.id, checked)}
+                      onCheckedChange={(checked) => handleSelectProduct(product.id, Boolean(checked))}
+                      className="h-3.5 w-3.5 [&_svg]:h-3 [&_svg]:w-3"
                     />
                   </div>
 
+                  {/* Внутренний код */}
+                  <div className="min-w-0">
+                    <span className="block text-[10.5px] text-gray-600 truncate" title={product.externalId || product.id}>
+                      {product.externalId || product.id}
+                    </span>
+                  </div>
+
                   {/* Фото */}
-                  <div className="col-span-1">
+                  <div className="min-w-0">
                     {product.images.length > 0 ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={product.images[0].url}
                         alt={product.images[0].alt || product.name}
-                        className="w-12 h-12 object-cover rounded-lg border"
+                        className="w-7 h-7 object-cover rounded border"
                       />
                     ) : (
-                      <div className="w-12 h-12 bg-gray-100 rounded-lg border flex items-center justify-center">
-                        <Package className="w-6 h-6 text-gray-400" />
+                      <div className="w-7 h-7 bg-gray-100 rounded border flex items-center justify-center">
+                        <Package className="w-3.5 h-3.5 text-gray-400" />
                       </div>
                     )}
                   </div>
 
                   {/* Название */}
-                  <div className="col-span-2 min-w-0">
-                    <h3 className="font-medium text-gray-900 truncate" title={product.name}>{product.name}</h3>
+                  <div className="min-w-0">
+                    <h3 className="font-medium text-gray-900 text-[11px] truncate" title={product.name}>{product.name}</h3>
                   </div>
 
                   {/* Категория */}
-                  <div className="col-span-2 min-w-0">
+                  <div className="min-w-0">
                     <span
-                      className="block text-sm text-gray-700 truncate"
+                      className="block text-[10.5px] text-gray-700 truncate"
                       title={product.categories.length > 0 ? product.categories.map(cat => cat.name).join(', ') : undefined}
                     >
                       {product.categories.length > 0 ? product.categories.map(cat => cat.name).join(', ') : '—'}
@@ -580,22 +575,22 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                   </div>
 
                   {/* Артикул */}
-                  <div className="col-span-1 min-w-0">
-                    <span className="block text-sm text-gray-600 truncate" title={product.article || undefined}>
+                  <div className="min-w-0">
+                    <span className="block text-[10.5px] text-gray-600 truncate" title={product.article || undefined}>
                       {product.article || '—'}
                     </span>
                   </div>
 
                   {/* Остаток */}
-                  <div className="col-span-1">
-                    <span className={`text-sm ${product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <div>
+                    <span className={`text-[11px] ${product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {product.stock} шт
                     </span>
                   </div>
 
                   {/* Цена опт */}
-                  <div className="col-span-1">
-                    <div className="flex items-center gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5">
                       <Input
                         value={getPriceValue(product, 'wholesale')}
                         onChange={(event) => handlePriceChange(product.id, 'wholesale', event.target.value)}
@@ -604,17 +599,17 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                         placeholder="—"
                         inputMode="decimal"
                         disabled={!!priceSaving[product.id]}
-                        className="h-9"
+                        className="h-[22px] min-h-[22px] px-1.5 py-0 text-[10.5px]"
                       />
                       {priceSaving[product.id] ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
                       ) : null}
                     </div>
                   </div>
 
                   {/* Цена на сайте */}
-                  <div className="col-span-1">
-                    <div className="flex items-center gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5">
                       <Input
                         value={getPriceValue(product, 'retail')}
                         onChange={(event) => handlePriceChange(product.id, 'retail', event.target.value)}
@@ -623,50 +618,51 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                         placeholder="—"
                         inputMode="decimal"
                         disabled={!!priceSaving[product.id]}
-                        className="h-9"
+                        className="h-[22px] min-h-[22px] px-1.5 py-0 text-[10.5px]"
                       />
                       {priceSaving[product.id] ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
                       ) : null}
                     </div>
                   </div>
 
                   {/* Показывать на сайте */}
-                  <div className="col-span-1">
+                  <div>
                     <Switch
                       checked={product.isVisible}
                       onCheckedChange={(checked) => handleToggleVisibility(product.id, checked)}
+                      size="sm"
                     />
                   </div>
 
                   {/* Действия */}
-                  <div className="col-span-2 flex space-x-2 pr-6">
+                  <div className="flex flex-nowrap items-center gap-1 justify-end pr-1.5">
                     <Button
-                      variant="outline"
-                      size="sm"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
                       onClick={() => onProductEdit(product)}
-                      className="flex-shrink-0"
                     >
-                      <Edit className="w-4 h-4 mr-1" />
-                      Редактировать
+                      <Edit className="w-4 h-4" />
+                      <span className="sr-only">Редактировать</span>
                     </Button>
                     <Button
-                      variant="outline"
-                      size="sm"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
                       onClick={() => window.open(buildFrontendProductUrl(product), '_blank')}
-                      className="flex-shrink-0"
                     >
-                      <ExternalLink className="w-4 h-4 mr-1" />
-                      Открыть на сайте
+                      <ExternalLink className="w-4 h-4" />
+                      <span className="sr-only">Открыть на сайте</span>
                     </Button>
                     <Button
-                      variant="outline"
-                      size="sm"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
                       onClick={() => handleDeleteProduct(product.id)}
-                      className="flex-shrink-0"
                     >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Удалить
+                      <Trash2 className="w-4 h-4" />
+                      <span className="sr-only">Удалить</span>
                     </Button>
                   </div>
                 </div>
