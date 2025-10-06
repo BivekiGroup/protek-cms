@@ -43,6 +43,10 @@ function slugify(input: string) {
     .replace(/^-|-$/g, '')
 }
 
+function isLikelyCuid(value: string) {
+  return /^[a-z0-9]+$/i.test(value) && value.length >= 24
+}
+
 function getClientIp(req: NextRequest): string | null {
   const xf = req.headers.get('x-forwarded-for') || ''
   if (xf) return xf.split(',')[0].trim()
@@ -89,6 +93,7 @@ const base64ImageObjectSchema = z.object({
 
 const productItemSchema = z.object({
   id: z.string().trim().min(1).optional(),
+  product_id: z.string().trim().min(1).optional(),
   externalId: z.string().trim().min(1).optional(),
   article: z.string().trim().min(1),
   brand: z.string().trim().min(1),
@@ -171,8 +176,18 @@ export async function POST(req: NextRequest) {
   for (let idx = 0; idx < items.length; idx++) {
     const raw = items[idx]
     // normalization
+    const rawId = raw.id?.trim()
+    const rawIdLooksLikeDbId = rawId ? isLikelyCuid(rawId) : false
+    const rawProductIdValue = raw.product_id
+    const rawProductId = rawProductIdValue === undefined || rawProductIdValue === null
+      ? undefined
+      : String(rawProductIdValue).trim()
+    const productIdFromPayload = rawProductId ? rawProductId : undefined
+    const normOnecProductId = productIdFromPayload || (!rawIdLooksLikeDbId ? rawId : undefined)
+
     const norm = {
-      id: raw.id?.trim(),
+      id: rawIdLooksLikeDbId ? rawId : undefined,
+      onecProductId: normOnecProductId,
       externalId: raw.externalId?.trim(),
       article: normalizeArticle(raw.article),
       brand: normalizeBrand(raw.brand),
@@ -196,14 +211,23 @@ export async function POST(req: NextRequest) {
 
     const itemKey = norm.id
       ? { id: norm.id }
-      : norm.externalId
-        ? { externalId: norm.externalId }
-        : { article: norm.article, brand: norm.brand }
+      : norm.onecProductId
+        ? { product_id: norm.onecProductId }
+        : norm.externalId
+          ? { externalId: norm.externalId }
+          : { article: norm.article, brand: norm.brand }
 
     try {
-      // find product by preferred key: id -> externalId -> (article,brand)
+      // find product by preferred key: product_id -> id -> externalId -> (article,brand)
       let product: Awaited<ReturnType<typeof prisma.product.findUnique>> | Awaited<ReturnType<typeof prisma.product.findFirst>> | null = null
-      if (norm.id) {
+      if (norm.onecProductId) {
+        product = await prisma.product.findUnique({
+          where: { onecProductId: norm.onecProductId },
+          include: productInclude,
+        })
+      }
+
+      if (!product && norm.id) {
         product = await prisma.product.findUnique({
           where: { id: norm.id },
           include: productInclude,
@@ -237,6 +261,7 @@ export async function POST(req: NextRequest) {
             article: norm.article || undefined,
             brand: norm.brand || undefined,
             externalId: norm.externalId,
+            onecProductId: norm.onecProductId,
             description: norm.description,
             retailPrice: norm.price,
             stock: norm.stock ?? 0,
@@ -257,6 +282,7 @@ export async function POST(req: NextRequest) {
         if (norm.weight !== undefined) updateData.weight = norm.weight
         if (norm.dimensions !== undefined) updateData.dimensions = norm.dimensions
         if (norm.isVisible !== undefined) updateData.isVisible = norm.isVisible
+        if (norm.onecProductId && norm.onecProductId !== product.onecProductId) updateData.onecProductId = norm.onecProductId
 
         if (Object.keys(updateData).length) {
           product = await prisma.product.update({ where: { id: product.id }, data: updateData, include: productInclude })
@@ -270,7 +296,7 @@ export async function POST(req: NextRequest) {
           for (const img of norm.images_base64 as Array<string | z.infer<typeof base64ImageObjectSchema>>) {
             const parsed = await parseBase64Image(img)
             if (!parsed) continue
-            const key = buildProductImageKey(norm.article || norm.externalId || 'unknown', parsed.extension)
+            const key = buildProductImageKey(norm.article || norm.onecProductId || norm.externalId || 'unknown', parsed.extension)
             const res = await uploadBuffer(parsed.buffer, key, parsed.contentType).catch(() => null as any)
             const url = (typeof res === 'string' ? res : res?.url) || null
             if (url) uploadedUrls.push(url)
@@ -335,7 +361,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      results.push({ key: itemKey, status: isNew ? 'created' : 'updated', id: product.id })
+      results.push({ key: itemKey, status: isNew ? 'created' : 'updated', id: product.id, product_id: product.onecProductId })
       if (isNew) created++; else updated++
     } catch (e: any) {
       const err = { key: itemKey, index: idx, error: e?.message || String(e) }

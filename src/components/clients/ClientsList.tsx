@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -70,6 +70,10 @@ export const ClientsList = () => {
   const router = useRouter()
   const { data, loading, error } = useQuery(GET_CLIENTS)
 
+  const frontendOrigin = useMemo(() => {
+    return (process.env.NEXT_PUBLIC_FRONTEND_ORIGIN || (process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://protekauto.ru'))
+  }, [])
+
   const handleAddClient = () => {
     setIsCreateModalOpen(true)
   }
@@ -94,10 +98,47 @@ export const ClientsList = () => {
     router.push(`/dashboard/clients/${clientId}`)
   }
 
-  const handleLoginAsClient = (clientId: string) => {
-    // TODO: Реализовать вход от имени клиента
-    toast.info('Функция входа от имени клиента будет реализована позже')
-    console.log('Войти от имени клиента:', clientId)
+  const encodeClientPayload = (client: Client) => {
+    const clientData = {
+      id: client.id,
+      name: client.name,
+      phone: client.phone,
+      email: client.email || '',
+      clientNumber: client.clientNumber,
+    }
+
+    const json = JSON.stringify(clientData)
+    if (typeof window === 'undefined' || typeof window.btoa !== 'function') {
+      throw new Error('Browser encoding APIs недоступны')
+    }
+
+    const encoder = new TextEncoder()
+    const bytes = encoder.encode(json)
+    let binary = ''
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte)
+    })
+    return window.btoa(binary)
+  }
+
+  const handleLoginAsClient = (client: Client) => {
+    try {
+      const token = `client_${client.id}_${Date.now()}`
+      const encodedClient = encodeClientPayload(client)
+      const redirectPath = '/profile-orders'
+      const impersonationUrl = `${frontendOrigin.replace(/\/$/, '')}/auth/impersonate?token=${encodeURIComponent(token)}&client=${encodeURIComponent(encodedClient)}&redirect=${encodeURIComponent(redirectPath)}`
+
+      const opened = window.open(impersonationUrl, '_blank', 'noopener')
+      if (!opened) {
+        toast.error('Браузер заблокировал открытие новой вкладки')
+        return
+      }
+
+      toast.success('Открывается личный кабинет клиента в новой вкладке')
+    } catch (error) {
+      console.error('Ошибка входа от имени клиента:', error)
+      toast.error('Не удалось открыть сайт клиента')
+    }
   }
 
   const handleClientClick = (clientId: string) => {
@@ -290,7 +331,7 @@ export const ClientsList = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleLoginAsClient(client.id)}
+                        onClick={() => handleLoginAsClient(client)}
                         title="Войти от имени пользователя"
                       >
                         <LogIn className="h-4 w-4" />

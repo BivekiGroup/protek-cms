@@ -150,6 +150,7 @@ model Product {
   name                         String
   slug                         String                  @unique
   externalId                   String?                 @unique
+  onecProductId                String?                 @unique @map("product_id")
   article                      String?
   description                  String?
   videoUrl                     String?

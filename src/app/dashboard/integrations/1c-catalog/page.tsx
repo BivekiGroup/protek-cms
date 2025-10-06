@@ -43,6 +43,7 @@ export default function OneCCatalogDocs() {
   -d '{
   "items": [
     {
+      "product_id": "DS00021",
       "id": "cku123example",
       "externalId": "941024_dayco",
       "article": "941024",
@@ -64,6 +65,7 @@ export default function OneCCatalogDocs() {
 
   const itemSchema = `{
   id?: string,
+  product_id?: string,
   externalId?: string,
   article: string,
   brand: string,
@@ -170,6 +172,7 @@ export default function OneCCatalogDocs() {
         return JSON.stringify({
           items: [
             {
+              product_id: 'DS00021',
               id: 'cku123example',
               externalId: '941024_dayco',
               article: '941024',
@@ -317,7 +320,7 @@ export default function OneCCatalogDocs() {
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><CheckCircle className="h-4 w-4"/> Идемпотентность</CardTitle></CardHeader>
           <CardContent className="text-sm text-gray-700">
-            Ключ товара: <span className="font-mono">externalId</span> или пара <span className="font-mono">article+brand</span> (нормализация).<br/>
+            Ключ товара: <span className="font-mono">product_id</span> (если передан), затем <span className="font-mono">externalId</span>, иначе пара <span className="font-mono">article+brand</span> (нормализация).<br/>
             Заголовок <Badge variant="secondary">Idempotency-Key</Badge> — возвращает сохранённый результат (~10 мин).
           </CardContent>
         </Card>
@@ -350,6 +353,7 @@ export default function OneCCatalogDocs() {
           <div className="text-sm text-gray-700">
             Правила:
             <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li><b>product_id</b>: основной идентификатор из 1С; сохраняется отдельно от внутреннего ID CMS.</li>
               <li><b>Категория</b>: передаётся код <span className="font-mono">category_code</span> (обяз.), справочник заполняется отдельным запросом.</li>
               <li><b>Изображения</b>: синхронизация полного набора (удаление отсутствующих, порядок по индексу).</li>
               <li><b>Картинки base64</b>: можно передавать через <span className="font-mono">images_base64</span> (data URL или {"{ filename, content, contentType }"}); CMS загрузит в S3 и подставит URL.</li>

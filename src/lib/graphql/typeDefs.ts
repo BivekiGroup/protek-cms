@@ -148,6 +148,7 @@ export const typeDefs = gql`
     name: String!
     slug: String!
     externalId: String
+    onecProductId: String
     article: String
     description: String
     brand: String

@@ -566,6 +566,7 @@ export const GET_PRODUCTS = gql`
       name
       slug
       externalId
+      onecProductId
       article
       brand
       description
@@ -629,6 +630,7 @@ export const GET_PRODUCT = gql`
       name
       slug
       externalId
+      onecProductId
       article
       description
       videoUrl

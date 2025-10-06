@@ -17,6 +17,7 @@ interface Product {
   article?: string
   brand?: string
   externalId?: string
+  onecProductId?: string
   retailPrice?: number
   wholesalePrice?: number
   stock: number
@@ -204,7 +205,9 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
   const getSortValue = (product: Product, field: SortField): string | number => {
     switch (field) {
       case 'internalCode':
-        return product.externalId?.toLowerCase() ?? product.id.toLowerCase()
+        return product.onecProductId?.toLowerCase()
+          ?? product.externalId?.toLowerCase()
+          ?? product.id.toLowerCase()
       case 'photo':
         return product.images.length > 0 ? 1 : 0
       case 'name':
@@ -538,8 +541,11 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
 
                   {/* Внутренний код */}
                   <div className="min-w-0">
-                    <span className="block text-[11px] text-gray-600 truncate" title={product.externalId || product.id}>
-                      {product.externalId || product.id}
+                    <span
+                      className="block text-[11px] text-gray-600 truncate"
+                      title={product.onecProductId || product.externalId || product.id}
+                    >
+                      {product.onecProductId || product.externalId || product.id}
                     </span>
                   </div>
 

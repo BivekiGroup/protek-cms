@@ -1077,7 +1077,9 @@ export const resolvers = {
           where.OR = [
             { name: { contains: search, mode: 'insensitive' } },
             { article: { contains: search, mode: 'insensitive' } },
-            { description: { contains: search, mode: 'insensitive' } }
+            { description: { contains: search, mode: 'insensitive' } },
+            { externalId: { contains: search, mode: 'insensitive' } },
+            { onecProductId: { contains: search, mode: 'insensitive' } }
           ]
         }
 
@@ -1112,7 +1114,9 @@ export const resolvers = {
           where.OR = [
             { name: { contains: search, mode: 'insensitive' } },
             { article: { contains: search, mode: 'insensitive' } },
-            { description: { contains: search, mode: 'insensitive' } }
+            { description: { contains: search, mode: 'insensitive' } },
+            { externalId: { contains: search, mode: 'insensitive' } },
+            { onecProductId: { contains: search, mode: 'insensitive' } }
           ]
         }
 

@@ -19,6 +19,7 @@ interface Product {
   name: string
   slug: string
   externalId?: string
+  onecProductId?: string
   article?: string
   description?: string
   videoUrl?: string
