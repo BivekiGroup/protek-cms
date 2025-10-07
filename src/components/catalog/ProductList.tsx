@@ -207,7 +207,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
       case 'internalCode':
         return product.onecProductId?.toLowerCase()
           ?? product.externalId?.toLowerCase()
-          ?? product.id.toLowerCase()
+          ?? ''
       case 'photo':
         return product.images.length > 0 ? 1 : 0
       case 'name':
@@ -543,26 +543,28 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                   <div className="min-w-0">
                     <span
                       className="block text-[11px] text-gray-600 truncate"
-                      title={product.onecProductId || product.externalId || product.id}
+                      title={product.onecProductId || product.externalId || '—'}
                     >
-                      {product.onecProductId || product.externalId || product.id}
+                      {product.onecProductId || product.externalId || '—'}
                     </span>
                   </div>
 
                   {/* Фото */}
                   <div className="min-w-0">
-                    {product.images.length > 0 ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={product.images[0].url}
-                        alt={product.images[0].alt || product.name}
-                        className="w-7 h-7 object-cover rounded border"
-                      />
-                    ) : (
-                      <div className="w-7 h-7 bg-gray-100 rounded border flex items-center justify-center">
-                        <Package className="w-3.5 h-3.5 text-gray-400" />
-                      </div>
-                    )}
+                    <div className="group relative flex items-center justify-center overflow-visible">
+                      {product.images.length > 0 ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={product.images[0].url}
+                          alt={product.images[0].alt || product.name}
+                          className="w-7 h-7 object-cover rounded border transition-transform duration-200 group-hover:scale-150 group-hover:z-10 group-hover:border-blue-200 group-hover:shadow-lg"
+                        />
+                      ) : (
+                        <div className="w-7 h-7 bg-gray-100 rounded border flex items-center justify-center transition-transform duration-200 group-hover:scale-150 group-hover:z-10 group-hover:border-blue-200 group-hover:shadow-lg">
+                          <Package className="w-3.5 h-3.5 text-gray-400" />
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Название */}

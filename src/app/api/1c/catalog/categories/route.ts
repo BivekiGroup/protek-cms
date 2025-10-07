@@ -71,9 +71,10 @@ export async function POST(req: NextRequest) {
 
   const items = rootArray
 
-  // optional max batch limit (consistent with other 1C endpoints)
-  const maxBatch = Number(process.env.ONEC_MAX_BATCH_SIZE || 1000)
-  if (items.length > maxBatch) {
+  // optional max batch limit (consistent with other 1C endpoints); <=0 disables the limit
+  const limitRaw = Number(process.env.ONEC_MAX_BATCH_SIZE || 1000)
+  const maxBatch = Number.isFinite(limitRaw) ? limitRaw : 1000
+  if (maxBatch > 0 && items.length > maxBatch) {
     return new Response(
       JSON.stringify({ ok: false, error: `Too many items: ${items.length} > ${maxBatch}` }),
       { status: 422, headers }
