@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: 'desc' },
         skip: offset,
         take: limit,
-        include: { items: true, payments: true },
+        include: { items: true, payments: true, client: true },
       }),
     ])
 
@@ -121,6 +121,18 @@ function mapOrderToOneCSchema(order: any) {
 
   const shipmentDate = new Date(order.createdAt)
   shipmentDate.setDate(shipmentDate.getDate() + 1)
+
+  const buyerInfo = order.client
+    ? {
+        code: order.client.clientNumber || '',
+        name: order.client.name || order.clientName || '',
+        inn: order.client.inn || '',
+      }
+    : {
+        code: '',
+        name: order.clientName || '',
+        inn: '',
+      }
 
   return {
     posting_number: order.orderNumber, // no shipments – reuse order number
@@ -169,6 +181,8 @@ function mapOrderToOneCSchema(order: any) {
       name: order.clientName || '',
       phone: order.clientPhone || '',
     },
+
+    buyer: buyerInfo,
 
     barcodes: {
       upper_barcode: '',

@@ -126,6 +126,32 @@ export default function OneCCatalogDocs() {
   const curlClients = `curl -sS "${CURL_BASE}/api/1c/catalog/clients" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" | jq`
 
+  const clientsResponseExample = `{
+  "users": [
+    {
+      "code": "001254",
+      "name": "Ремни ГРМ ООО",
+      "inn": "0123456789",
+      "kpp": "123456789",
+      "ogrn": "0123456789123",
+      "view": "legal entity",
+      "address": {
+        "actual": "Республика Калмыкия, р-н Яшкульский п. яшкуль д3 кв1",
+        "legal": "Республика Калмыкия, р-н Яшкульский п. микаль д140",
+        "mailing": "Республика Калмыкия, р-н Яшкульский п. микаль д138"
+      },
+      "contact_information": {
+        "telephone": "89186584172",
+        "email": "test@mail.ru"
+      },
+      "bank_requisites": {
+        "bik": "004525988",
+        "account_number": "40102810545370000003"
+      }
+    }
+  ]
+}`
+
   const curlOrders = `curl -sS "${CURL_BASE}/api/1c/orders?since=2025-01-01&to=2025-01-31" \\
   -H "X-API-Key: <ONEC_API_TOKEN>" | jq`
 
@@ -399,8 +425,14 @@ export default function OneCCatalogDocs() {
           <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Заказы (list)</CardTitle>
           <CardDescription>Получение заказов. Поддерживает `limit/offset`, `status`, `orderNumber`, `since/to` (формат YYYY-MM-DD).</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <CodeBlock title="curl" code={curlOrders} />
+          <div className="text-sm text-gray-700">
+            Поля ответа:
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li><span className="font-mono">buyer</span> — данные покупателя (код, название, ИНН) из справочника <span className="font-mono">/api/1c/catalog/clients</span>.</li>
+            </ul>
+          </div>
         </CardContent>
       </Card>
 
@@ -417,8 +449,21 @@ export default function OneCCatalogDocs() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Контрагенты (юр. лица)</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <CodeBlock title="curl" code={curlClients} />
+          <div>
+            <div className="text-xs uppercase text-gray-500 mb-2">Пример ответа</div>
+            <CodeBlock code={clientsResponseExample} />
+          </div>
+          <div className="text-sm text-gray-700">
+            Поля:
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li><b>code</b> соответствует полю <span className="font-mono">clientNumber</span> в CMS.</li>
+              <li><b>view</b>: <span className="font-mono">&quot;legal entity&quot;</span> для юр. лиц, <span className="font-mono">&quot;physical entity&quot;</span> для физ. лиц.</li>
+              <li>Адреса формируются из <span className="font-mono">actualAddress</span>, <span className="font-mono">legalAddress</span> и строки «Почтовый адрес» из комментария.</li>
+              <li>Контакты и банковские реквизиты берутся из полей клиента (<span className="font-mono">phone</span>, <span className="font-mono">email</span>, <span className="font-mono">bankBik</span>, <span className="font-mono">bankAccount</span>).</li>
+            </ul>
+          </div>
         </CardContent>
       </Card>
 

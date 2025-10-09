@@ -204,6 +204,31 @@ export async function POST(req: NextRequest) {
       isVisible: typeof raw.isVisible === 'boolean' ? raw.isVisible : undefined,
     }
 
+    const rawArticleTrimmed = raw.article?.trim()
+    const rawBrandTrimmed = raw.brand?.trim()
+    const articleVariants = Array.from(
+      new Set(
+        [
+          norm.article,
+          rawArticleTrimmed,
+          rawArticleTrimmed ? normalizeArticle(rawArticleTrimmed) : undefined,
+        ].filter(Boolean)
+      )
+    ) as string[]
+    const brandVariants = Array.from(
+      new Set(
+        [
+          norm.brand,
+          rawBrandTrimmed,
+          rawBrandTrimmed ? normalizeBrand(rawBrandTrimmed) : undefined,
+        ].filter(Boolean)
+      )
+    ) as string[]
+    const articleFilters = articleVariants.map(article => ({
+      article: { equals: article, mode: 'insensitive' as const },
+    }))
+    const brandVariantSet = new Set(brandVariants.map(value => normalizeBrand(value)))
+
     // externalId по умолчанию: article + '_' + brand в нижнем регистре
     if (!norm.externalId && norm.article && norm.brand) {
       norm.externalId = `${norm.article.toLowerCase()}_${norm.brand.toLowerCase()}`
@@ -241,11 +266,57 @@ export async function POST(req: NextRequest) {
         })
       }
 
-      if (!product) {
-        product = await prisma.product.findFirst({
-          where: { article: norm.article || undefined, brand: norm.brand || undefined },
+      let matchesForArticleFull: any[] | null = null
+
+      if (!product && articleVariants.length && brandVariants.length) {
+        for (const article of articleVariants) {
+          for (const brand of brandVariants) {
+            const candidate = await prisma.product.findFirst({
+              where: {
+                article: { equals: article, mode: 'insensitive' as const },
+                brand: { equals: brand, mode: 'insensitive' as const },
+              },
+              include: productInclude,
+              orderBy: { createdAt: 'asc' },
+            })
+            if (candidate) {
+              product = candidate
+              break
+            }
+          }
+          if (product) break
+        }
+      }
+
+      if (!product && articleFilters.length) {
+        matchesForArticleFull = await prisma.product.findMany({
+          where: { OR: articleFilters },
           include: productInclude,
+          orderBy: { createdAt: 'asc' },
         })
+        if (matchesForArticleFull.length) {
+          const byOnecId = norm.onecProductId
+            ? matchesForArticleFull.find(m => m.onecProductId && String(m.onecProductId).trim() === norm.onecProductId)
+            : null
+          const byExternalId = !byOnecId && norm.externalId
+            ? matchesForArticleFull.find(m => (m.externalId || '').trim() === norm.externalId)
+            : null
+          const byBrand = matchesForArticleFull.find(m => m.brand && brandVariantSet.has(normalizeBrand(m.brand)))
+          product = byOnecId || byExternalId || byBrand || matchesForArticleFull[0]
+        }
+      }
+
+      if (product && articleFilters.length) {
+        const matchesIds =
+          matchesForArticleFull?.map(m => m.id) ??
+          (await prisma.product.findMany({
+            where: { OR: articleFilters },
+            select: { id: true },
+          })).map(m => m.id)
+        const duplicatesToRemove = matchesIds.filter(id => id !== product!.id)
+        if (duplicatesToRemove.length) {
+          await prisma.product.deleteMany({ where: { id: { in: duplicatesToRemove } } })
+        }
       }
 
       const isNew = !product
@@ -274,6 +345,8 @@ export async function POST(req: NextRequest) {
       } else {
         // partial update
         const updateData: any = {}
+        if (norm.article && product.article !== norm.article) updateData.article = norm.article
+        if (norm.brand && product.brand !== norm.brand) updateData.brand = norm.brand
         if (norm.name) updateData.name = norm.name
         if (norm.externalId && !product.externalId) updateData.externalId = norm.externalId
         if (norm.description !== undefined) updateData.description = norm.description
