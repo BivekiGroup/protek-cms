@@ -57,6 +57,11 @@ export async function GET(req: NextRequest) {
   }
 
   const clients = await prisma.client.findMany({
+    where: {
+      legalEntities: {
+        some: {},
+      },
+    },
     select: {
       clientNumber: true,
       name: true,
@@ -71,6 +76,29 @@ export async function GET(req: NextRequest) {
       phone: true,
       bankBik: true,
       bankAccount: true,
+      legalEntities: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: {
+          fullName: true,
+          shortName: true,
+          inn: true,
+          ogrn: true,
+          registrationReasonCode: true,
+          legalAddress: true,
+          actualAddress: true,
+          bankDetails: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: {
+              bik: true,
+              accountNumber: true,
+              bankName: true,
+              correspondentAccount: true,
+            },
+          },
+        },
+      },
     },
     orderBy: { createdAt: 'desc' },
     take: 1000,
@@ -78,14 +106,14 @@ export async function GET(req: NextRequest) {
 
   const users = clients.map((c) => ({
     code: c.clientNumber,
-    name: c.name,
-    inn: c.inn ?? '',
-    kpp: c.kpp ?? '',
-    ogrn: c.ogrn ?? '',
-    view: mapClientView(c.type),
+    name: c.legalEntities[0]?.fullName ?? c.legalEntities[0]?.shortName ?? c.name,
+    inn: c.legalEntities[0]?.inn ?? c.inn ?? '',
+    kpp: c.legalEntities[0]?.registrationReasonCode ?? c.kpp ?? '',
+    ogrn: c.legalEntities[0]?.ogrn ?? c.ogrn ?? '',
+    view: c.legalEntities.length > 0 ? 'legal entity' : mapClientView(c.type),
     address: {
-      actual: c.actualAddress ?? '',
-      legal: c.legalAddress ?? '',
+      actual: c.legalEntities[0]?.actualAddress ?? c.actualAddress ?? '',
+      legal: c.legalEntities[0]?.legalAddress ?? c.legalAddress ?? '',
       mailing: extractMailingAddress(c.comment),
     },
     contact_information: {
@@ -93,8 +121,8 @@ export async function GET(req: NextRequest) {
       email: c.email ?? '',
     },
     bank_requisites: {
-      bik: c.bankBik ?? '',
-      account_number: c.bankAccount ?? '',
+      bik: c.legalEntities[0]?.bankDetails[0]?.bik ?? c.bankBik ?? '',
+      account_number: c.legalEntities[0]?.bankDetails[0]?.accountNumber ?? c.bankAccount ?? '',
     },
   }))
 
