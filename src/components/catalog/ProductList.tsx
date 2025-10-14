@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useMemo, useState, useEffect } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Package, Plus, Edit, Trash2, FolderOpen, ExternalLink } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Package, Plus, Trash2, FolderOpen, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -443,6 +443,13 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
 
   const gridTemplate = 'grid grid-cols-[30px_minmax(62px,95px)_minmax(52px,80px)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(68px,100px)_minmax(52px,80px)_minmax(62px,96px)_minmax(62px,96px)_minmax(48px,72px)_minmax(70px,100px)] items-center gap-1'
 
+  const isInteractive = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) {
+      return false
+    }
+    return Boolean(target.closest('[data-row-interactive="true"]'))
+  }
+
   return (
     <div className="relative">
       {isRefreshing ? (
@@ -527,12 +534,36 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
         {/* Список товаров */}
         <div className="space-y-0.5 overflow-x-auto">
           {sortedProducts.map((product) => (
-            <div key={product.id} className="bg-white border border-gray-200 rounded-md py-0.5 px-1 hover:shadow-sm transition-shadow">
+            <div
+              key={product.id}
+              className="bg-white border border-gray-200 rounded-md py-0.5 px-1 hover:bg-blue-50/60 hover:shadow-sm transition-colors transition-shadow"
+            >
               <div className="w-full">
-                <div className={`${gridTemplate} py-0.5 text-[11.5px] leading-snug`}>
+                <div
+                  className={`${gridTemplate} py-0.5 text-[11.5px] leading-snug cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500`}
+                  role="button"
+                  tabIndex={0}
+                  title="Открыть редактирование товара"
+                  onClick={(event) => {
+                    if (isInteractive(event.target)) {
+                      return
+                    }
+                    onProductEdit(product)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      if (isInteractive(event.target)) {
+                        return
+                      }
+                      event.preventDefault()
+                      onProductEdit(product)
+                    }
+                  }}
+                >
                   {/* Чекбокс */}
                   <div className="flex justify-center">
                     <Checkbox
+                      data-row-interactive="true"
                       checked={selectedProducts.includes(product.id)}
                       onCheckedChange={(checked) => handleSelectProduct(product.id, Boolean(checked))}
                       className="h-3.5 w-3.5 [&_svg]:h-3 [&_svg]:w-3"
@@ -600,6 +631,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                   <div>
                     <div className="flex items-center gap-1.5">
                       <Input
+                        data-row-interactive="true"
                         value={getPriceValue(product, 'wholesale')}
                         onChange={(event) => handlePriceChange(product.id, 'wholesale', event.target.value)}
                         onBlur={() => handlePriceSubmit(product)}
@@ -619,6 +651,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                   <div>
                     <div className="flex items-center gap-1.5">
                       <Input
+                        data-row-interactive="true"
                         value={getPriceValue(product, 'retail')}
                         onChange={(event) => handlePriceChange(product.id, 'retail', event.target.value)}
                         onBlur={() => handlePriceSubmit(product)}
@@ -637,6 +670,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                   {/* Показывать на сайте */}
                   <div>
                     <Switch
+                      data-row-interactive="true"
                       checked={product.isVisible}
                       onCheckedChange={(checked) => handleToggleVisibility(product.id, checked)}
                       size="sm"
@@ -649,16 +683,11 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
-                      onClick={() => onProductEdit(product)}
-                    >
-                      <Edit className="w-4 h-4" />
-                      <span className="sr-only">Редактировать</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => window.open(buildFrontendProductUrl(product), '_blank')}
+                      data-row-interactive="true"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        window.open(buildFrontendProductUrl(product), '_blank')
+                      }}
                     >
                       <ExternalLink className="w-4 h-4" />
                       <span className="sr-only">Открыть на сайте</span>
@@ -667,7 +696,11 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
-                      onClick={() => handleDeleteProduct(product.id)}
+                      data-row-interactive="true"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleDeleteProduct(product.id)
+                      }}
                     >
                       <Trash2 className="w-4 h-4" />
                       <span className="sr-only">Удалить</span>
