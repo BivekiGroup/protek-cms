@@ -560,8 +560,8 @@ export const GET_CATEGORY = gql`
 `
 
 export const GET_PRODUCTS = gql`
-  query GetProducts($categoryId: String, $search: String, $limit: Int, $offset: Int) {
-    products(categoryId: $categoryId, search: $search, limit: $limit, offset: $offset) {
+  query GetProducts($categoryId: String, $search: String, $limit: Int, $offset: Int, $sort: ProductSortInput) {
+    products(categoryId: $categoryId, search: $search, limit: $limit, offset: $offset, sort: $sort) {
       id
       name
       slug

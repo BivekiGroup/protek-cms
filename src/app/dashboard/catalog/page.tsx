@@ -17,7 +17,7 @@ import {
   Download
 } from 'lucide-react'
 import { CategoryTree } from '@/components/catalog/CategoryTree'
-import { ProductList } from '@/components/catalog/ProductList'
+import { ProductList, type ProductSortConfig, type ProductSortField } from '@/components/catalog/ProductList'
 import { CategoryForm } from '@/components/catalog/CategoryForm'
 import { ProductForm } from '@/components/catalog/ProductForm'
 import { ImportProductsModal } from '@/components/catalog/ImportProductsModal'
@@ -33,6 +33,17 @@ import {
   SelectValue
 } from '@/components/ui/select'
 
+const productSortFieldMap: Record<ProductSortField, string> = {
+  photo: 'PHOTO',
+  internalCode: 'INTERNAL_CODE',
+  name: 'NAME',
+  category: 'CATEGORY',
+  article: 'ARTICLE',
+  stock: 'STOCK',
+  wholesalePrice: 'WHOLESALE_PRICE',
+  retailPrice: 'RETAIL_PRICE',
+  isVisible: 'IS_VISIBLE'
+}
 
 
 export default function CatalogPage() {
@@ -45,8 +56,9 @@ export default function CatalogPage() {
   const [editingProduct, setEditingProduct] = useState(undefined)
   const [exportLoading, setExportLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(20)
+  const [itemsPerPage, setItemsPerPage] = useState(100)
   const itemsPerPageOptions = [20, 50, 100]
+  const [sortConfig, setSortConfig] = useState<ProductSortConfig | null>(null)
 
   const { data: categoriesData, loading: categoriesLoading, refetch: refetchCategories } = useQuery(GET_CATEGORIES)
   
@@ -55,7 +67,13 @@ export default function CatalogPage() {
       categoryId: selectedCategoryId,
       search: searchQuery || undefined,
       limit: itemsPerPage,
-      offset: (currentPage - 1) * itemsPerPage
+      offset: (currentPage - 1) * itemsPerPage,
+      sort: sortConfig
+        ? {
+            field: productSortFieldMap[sortConfig.field],
+            direction: sortConfig.direction === 'asc' ? 'ASC' : 'DESC'
+          }
+        : undefined
     }
   })
 
@@ -81,6 +99,11 @@ export default function CatalogPage() {
   const handleSearch = (query: string) => {
     setSearchQuery(query)
     setCurrentPage(1) // Сбрасываем на первую страницу при поиске
+  }
+
+  const handleSortChange = (config: ProductSortConfig) => {
+    setSortConfig(config)
+    setCurrentPage(1)
   }
 
   const handlePageChange = (page: number) => {
@@ -246,6 +269,8 @@ export default function CatalogPage() {
             onProductEdit={(product: any) => setEditingProduct(product)}
             onProductCreated={handleProductCreated}
             categories={categories}
+            sortConfig={sortConfig}
+            onSortChange={handleSortChange}
           />
           
           {/* Пагинация и информация */}

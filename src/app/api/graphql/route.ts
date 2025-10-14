@@ -11,16 +11,26 @@ interface Context {
   userRole?: string
   userEmail?: string
   headers?: Headers
+  categoryLevelCache?: Map<string, number>
+  categoryParentMap?: Map<string, string | null>
+  categoryHierarchyLoaded?: boolean
 }
 
 // Функция для создания контекста
+const createBaseContext = (overrides: Partial<Context> = {}): Context => ({
+  categoryLevelCache: new Map(),
+  categoryParentMap: new Map(),
+  categoryHierarchyLoaded: false,
+  ...overrides,
+})
+
 async function createContext(req: any): Promise<Context> {
   const requestHeaders = req.headers
   const token = extractTokenFromHeaders(requestHeaders)
   console.log('GraphQL: получен токен:', token ? 'есть' : 'нет')
   
   if (!token) {
-    return { headers: requestHeaders }
+    return createBaseContext({ headers: requestHeaders })
   }
 
   try {
@@ -29,12 +39,12 @@ async function createContext(req: any): Promise<Context> {
     console.log('GraphQL: JWT payload:', payload ? 'найден' : 'не найден')
     if (payload) {
       console.log('GraphQL: пользователь авторизован:', payload.userId, 'роль:', payload.role)
-      return {
+      return createBaseContext({
         userId: payload.userId,
         userRole: payload.role,
         userEmail: payload.email,
         headers: requestHeaders
-      }
+      })
     }
   } catch (error) {
     console.error('GraphQL: ошибка при парсинге токена:', error)
@@ -54,13 +64,13 @@ async function createContext(req: any): Promise<Context> {
     } else {
       // Неправильный формат токена
       console.error('GraphQL: неправильный формат клиентского токена:', token)
-      return { headers: requestHeaders }
+      return createBaseContext({ headers: requestHeaders })
     }
     
-    const context = {
+    const context = createBaseContext({
       clientId: clientId,
       headers: requestHeaders
-    }
+    })
     console.log('GraphQL: возвращаем клиентский контекст:', context)
     return context
   }
@@ -70,16 +80,16 @@ async function createContext(req: any): Promise<Context> {
     const decoded = jwt.decode(token) as any
     if (decoded && decoded.clientId) {
       console.log('GraphQL: клиент авторизован через JWT:', decoded.clientId)
-      return {
+      return createBaseContext({
         clientId: decoded.clientId,
         headers: requestHeaders
-      }
+      })
     }
   } catch (error) {
     console.error('GraphQL: ошибка при парсинге клиентского токена:', error)
   }
 
-  return { headers: requestHeaders }
+  return createBaseContext({ headers: requestHeaders })
 }
 
 const server = new ApolloServer({

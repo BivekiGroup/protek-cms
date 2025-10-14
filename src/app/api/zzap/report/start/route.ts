@@ -134,6 +134,18 @@ export async function POST(req: NextRequest) {
     }
     const buf = Buffer.from(await file.arrayBuffer())
     const rows = parseRows(buf, file.name)
+    const modeRaw = String(form.get('mode') || 'full').toLowerCase()
+    const includeStats = modeRaw !== 'prices-only'
+    const bucketRaw = String(form.get('deliveryBucket') || 'any').toLowerCase()
+    const allowedBuckets = new Set(['any', '0-3', '3-7', '8+'])
+    const deliveryBucket = allowedBuckets.has(bucketRaw) ? (bucketRaw as 'any' | '0-3' | '3-7' | '8+') : 'any'
+    const inputPayload = {
+      rows,
+      options: {
+        includeStats,
+        deliveryBucket,
+      },
+    }
     let job
     try {
       job = await (prisma as any).zzapReportJob.create({
@@ -144,7 +156,7 @@ export async function POST(req: NextRequest) {
           total: rows.length,
           processed: 0,
           originalFilename: (file.name || '').slice(0, 255),
-          inputRows: rows,
+          inputRows: inputPayload,
           results: Array.from({ length: rows.length }).fill(null)
         }
       })
@@ -157,7 +169,7 @@ export async function POST(req: NextRequest) {
           periodTo: new Date(periodTo),
           total: rows.length,
           processed: 0,
-          inputRows: rows,
+          inputRows: inputPayload,
           results: Array.from({ length: rows.length }).fill(null)
         }
       })
@@ -197,7 +209,14 @@ export async function POST(req: NextRequest) {
         setTimeout(() => { processJob(req2).catch(() => {}) }, 0)
       } catch {}
     })().catch(() => null as any)
-    return new Response(JSON.stringify({ ok: true, jobId: job.id, total: rows.length, etaMs, etaText }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
+    return new Response(JSON.stringify({
+      ok: true,
+      jobId: job.id,
+      total: rows.length,
+      etaMs,
+      etaText,
+      options: { includeStats, deliveryBucket },
+    }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
   } catch (e: any) {
     return new Response(JSON.stringify({ ok: false, error: String(e?.message || e) }), { status: 500, headers: { 'content-type': 'application/json; charset=utf-8' } })
   }

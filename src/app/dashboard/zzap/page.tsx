@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 type ZzapHistoryItem = {
   id: string
@@ -39,6 +40,8 @@ type ZzapStreamPayload = {
   line?: string
   etaText?: string
 }
+
+type DeliveryBucketOption = 'any' | '0-3' | '3-7' | '8+'
 
 const getErrorMessage = (error: unknown, fallback = 'Произошла ошибка'): string => {
   if (error instanceof Error && error.message) return error.message
@@ -73,6 +76,8 @@ export default function ZzapStatsPage() {
   const [historyPageSize] = useState(20)
   const [historyTotal, setHistoryTotal] = useState(0)
   const [query, setQuery] = useState('')
+  const [includeStats, setIncludeStats] = useState(true)
+  const [deliveryBucket, setDeliveryBucket] = useState<DeliveryBucketOption>('any')
 
   // Batch report state
   const [reportFile, setReportFile] = useState<File | null>(null)
@@ -87,11 +92,39 @@ export default function ZzapStatsPage() {
   const [reportRunning, setReportRunning] = useState(false)
   const [stopping, setStopping] = useState(false)
   const [jobEtaText, setJobEtaText] = useState<string>('')
+  const [jobIncludeStats, setJobIncludeStats] = useState(true)
+  const [jobDeliveryBucket, setJobDeliveryBucket] = useState<DeliveryBucketOption>('any')
   const [reportHistory, setReportHistory] = useState<ZzapReportHistoryItem[]>([])
   const [jobLogs, setJobLogs] = useState<string[]>([])
   const [showLogs, setShowLogs] = useState<boolean>(true)
   const sseRef = useRef<EventSource | null>(null)
   const sseJobRef = useRef<string>('')
+  const deliveryBucketLabel = (bucket: DeliveryBucketOption) => {
+    switch (bucket) {
+      case '0-3': return '0–3 дней'
+      case '3-7': return '3–7 дней'
+      case '8+': return 'Более 7 дней'
+      default: return 'Все предложения'
+    }
+  }
+  const parsePriceNumber = (value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string') {
+      const cleaned = value.replace(/\s+/g, '').replace(',', '.').replace(/[^0-9.]/g, '')
+      if (!cleaned) return null
+      const num = Number(cleaned)
+      if (Number.isFinite(num)) return num
+    }
+    return null
+  }
+  const formatPriceValue = (value: unknown): string => {
+    const num = parsePriceNumber(value)
+    if (num !== null) {
+      return num.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: num % 1 === 0 ? 0 : 2 })
+    }
+    if (typeof value === 'string' && value.trim()) return value
+    return '—'
+  }
   const calcEtaText = useCallback((items: number) => {
     const perItemMs = 12000 + 2000 + 1500
     const total = Math.max(0, Math.ceil((items || 0) * perItemMs))
@@ -351,6 +384,31 @@ export default function ZzapStatsPage() {
               <Input type="month" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)} />
             </div>
           </div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Статистика</Label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={includeStats} onChange={(e) => setIncludeStats(e.target.checked)} />
+                Собирать статистику по месяцам
+              </label>
+              <p className="text-xs text-muted-foreground">Отключите, если отчёт нужен только с ценами.</p>
+            </div>
+            <div className="grid gap-2">
+              <Label>Фильтр по сроку доставки</Label>
+              <Select value={deliveryBucket} onValueChange={(value) => setDeliveryBucket(value as DeliveryBucketOption)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Все предложения" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Все предложения</SelectItem>
+                  <SelectItem value="0-3">0–3 дня</SelectItem>
+                  <SelectItem value="3-7">3–7 дней</SelectItem>
+                  <SelectItem value="8+">Более 7 дней</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">В отчёт попадут цены с выбранным сроком доставки.</p>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
               <Button
                 onClick={async () => {
@@ -370,11 +428,17 @@ export default function ZzapStatsPage() {
                     const pt = `${periodTo}-01`
                     form.append('periodFrom', pf)
                     form.append('periodTo', pt)
+                    form.append('mode', includeStats ? 'full' : 'prices-only')
+                    form.append('deliveryBucket', deliveryBucket)
                   const res = await fetch('/api/zzap/report/start', { method: 'POST', body: form })
                   const data = await res.json()
                   if (!res.ok || !data?.ok) throw new Error(data?.error || `Ошибка ${res.status}`)
                   setJobId(data.jobId)
                   setJobTotal(data.total || 0)
+                  const returnedIncludeStats = typeof data?.options?.includeStats === 'boolean' ? data.options.includeStats : includeStats
+                  const returnedBucket = (typeof data?.options?.deliveryBucket === 'string' ? data.options.deliveryBucket : null) as DeliveryBucketOption | null
+                  setJobIncludeStats(returnedIncludeStats)
+                  setJobDeliveryBucket(returnedBucket && ['any','0-3','3-7','8+'].includes(returnedBucket) ? returnedBucket : deliveryBucket)
                   if (typeof data.etaText === 'string' && data.etaText) setJobEtaText(data.etaText)
                   else if (typeof data.total === 'number') setJobEtaText(calcEtaText(Number(data.total)))
                   // ensure new job appears immediately in the list
@@ -444,6 +508,10 @@ export default function ZzapStatsPage() {
                     {reportFile?.name ? (
                       <span className="ml-2 text-muted-foreground">Файл: {reportFile.name}</span>
                     ) : null}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Сбор данных: {jobIncludeStats ? 'Цены и статистика' : 'Только цены'}
+                    <span className="ml-2">Доставка: {deliveryBucketLabel(jobDeliveryBucket)}</span>
                   </div>
                   <div className="flex items-center gap-3 max-w-md mt-1">
                     <Progress value={jobTotal ? (jobProcessed / jobTotal) * 100 : 0} />
@@ -664,13 +732,23 @@ export default function ZzapStatsPage() {
                   <TableCell>{item.article}</TableCell>
                   <TableCell>{item.ok ? 'OK' : 'ERR'}</TableCell>
                   <TableCell>
-                    {Array.isArray(item.prices) && item.prices.length > 0 ? (
-                      <div className="text-xs">
-                        {item.prices.slice(0, 3).map((price, index) => (
-                          <span key={index} className="mr-2">{price}</span>
-                        ))}
-                      </div>
-                    ) : '—'}
+                    {Array.isArray(item.prices) && item.prices.length > 0 ? (() => {
+                      const numeric = item.prices
+                        .map((price) => parsePriceNumber(price))
+                        .filter((n): n is number => n !== null)
+                        .sort((a, b) => a - b)
+                      if (numeric.length === 0) return '—'
+                      const labels = ['Мин', '2-я', '3-я']
+                      return (
+                        <div className="text-xs space-y-1">
+                          {labels.map((label, idx) => (
+                            <div key={label}>
+                              {label}: {numeric[idx] !== undefined ? formatPriceValue(numeric[idx]) : '—'}
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })() : '—'}
                   </TableCell>
                   <TableCell>
                     {item.stats && typeof item.stats === 'object' ? (

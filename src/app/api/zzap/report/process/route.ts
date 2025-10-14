@@ -37,6 +37,459 @@ function jitter(base: number, jitter: number) {
   return base + j;
 }
 
+type DeliveryBucket = "any" | "0-3" | "3-7" | "8+";
+
+type OfferInfo = {
+  price: number;
+  deliveryText?: string | null;
+};
+
+type OfferWithDelivery = OfferInfo & {
+  deliveryMin?: number | null;
+  deliveryMax?: number | null;
+  deliveryBucket?: DeliveryBucket;
+};
+
+const normalizeDeliveryBucket = (value: unknown): DeliveryBucket => {
+  const v = typeof value === "string" ? value.toLowerCase() : "";
+  if (v === "0-3" || v === "3-7" || v === "8+") return v;
+  return "any";
+};
+
+const sanitizeNumber = (n: number | null | undefined): number | null =>
+  typeof n === "number" && Number.isFinite(n) ? n : null;
+
+const parseDeliveryWindow = (
+  raw: string | null | undefined
+): { min: number | null; max: number | null } => {
+  if (typeof raw !== "string") return { min: null, max: null };
+  const text = raw.trim().toLowerCase();
+  if (!text) return { min: null, max: null };
+  let min: number | null = null;
+  let max: number | null = null;
+
+  if (
+    /(сегодня|в наличии|на складе|самовывоз|час|ч\.|ч\b)/i.test(text)
+  ) {
+    min = 0;
+    max = 0;
+  } else if (/завтра/.test(text)) {
+    min = 1;
+    max = 1;
+  }
+
+  const range = text.match(/(\d+)\s*[-–]\s*(\d+)/);
+  if (range) {
+    min = parseInt(range[1], 10);
+    max = parseInt(range[2], 10);
+  } else {
+    const fromMatch = text.match(/от\s*(\d+)/);
+    if (fromMatch) min = parseInt(fromMatch[1], 10);
+    const toMatch = text.match(/до\s*(\d+)/);
+    if (toMatch) {
+      max = parseInt(toMatch[1], 10);
+      if (min === null) min = 0;
+    }
+    if (min === null || max === null) {
+      const single = text.match(
+        /(\d+)(?=\s*(?:дн|раб|сут|нед|час|ч\.|ч\b))/
+      );
+      if (single) {
+        const n = parseInt(single[1], 10);
+        if (min === null) min = n;
+        if (max === null) max = n;
+      }
+    }
+  }
+
+  if (/нед/i.test(text)) {
+    if (min !== null) min *= 7;
+    if (max !== null) max *= 7;
+  }
+  if (/мес|месяц/i.test(text)) {
+    if (min !== null) min *= 30;
+    if (max !== null) max *= 30;
+  }
+
+  if (/более|>|\\+/.test(text)) {
+    const any = text.match(/(\d+)/);
+    if (any) {
+      const n = parseInt(any[1], 10);
+      if (min === null) min = n;
+      if (max === null) max = null;
+    }
+  }
+  if (/по запросу|под заказ|ожидание|неизвест/i.test(text)) {
+    if (min === null) min = 8;
+    if (max === null) max = null;
+  }
+
+  min = sanitizeNumber(min);
+  max = sanitizeNumber(max);
+  if (min !== null && max !== null && min > max) {
+    const tmp = min;
+    min = max;
+    max = tmp;
+  }
+  return { min, max };
+};
+
+const categorizeDeliveryBucket = (
+  min: number | null,
+  max: number | null
+): DeliveryBucket => {
+  const hi =
+    max !== null
+      ? max
+      : min !== null
+      ? min
+      : Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(hi)) return "8+";
+  if (hi <= 3) return "0-3";
+  if (hi <= 7) return "3-7";
+  return "8+";
+};
+
+const enrichOffersWithDelivery = (
+  offers: OfferInfo[]
+): OfferWithDelivery[] => {
+  return offers.map((offer) => {
+    const { min, max } = parseDeliveryWindow(offer.deliveryText);
+    const bucket = categorizeDeliveryBucket(min, max);
+    return {
+      ...offer,
+      deliveryMin: min,
+      deliveryMax: max,
+      deliveryBucket: bucket,
+    };
+  });
+};
+
+const filterOffersByBucket = (
+  offers: OfferWithDelivery[],
+  bucket: DeliveryBucket
+): OfferWithDelivery[] => {
+  if (bucket === "any") return offers;
+  return offers.filter((offer) => offer.deliveryBucket === bucket);
+};
+
+async function scrapeOffersWithDelivery(
+  page: Page,
+  brand: string,
+  article?: string
+): Promise<OfferInfo[]> {
+  try {
+    const offers = await page.evaluate(
+      (brandUpper: string, art?: string) => {
+        const getDocs = (): Document[] => {
+          const docs: Document[] = [document];
+          const ifr = Array.from(
+            document.querySelectorAll("iframe")
+          ) as HTMLIFrameElement[];
+          for (const f of ifr) {
+            try {
+              const d = f.contentDocument as Document | null;
+              if (d) docs.push(d);
+            } catch {}
+          }
+          return docs;
+        };
+        const norm = (s: string) =>
+          (s || "")
+            .replace(/[^0-9a-zA-Zа-яА-Я]+/g, "")
+            .toUpperCase();
+        const wantBrand = (brandUpper || "").trim().toUpperCase();
+        const wantArt = art ? norm(art) : "";
+        const limit = 40;
+        const seen = new Set<string>();
+        const collected: { price: number; deliveryText: string | null }[] = [];
+
+        const pushOffer = (price: number | null, delivery: string | null) => {
+          if (price === null || !Number.isFinite(price)) return;
+          const key = `${price}|${delivery || ""}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          collected.push({ price, deliveryText: delivery });
+        };
+
+        const extractDelivery = (tr: HTMLTableRowElement): string | null => {
+          const selectors = [
+            '.delivery',
+            '.delivery-time',
+            '.deliverytime',
+            '.term',
+            '.srok',
+            '.leadtime',
+            '[class*="delivery" i]',
+            '[class*="srok" i]',
+          ];
+          for (const sel of selectors) {
+            const el = tr.querySelector(sel) as HTMLElement | null;
+            if (el) {
+              const txt = (el.innerText || el.textContent || "").trim();
+              if (txt) return txt;
+            }
+          }
+          const cells = Array.from(tr.querySelectorAll("td")) as HTMLElement[];
+          for (const td of cells) {
+            const txt = (td.innerText || "").trim();
+            if (!txt) continue;
+            if (
+              /(дн|сут|нед|час|ч\.|ч\b|сегодня|завтра|налич|склад|заказ|по запрос)/i.test(
+                txt
+              )
+            ) {
+              return txt;
+            }
+          }
+          const rowText = (tr.innerText || "").trim();
+          if (
+            /(дн|сут|нед|час|ч\.|ч\b|сегодня|завтра|налич|склад|заказ|по запрос)/i.test(
+              rowText
+            )
+          ) {
+            return rowText;
+          }
+          return null;
+        };
+
+        const parsePrice = (raw?: string | null) => {
+          const txt = (raw || "").trim();
+          if (!txt) return null;
+          const looksNonPrice = /(шт\.|штук|штуки|дн\.|дней|день|предлож|налич|шт\b|дн\b)/i.test(
+            txt
+          );
+          if (looksNonPrice) return null;
+          const m = txt.match(/\d[\d\s.,]*/);
+          if (!m) return null;
+          const cleaned = m[0]
+            .replace(/[^0-9.,]/g, "")
+            .replace(/\s+/g, "")
+            .replace(",", ".");
+          const n = parseFloat(cleaned);
+          if (!Number.isFinite(n)) return null;
+          const hasCurrency = /(руб|₽|\br\.|\bр\b)/i.test(txt);
+          if (!hasCurrency && n < 500) return null;
+          return n;
+        };
+
+        const parseAny = (raw?: string | null) => {
+          const txt = (raw || "").trim();
+          const m = txt.match(/\d[\d\s.,]*/);
+          if (!m) return null;
+          const cleaned = m[0]
+            .replace(/[^0-9.,]/g, "")
+            .replace(/\s+/g, "")
+            .replace(",", ".");
+          const n = parseFloat(cleaned);
+          return Number.isFinite(n) ? n : null;
+        };
+
+        const pickPriceFromRow = (tr: HTMLTableRowElement): number | null => {
+          const candidates: {
+            txt: string;
+            inPriceCell: boolean;
+            trusted: boolean;
+          }[] = [];
+
+          const knownSelectors = [
+            'td.pricewhitecell',
+            'td[class*="price" i]',
+            'span[class*="price" i]',
+            'span[class*="cena" i]',
+            'span[class*="cost" i]',
+            'span[class*="dxeBase_ZZap" i].dx-nowrap',
+          ];
+          for (const sel of knownSelectors) {
+            const els = Array.from(tr.querySelectorAll(sel)) as HTMLElement[];
+            for (const el of els) {
+              const txt = (el.innerText || el.textContent || "").trim();
+              if (!txt) continue;
+              const td = el.closest("td") as HTMLElement | null;
+              const trusted =
+                /\bdxeBase_ZZap/i.test(el.className) &&
+                /\bdx-nowrap\b/i.test(el.className);
+              const inPriceCell =
+                trusted || (!!td && /price/i.test(td.className));
+              candidates.push({ txt, inPriceCell, trusted });
+            }
+          }
+
+          const rightAligned = tr.querySelector(
+            'td[align="right" i]'
+          ) as HTMLElement | null;
+          if (rightAligned) {
+            const txt = (rightAligned.innerText || "").trim();
+            if (txt)
+              candidates.push({
+                txt,
+                inPriceCell: /price/i.test(rightAligned.className),
+                trusted: false,
+              });
+          }
+
+          const tds = Array.from(tr.querySelectorAll("td")) as HTMLElement[];
+          if (tds.length) {
+            const last = tds[tds.length - 1];
+            const prev = tds[tds.length - 2];
+            if (last) {
+              const t = (last.innerText || "").trim();
+              if (t)
+                candidates.push({
+                  txt: t,
+                  inPriceCell: /price/i.test(last.className),
+                  trusted: false,
+                });
+            }
+            if (prev) {
+              const t = (prev.innerText || "").trim();
+              if (t)
+                candidates.push({
+                  txt: t,
+                  inPriceCell: /price/i.test(prev.className),
+                  trusted: false,
+                });
+            }
+          }
+
+          const rowText = (tr.innerText || "").trim();
+          if (/руб|₽|р\.|р\s/i.test(rowText))
+            candidates.push({
+              txt: rowText,
+              inPriceCell: false,
+              trusted: false,
+            });
+
+          for (const c of candidates) {
+            let n = parsePrice(c.txt);
+            if (n == null && c.trusted) n = parseAny(c.txt);
+            if (n != null && n > 0) {
+              const cur = /(руб|₽|\br\.|\bр\b)/i.test(c.txt);
+              if (cur || c.inPriceCell || c.trusted) {
+                return n;
+              }
+            }
+          }
+          return null;
+        };
+
+        const docs = getDocs();
+        const allRows: HTMLTableRowElement[] = [];
+        for (const d of docs) {
+          const rows = Array.from(
+            d.querySelectorAll(
+              'tr[id*="SearchGridView_DXDataRow"], tr[id*="GridView_DXDataRow"]'
+            )
+          ) as HTMLTableRowElement[];
+          allRows.push(...rows);
+        }
+
+        const pushFromRows = (rows: HTMLTableRowElement[]) => {
+          for (const tr of rows) {
+            const price = pickPriceFromRow(tr);
+            if (price == null) continue;
+            const delivery = extractDelivery(tr);
+            pushOffer(price, delivery);
+            if (collected.length >= limit) break;
+          }
+        };
+
+        if (wantBrand || wantArt) {
+          const rows = allRows.filter((tr) => {
+            const text = (tr.innerText || "").toUpperCase();
+            if (wantBrand && !text.includes(wantBrand)) return false;
+            if (wantArt && !norm(text).includes(wantArt)) return false;
+            return true;
+          });
+          pushFromRows(rows);
+        }
+
+        if (collected.length < limit && wantBrand) {
+          const rows = allRows.filter((tr) =>
+            (tr.innerText || "").toUpperCase().includes(wantBrand)
+          );
+          pushFromRows(rows);
+        }
+
+        if (collected.length < limit) {
+          pushFromRows(allRows);
+        }
+
+        const firstN = allRows.slice(0, 20);
+        if (collected.length < limit) pushFromRows(firstN);
+
+        return collected
+          .sort((a, b) => a.price - b.price)
+          .slice(0, limit);
+      },
+      (brand || "").toUpperCase(),
+      article
+    );
+    if (Array.isArray(offers)) {
+      return offers
+        .filter(
+          (o): o is { price: number; deliveryText?: string | null } =>
+            o &&
+            typeof o.price === "number" &&
+            Number.isFinite(o.price)
+        )
+        .map((o) => ({
+          price: o.price,
+          deliveryText:
+            typeof o.deliveryText === "string" ? o.deliveryText : null,
+        }))
+        .sort((a, b) => a.price - b.price);
+    }
+  } catch {}
+  return [];
+}
+
+const normalizeJobInput = (
+  input: any
+): {
+  rows: { article: string; brand: string }[];
+  options: { includeStats?: boolean; deliveryBucket?: DeliveryBucket };
+} => {
+  const rows: { article: string; brand: string }[] = [];
+  let includeStats: boolean | undefined;
+  let deliveryBucket: DeliveryBucket | undefined;
+
+  const pushRow = (row: any) => {
+    if (!row || typeof row !== "object") return;
+    const article = typeof row.article === "string" ? row.article : "";
+    const brand = typeof row.brand === "string" ? row.brand : "";
+    if (article) rows.push({ article, brand });
+  };
+
+  if (Array.isArray(input)) {
+    for (const row of input) pushRow(row);
+  } else if (input && typeof input === "object") {
+    if (Array.isArray((input as any).rows)) {
+      for (const row of (input as any).rows) pushRow(row);
+    } else if (Array.isArray((input as any).items)) {
+      for (const row of (input as any).items) pushRow(row);
+    }
+    const options = (input as any).options || (input as any).settings;
+    if (options && typeof options === "object") {
+      if (typeof options.includeStats === "boolean") {
+        includeStats = options.includeStats;
+      }
+      if (typeof options.mode === "string") {
+        includeStats = options.mode.toLowerCase() !== "prices-only";
+      }
+      if (typeof options.deliveryBucket === "string") {
+        deliveryBucket = normalizeDeliveryBucket(options.deliveryBucket);
+      } else if (typeof options.deliveryFilter === "string") {
+        deliveryBucket = normalizeDeliveryBucket(options.deliveryFilter);
+      }
+    }
+  }
+
+  return {
+    rows,
+    options: { includeStats, deliveryBucket },
+  };
+};
 async function reauthInPage(page: Page, jobId?: string): Promise<boolean> {
   try { if (jobId) appendJobLog(jobId, 'reauth: try restoreSession+ensureAuthenticated') } catch {}
   try { await restoreSession(page) } catch {}
@@ -1653,7 +2106,24 @@ export async function POST(req: NextRequest) {
     }
   } catch {}
 
-  const rows = job.inputRows as any[] as { article: string; brand: string }[];
+  const normalized = normalizeJobInput(job.inputRows);
+  const rows = normalized.rows;
+  const jobOptions = {
+    includeStats: normalized.options.includeStats !== false,
+    deliveryBucket: normalizeDeliveryBucket(
+      normalized.options.deliveryBucket
+    ),
+  };
+  if (!rows.length) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        status: "error",
+        error: "input rows missing",
+      }),
+      { status: 400, headers: { "content-type": "application/json; charset=utf-8" } }
+    );
+  }
   const processed = job.processed;
   const toProcess = rows.slice(processed, processed + batchSize);
   let results = (job.results as any[]) || [];
@@ -1662,7 +2132,12 @@ export async function POST(req: NextRequest) {
 
   // Ensure status is running (idempotent)
   try { await (prisma as any).zzapReportJob.update({ where: { id }, data: { status: 'running' } }) } catch {}
-  try { appendJobLog(id, `processor: start batchSize=${batchSize}, processed=${processed}/${rows.length}`) } catch {}
+  try {
+    appendJobLog(
+      id,
+      `processor: start batchSize=${batchSize}, processed=${processed}/${rows.length}; includeStats=${jobOptions.includeStats}; deliveryFilter=${jobOptions.deliveryBucket}`
+    );
+  } catch {}
 
   // Helper to call internal endpoints (AI, screenshot)
   const origin = (() => {
@@ -1881,6 +2356,7 @@ export async function POST(req: NextRequest) {
               stats: {},
               imageUrl: null,
               notFound: true,
+              offers: [],
             } as const;
             results[realIndex] = emptyResult as any;
             const safeResults = results.map((v: any) => (v === undefined ? null : v));
@@ -1915,103 +2391,179 @@ export async function POST(req: NextRequest) {
           await debugShot(page, id, `search-before-scrape-${encodeURIComponent(article)}`)
           prices = await scrapeTop3Prices(page, brand, article);
         }
-        // Keep original behavior: не трогаем цены пост-фильтрами здесь
+        let offersPreview: OfferWithDelivery[] = [];
+        try {
+          const offersRaw = await scrapeOffersWithDelivery(page, brand, article);
+          const offersEnriched = enrichOffersWithDelivery(offersRaw);
+          let filteredOffers = filterOffersByBucket(
+            offersEnriched,
+            jobOptions.deliveryBucket
+          );
+          if (
+            filteredOffers.length === 0 &&
+            jobOptions.deliveryBucket !== "any" &&
+            offersEnriched.length > 0
+          ) {
+            appendJobLog(
+              id,
+              `delivery-filter fallback: no offers in bucket ${jobOptions.deliveryBucket}, using all offers`
+            );
+            filteredOffers = offersEnriched;
+          }
+          offersPreview = filteredOffers.slice(0, 6);
+          const topOffers = filteredOffers.slice(0, 3);
+          if (topOffers.length > 0) {
+            prices = topOffers.map((o) => o.price);
+          }
+          if (offersPreview.length > 0) {
+            const offerLog = offersPreview
+              .slice(0, 3)
+              .map((o) => {
+                const parts: string[] = [String(Math.round(o.price))];
+                if (o.deliveryBucket && o.deliveryBucket !== "any") {
+                  parts.push(o.deliveryBucket);
+                }
+                if (o.deliveryText) {
+                  parts.push(
+                    o.deliveryText.replace(/\s+/g, " ").slice(0, 60)
+                  );
+                }
+                return parts.join(" | ");
+              })
+              .join(" || ");
+            appendJobLog(id, `offers: ${offerLog}`);
+          }
+        } catch {}
+        const logSuffix =
+          jobOptions.deliveryBucket === "any"
+            ? ""
+            : ` [filter=${jobOptions.deliveryBucket}]`;
         appendJobLog(
           id,
-          `prices: ${prices.map((p) => String(p)).join(", ") || "—"}`
+          `prices${logSuffix}: ${prices
+            .map((p) => String(p))
+            .join(", ") || "—"}`
         );
-        // 1) Быстрый способ: в той же вкладке кликнуть "Статистика" и перехватить DX
-        let monthly: { label: string; count: number }[] | null = await captureDxFromSearch(page, id, article)
-        // 2) Если не получилось, fallback через screenshot URL и навигацию на страницу графика
-        // Prefer to warm session + get exact stats URL via screenshot first
+        let monthly: { label: string; count: number }[] | null = null;
         let imageUrl: string | null = null;
         let statsUrlFromShot: string | null = null;
-        if (!monthly || monthly.length === 0) {
-          try {
-            for (let a = 0; a < 2; a++) {
-              const shot = await callScreenshot(article, brand);
-              imageUrl = shot.imageUrl;
-              statsUrlFromShot = shot.statsUrl;
-              if (imageUrl || statsUrlFromShot) break;
-              await sleep(400);
-            }
-          } catch {}
-          if (imageUrl) appendJobLog(id, `screenshot: ${imageUrl}`);
-        }
-        await debugShot(page, id, `before-stats-${encodeURIComponent(article)}`)
-
-        // Try apply saved cookies from screenshot session (shared cookie file)
-        try {
-          await restoreSession(page);
-        } catch {}
-
-        // Decide stats page
-        // Use single tab to reduce anti-bot triggers
-        let statsPage: Page = page;
-        if (!statsUrlFromShot && (!monthly || monthly.length === 0)) {
-          const sp = await openStats(page);
-          statsPage = sp;
-          try {
-            appendJobLog(id, `stats: ${statsPage.url?.() || "unknown"}`);
-          } catch {}
-        }
-        // Gentle settle before DX triggers
-        await sleep(600);
-        await debugShot(statsPage, id, `stats-entry-${encodeURIComponent(article)}`)
-
-        // Captcha handling: pause and one retry
-        const urlNow = statsPage.url?.() || "";
-        if (/\/sys\/captcha\.aspx/i.test(urlNow)) {
-          appendJobLog(id, "captcha detected, trying reauth then retry");
-          const ok = await reauthInPage(statsPage, id)
-          if (!ok) {
-            appendJobLog(id, "reauth failed; sleeping 90s then retry once");
-            await sleep(90000);
-          }
-          try {
-            const retryUrl = statsUrlFromShot || urlNow;
-            await statsPage
-              .goto(retryUrl, { waitUntil: "domcontentloaded", timeout: 20000 })
-              .catch(() => {});
-          } catch {}
-          const after = statsPage.url?.() || "";
-          if (/\/sys\/captcha\.aspx/i.test(after)) {
-            appendJobLog(id, "captcha persists, skipping item");
-            // Save empty stats and move on
-            const counts: Record<string, number> = {};
-            for (const ml of monthLabels) counts[ml] = 0;
-            results[realIndex] = {
-              article,
-              brand,
-              prices,
-              stats: counts,
-              imageUrl,
-            };
-            continue;
-          }
-        }
-
-        // Try DevExpress DX payload first (reliable)
-        if ((!monthly || monthly.length === 0) && statsUrlFromShot) appendJobLog(id, `dx: use screenshot url ${statsUrlFromShot}`);
-        if (!monthly || monthly.length === 0) monthly = await fetchDxMonthly(statsPage, id, statsUrlFromShot || null);
-        if (!monthly || monthly.length === 0) {
-          // fallback to DOM/highcharts
-          const m2 = await scrapeMonthlyCounts(statsPage, monthLabels);
-          if (m2 && m2.length) {
-            appendJobLog(id, `dom: monthly points=${m2.length}`);
-            monthly = m2;
-          } else if (imageUrl) {
-            // Vision fallback from screenshot
+        if (jobOptions.includeStats) {
+          monthly = await captureDxFromSearch(page, id, article);
+          if (!monthly || monthly.length === 0) {
             try {
-              const ai = await callVisionAI(imageUrl, monthLabels);
-              if (ai.stats) {
-                monthly = Object.entries(ai.stats).map(([label, count]) => ({ label, count: Number(count) || 0 }));
-                appendJobLog(id, `vision: monthly from image`);
+              for (let a = 0; a < 2; a++) {
+                const shot = await callScreenshot(article, brand);
+                imageUrl = shot.imageUrl;
+                statsUrlFromShot = shot.statsUrl;
+                if (imageUrl || statsUrlFromShot) break;
+                await sleep(400);
               }
             } catch {}
+            if (imageUrl) appendJobLog(id, `screenshot: ${imageUrl}`);
           }
+          await debugShot(
+            page,
+            id,
+            `before-stats-${encodeURIComponent(article)}`
+          );
+
+          try {
+            await restoreSession(page);
+          } catch {}
+
+          let statsPage: Page = page;
+          if (!statsUrlFromShot && (!monthly || monthly.length === 0)) {
+            const sp = await openStats(page);
+            statsPage = sp;
+            try {
+              appendJobLog(id, `stats: ${statsPage.url?.() || "unknown"}`);
+            } catch {}
+          }
+          await sleep(600);
+          await debugShot(
+            statsPage,
+            id,
+            `stats-entry-${encodeURIComponent(article)}`
+          );
+
+          const urlNow = statsPage.url?.() || "";
+          if (/\/sys\/captcha\.aspx/i.test(urlNow)) {
+            appendJobLog(id, "captcha detected, trying reauth then retry");
+            const ok = await reauthInPage(statsPage, id);
+            if (!ok) {
+              appendJobLog(
+                id,
+                "reauth failed; sleeping 90s then retry once"
+              );
+              await sleep(90000);
+            }
+            try {
+              const retryUrl = statsUrlFromShot || urlNow;
+              await statsPage
+                .goto(retryUrl, {
+                  waitUntil: "domcontentloaded",
+                  timeout: 20000,
+                })
+                .catch(() => {});
+            } catch {}
+            const after = statsPage.url?.() || "";
+            if (/\/sys\/captcha\.aspx/i.test(after)) {
+              appendJobLog(id, "captcha persists, skipping item");
+              const counts: Record<string, number> = {};
+              for (const ml of monthLabels) counts[ml] = 0;
+              results[realIndex] = {
+                article,
+                brand,
+                prices,
+                stats: counts,
+                imageUrl,
+                offers: offersPreview.map((o) => ({
+                  price: o.price,
+                  deliveryText: o.deliveryText ?? null,
+                  deliveryMin: o.deliveryMin ?? null,
+                  deliveryMax: o.deliveryMax ?? null,
+                  deliveryBucket: o.deliveryBucket,
+                })),
+              };
+              continue;
+            }
+          }
+
+          if (
+            (!monthly || monthly.length === 0) &&
+            statsUrlFromShot
+          )
+            appendJobLog(id, `dx: use screenshot url ${statsUrlFromShot}`);
+          if (!monthly || monthly.length === 0)
+            monthly = await fetchDxMonthly(
+              statsPage,
+              id,
+              statsUrlFromShot || null
+            );
+          if (!monthly || monthly.length === 0) {
+            const m2 = await scrapeMonthlyCounts(statsPage, monthLabels);
+            if (m2 && m2.length) {
+              appendJobLog(id, `dom: monthly points=${m2.length}`);
+              monthly = m2;
+            } else if (imageUrl) {
+              try {
+                const ai = await callVisionAI(imageUrl, monthLabels);
+                if (ai.stats) {
+                  monthly = Object.entries(ai.stats).map(
+                    ([label, count]) => ({
+                      label,
+                      count: Number(count) || 0,
+                    })
+                  );
+                  appendJobLog(id, `vision: monthly from image`);
+                }
+              } catch {}
+            }
+          }
+          if (statsPage !== page) await statsPage.close().catch(() => {});
+        } else {
+          monthly = [];
         }
-        if (statsPage !== page) await statsPage.close().catch(() => {});
 
         // project into map yyyy-mm -> count (try to parse label)
         const counts: Record<string, number> = {};
@@ -2102,6 +2654,13 @@ export async function POST(req: NextRequest) {
           prices,
           stats: counts,
           imageUrl,
+          offers: offersPreview.map((o) => ({
+            price: o.price,
+            deliveryText: o.deliveryText ?? null,
+            deliveryMin: o.deliveryMin ?? null,
+            deliveryMax: o.deliveryMax ?? null,
+            deliveryBucket: o.deliveryBucket,
+          })),
         };
         if (results[realIndex] && (results[realIndex] as any).article !== article) {
           appendJobLog(id, `WARN: index drift at ${realIndex}: got ${(results[realIndex] as any).article} expected ${article}`)
@@ -2115,6 +2674,13 @@ export async function POST(req: NextRequest) {
           prices: [],
           stats: {},
           imageUrl: null,
+          offers: offersPreview.map((o) => ({
+            price: o.price,
+            deliveryText: o.deliveryText ?? null,
+            deliveryMin: o.deliveryMin ?? null,
+            deliveryMax: o.deliveryMax ?? null,
+            deliveryBucket: o.deliveryBucket,
+          })),
         };
       }
       const safeResults = results.map((v: any) => (v === undefined ? null : v));
@@ -2216,7 +2782,14 @@ export async function POST(req: NextRequest) {
               const improved = (hasPrices || hasNonZeroMonths)
                 && (priceSig(prices2) !== priceSig(prev?.prices) || monthSig(counts2) !== monthSig(prev?.stats))
               if (improved) {
-                results[i] = { article: item.article, brand: item.brand, prices: prices2, stats: counts2, imageUrl: (results[i] as any)?.imageUrl ?? null }
+                results[i] = {
+                  article: item.article,
+                  brand: item.brand,
+                  prices: prices2,
+                  stats: counts2,
+                  imageUrl: (results[i] as any)?.imageUrl ?? null,
+                  offers: (results[i] as any)?.offers ?? [],
+                }
                 appendJobLog(id, `post-pass: row ${i} fixed`) 
               } else {
                 appendJobLog(id, `post-pass: row ${i} still matches previous; keep`) 

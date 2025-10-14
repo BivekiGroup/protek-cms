@@ -12,6 +12,29 @@ function* eachMonth(from: Date, to: Date): Generator<Date> {
 const ruGenitive = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря']
 function labelFor(d: Date) { return `${ruGenitive[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}` }
 
+const extractRows = (input: any): { article: string; brand: string }[] => {
+  const rows: { article: string; brand: string }[] = []
+  const push = (row: any) => {
+    if (!row || typeof row !== 'object') return
+    const article = typeof row.article === 'string' ? row.article : ''
+    const brand = typeof row.brand === 'string' ? row.brand : ''
+    if (article) rows.push({ article, brand })
+  }
+  if (Array.isArray(input)) {
+    for (const row of input) push(row)
+  } else if (input && typeof input === 'object') {
+    if (Array.isArray(input.rows)) {
+      for (const row of input.rows) push(row)
+    } else if (Array.isArray((input as any).items)) {
+      for (const row of (input as any).items) push(row)
+    } else {
+      // some older jobs might store a single row object
+      push(input)
+    }
+  }
+  return rows
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
@@ -19,8 +42,16 @@ export async function POST(req: NextRequest) {
     if (!id) return new Response(JSON.stringify({ ok: false, error: 'id required' }), { status: 400, headers: { 'content-type': 'application/json; charset=utf-8' } })
     const job = await (prisma as any).zzapReportJob.findUnique({ where: { id } })
     if (!job) return new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8' } })
-    const rows = (job.inputRows as any[]) as { article: string; brand: string }[]
+    let rows = extractRows(job.inputRows)
     const results = (job.results as any[]) || []
+    if (!rows.length && Array.isArray(results)) {
+      rows = results
+        .map((r: any) => ({
+          article: typeof r?.article === 'string' ? r.article : '',
+          brand: typeof r?.brand === 'string' ? r.brand : '',
+        }))
+        .filter((r) => r.article)
+    }
     const from = new Date(job.periodFrom)
     const to = new Date(job.periodTo)
     const monthLabels: string[] = []

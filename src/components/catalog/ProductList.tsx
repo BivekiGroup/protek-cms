@@ -37,23 +37,37 @@ interface Category {
   }
 }
 
+export type ProductSortField = 'photo' | 'internalCode' | 'name' | 'category' | 'article' | 'stock' | 'wholesalePrice' | 'retailPrice' | 'isVisible'
+
+export interface ProductSortConfig {
+  field: ProductSortField
+  direction: 'asc' | 'desc'
+}
+
 interface ProductListProps {
   products: Product[]
   loading?: boolean
   onProductEdit: (product: Product) => void
   onProductCreated: () => void
   categories?: Category[]
+  sortConfig: ProductSortConfig | null
+  onSortChange: (config: ProductSortConfig) => void
 }
 
-type SortField = 'photo' | 'internalCode' | 'name' | 'category' | 'article' | 'stock' | 'wholesalePrice' | 'retailPrice' | 'isVisible'
-
-export const ProductList = ({ products, loading, onProductEdit, onProductCreated, categories = [] }: ProductListProps) => {
+export const ProductList = ({
+  products,
+  loading,
+  onProductEdit,
+  onProductCreated,
+  categories = [],
+  sortConfig,
+  onSortChange
+}: ProductListProps) => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [selectAll, setSelectAll] = useState(false)
   const [bulkLoading, setBulkLoading] = useState(false)
   const [showCategorySelector, setShowCategorySelector] = useState(false)
   const hasSelection = selectedProducts.length > 0
-  const [sortConfig, setSortConfig] = useState<{ field: SortField; direction: 'asc' | 'desc' } | null>(null)
 
   const [deleteProduct] = useMutation(DELETE_PRODUCT)
   const [deleteProducts] = useMutation(DELETE_PRODUCTS)
@@ -190,67 +204,15 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
   const isInitialLoading = loading && products.length === 0
   const isRefreshing = loading && products.length > 0
 
-  const handleSort = (field: SortField) => {
-    setSortConfig((prev) => {
-      if (prev && prev.field === field) {
-        return {
-          field,
-          direction: prev.direction === 'asc' ? 'desc' : 'asc',
-        }
-      }
-      return { field, direction: 'asc' }
-    })
+  const handleSort = (field: ProductSortField) => {
+    const nextDirection: 'asc' | 'desc' =
+      sortConfig && sortConfig.field === field && sortConfig.direction === 'asc'
+        ? 'desc'
+        : 'asc'
+    onSortChange({ field, direction: nextDirection })
   }
 
-  const getSortValue = (product: Product, field: SortField): string | number => {
-    switch (field) {
-      case 'internalCode':
-        return product.onecProductId?.toLowerCase()
-          ?? product.externalId?.toLowerCase()
-          ?? ''
-      case 'photo':
-        return product.images.length > 0 ? 1 : 0
-      case 'name':
-        return product.name?.toLowerCase() ?? ''
-      case 'category':
-        return product.categories.map(cat => cat.name).join(', ').toLowerCase()
-      case 'article':
-        return product.article?.toLowerCase() ?? ''
-      case 'stock':
-        return product.stock ?? 0
-      case 'wholesalePrice':
-        return product.wholesalePrice ?? 0
-      case 'retailPrice':
-        return product.retailPrice ?? 0
-      case 'isVisible':
-        return product.isVisible ? 1 : 0
-      default:
-        return ''
-    }
-  }
-
-  const sortedProducts = useMemo(() => {
-    if (!sortConfig) return products
-
-    const sorted = [...products]
-    sorted.sort((a, b) => {
-      const aValue = getSortValue(a, sortConfig.field)
-      const bValue = getSortValue(b, sortConfig.field)
-
-      if (typeof aValue === 'number' && typeof bValue === 'number') {
-        return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue
-      }
-
-      const aString = String(aValue)
-      const bString = String(bValue)
-      return sortConfig.direction === 'asc'
-        ? aString.localeCompare(bString, 'ru')
-        : bString.localeCompare(aString, 'ru')
-    })
-    return sorted
-  }, [products, sortConfig])
-
-  const renderSortIcon = (field: SortField) => {
+  const renderSortIcon = (field: ProductSortField) => {
     if (!sortConfig || sortConfig.field !== field) {
       return <ArrowUpDown className="w-3 h-3 text-gray-400" />
     }
@@ -260,7 +222,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
       : <ArrowDown className="w-3 h-3 text-blue-600" />
   }
 
-  const renderSortableHeader = (field: SortField, label: string) => (
+  const renderSortableHeader = (field: ProductSortField, label: string) => (
     <button
       type="button"
       onClick={() => handleSort(field)}
@@ -533,7 +495,7 @@ export const ProductList = ({ products, loading, onProductEdit, onProductCreated
 
         {/* Список товаров */}
         <div className="space-y-0.5 overflow-x-auto">
-          {sortedProducts.map((product) => (
+          {products.map((product) => (
             <div
               key={product.id}
               className="bg-white border border-gray-200 rounded-md py-0.5 px-1 hover:bg-blue-50/60 hover:shadow-sm transition-colors transition-shadow"

@@ -33,6 +33,31 @@ export const typeDefs = gql`
     REGEX
   }
 
+  enum SortDirection {
+    ASC
+    DESC
+  }
+
+  enum ProductSortField {
+    NAME
+    CATEGORY
+    ARTICLE
+    STOCK
+    WHOLESALE_PRICE
+    RETAIL_PRICE
+    IS_VISIBLE
+    INTERNAL_CODE
+    PHOTO
+    BRAND
+    CREATED_AT
+    UPDATED_AT
+  }
+
+  input ProductSortInput {
+    field: ProductSortField!
+    direction: SortDirection!
+  }
+
   type SeoPageConfig {
     id: ID!
     pattern: String!
@@ -1021,7 +1046,7 @@ export const typeDefs = gql`
     categories: [Category!]!
     category(id: ID!): Category
     categoryBySlug(slug: String!): Category
-    products(categoryId: String, search: String, limit: Int, offset: Int): [Product!]!
+    products(categoryId: String, search: String, limit: Int, offset: Int, sort: ProductSortInput): [Product!]!
     productsCount(categoryId: String, search: String): Int!
     product(id: ID!): Product
     productBySlug(slug: String!): Product

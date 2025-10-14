@@ -1,5 +1,5 @@
 import { prisma } from '../prisma'
-import { SearchType, OrderStatus as PrismaOrderStatus } from '../../generated/prisma'
+import { Prisma, SearchType, OrderStatus as PrismaOrderStatus } from '../../generated/prisma'
 import { createToken, comparePasswords, hashPassword } from '../auth'
 import { createAuditLog, AuditAction, getClientInfo } from '../audit'
 import { uploadBuffer, generateFileKey } from '../s3'
@@ -97,6 +97,25 @@ interface AdminChangePasswordInput {
   newPassword: string
 }
 
+type ProductSortField =
+  | 'NAME'
+  | 'CATEGORY'
+  | 'ARTICLE'
+  | 'STOCK'
+  | 'WHOLESALE_PRICE'
+  | 'RETAIL_PRICE'
+  | 'IS_VISIBLE'
+  | 'INTERNAL_CODE'
+  | 'PHOTO'
+  | 'BRAND'
+  | 'CREATED_AT'
+  | 'UPDATED_AT'
+
+interface ProductSortInput {
+  field: ProductSortField
+  direction: 'ASC' | 'DESC'
+}
+
 // News inputs
 interface NewsInput {
   slug?: string
@@ -128,6 +147,9 @@ interface Context {
   userRole?: string
   userEmail?: string
   headers?: Headers
+  categoryLevelCache?: Map<string, number>
+  categoryParentMap?: Map<string, string | null>
+  categoryHierarchyLoaded?: boolean
 }
 
 // Глобальные настройки интеграций (провайдеров внешних API)
@@ -734,17 +756,151 @@ const createSlug = (text: string): string => {
     .replace(/^-+|-+$/g, '')
 }
 
-const getCategoryLevel = async (categoryId: string, level = 0): Promise<number> => {
-  const category = await prisma.category.findUnique({
-    where: { id: categoryId },
-    select: { parentId: true }
-  })
-  
-  if (!category || !category.parentId) {
-    return level
+const ensureCategoryParentMap = async (context: Context): Promise<Map<string, string | null>> => {
+  context.categoryParentMap ??= new Map()
+
+  if (!context.categoryHierarchyLoaded) {
+    const categories = await prisma.category.findMany({
+      select: { id: true, parentId: true }
+    })
+
+    for (const { id, parentId } of categories) {
+      context.categoryParentMap.set(id, parentId ?? null)
+    }
+
+    context.categoryHierarchyLoaded = true
   }
-  
-  return getCategoryLevel(category.parentId, level + 1)
+
+  return context.categoryParentMap
+}
+
+const getCategoryLevel = async (categoryId: string, context: Context): Promise<number> => {
+  context.categoryLevelCache ??= new Map()
+
+  const cachedLevel = context.categoryLevelCache.get(categoryId)
+  if (cachedLevel !== undefined) {
+    return cachedLevel
+  }
+
+  const parentMap = await ensureCategoryParentMap(context)
+
+  if (!parentMap.has(categoryId)) {
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      select: { parentId: true }
+    })
+    parentMap.set(categoryId, category?.parentId ?? null)
+  }
+
+  const path: string[] = []
+  let currentId: string | null = categoryId
+
+  while (currentId) {
+    const levelFromCache = context.categoryLevelCache.get(currentId)
+    if (levelFromCache !== undefined) {
+      let level = levelFromCache
+      for (let i = path.length - 1; i >= 0; i--) {
+        level += 1
+        context.categoryLevelCache.set(path[i], level)
+      }
+      return context.categoryLevelCache.get(categoryId)!
+    }
+
+    path.push(currentId)
+
+    let parentId = parentMap.get(currentId)
+    if (parentId === undefined) {
+      const category = await prisma.category.findUnique({
+        where: { id: currentId },
+        select: { parentId: true }
+      })
+      parentId = category?.parentId ?? null
+      parentMap.set(currentId, parentId)
+    }
+
+    if (!parentId) {
+      context.categoryLevelCache.set(currentId, 0)
+      let level = 0
+      for (let i = path.length - 2; i >= 0; i--) {
+        level += 1
+        context.categoryLevelCache.set(path[i], level)
+      }
+      return context.categoryLevelCache.get(categoryId) ?? 0
+    }
+
+    currentId = parentId
+  }
+
+  return context.categoryLevelCache.get(categoryId) ?? 0
+}
+
+const withNullsLast = (direction: Prisma.SortOrder): Prisma.SortOrderInput => ({
+  sort: direction,
+  nulls: 'last'
+})
+
+const buildProductOrderBy = (sort?: ProductSortInput): Prisma.ProductOrderByWithRelationInput[] => {
+  if (!sort) {
+    return [{ name: 'asc' }]
+  }
+
+  const direction: Prisma.SortOrder = sort.direction === 'DESC' ? 'desc' : 'asc'
+
+  switch (sort.field) {
+    case 'INTERNAL_CODE':
+      return [
+        { onecProductId: withNullsLast(direction) },
+        { externalId: withNullsLast(direction) },
+        { name: 'asc' }
+      ]
+    case 'ARTICLE':
+      return [
+        { article: withNullsLast(direction) },
+        { name: 'asc' }
+      ]
+    case 'STOCK':
+      return [
+        { stock: direction },
+        { name: 'asc' }
+      ]
+    case 'WHOLESALE_PRICE':
+      return [
+        { wholesalePrice: withNullsLast(direction) },
+        { name: 'asc' }
+      ]
+    case 'RETAIL_PRICE':
+      return [
+        { retailPrice: withNullsLast(direction) },
+        { name: 'asc' }
+      ]
+    case 'IS_VISIBLE':
+      return [
+        { isVisible: direction },
+        { name: 'asc' }
+      ]
+    case 'PHOTO':
+      return [
+        { images: { _count: direction } },
+        { name: 'asc' }
+      ]
+    case 'CATEGORY':
+      return [
+        { categories: { _count: direction } },
+        { name: 'asc' }
+      ]
+    case 'BRAND':
+      return [
+        { brand: withNullsLast(direction) },
+        { name: 'asc' }
+      ]
+    case 'CREATED_AT':
+      return [{ createdAt: direction }]
+    case 'UPDATED_AT':
+      return [{ updatedAt: direction }]
+    case 'NAME':
+    default:
+      return [{ name: direction }, { createdAt: 'desc' }]
+  }
 }
 
 // Функция для расчета дней доставки из строки даты
@@ -787,8 +943,10 @@ export const resolvers = {
   JSON: GraphQLJSON,
 
   Category: {
-    level: async (parent: { id: string }) => {
-      return await getCategoryLevel(parent.id)
+    level: async (parent: { id: string; parentId?: string | null }, _args: unknown, context: Context) => {
+      context.categoryParentMap ??= new Map()
+      context.categoryParentMap.set(parent.id, parent.parentId ?? null)
+      return await getCategoryLevel(parent.id, context)
     },
     children: async (parent: { id: string }) => {
       return await prisma.category.findMany({
@@ -1063,8 +1221,8 @@ export const resolvers = {
       }
     },
 
-    products: async (_: unknown, { categoryId, search, limit = 50, offset = 0 }: { 
-      categoryId?: string; search?: string; limit?: number; offset?: number 
+    products: async (_: unknown, { categoryId, search, limit = 50, offset = 0, sort }: { 
+      categoryId?: string; search?: string; limit?: number; offset?: number; sort?: ProductSortInput 
     }) => {
       try {
         const where: Record<string, unknown> = {}
@@ -1090,7 +1248,7 @@ export const resolvers = {
             categories: true,
             characteristics: { include: { characteristic: true } }
           },
-          orderBy: { name: 'asc' },
+          orderBy: buildProductOrderBy(sort),
           take: limit,
           skip: offset
         })
