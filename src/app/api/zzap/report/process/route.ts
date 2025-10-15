@@ -427,16 +427,29 @@ async function scrapeOffersWithDelivery(
     );
     if (Array.isArray(offers)) {
       return offers
-        .filter(
-          (o): o is { price: number; deliveryText?: string | null } =>
-            o &&
-            typeof o.price === "number" &&
-            Number.isFinite(o.price)
-        )
+        .filter((o): o is { price: number; deliveryText: string | null } => {
+          if (!o || typeof o !== "object") return false;
+          const candidate = o as {
+            price?: unknown;
+            deliveryText?: unknown;
+          };
+          if (
+            typeof candidate.price !== "number" ||
+            !Number.isFinite(candidate.price)
+          ) {
+            return false;
+          }
+          if (
+            candidate.deliveryText != null &&
+            typeof candidate.deliveryText !== "string"
+          ) {
+            return false;
+          }
+          return true;
+        })
         .map((o) => ({
           price: o.price,
-          deliveryText:
-            typeof o.deliveryText === "string" ? o.deliveryText : null,
+          deliveryText: o.deliveryText ?? null,
         }))
         .sort((a, b) => a.price - b.price);
     }
@@ -2297,6 +2310,7 @@ export async function POST(req: NextRequest) {
     for (let idx = 0; idx < toProcess.length; idx++) {
       const realIndex = processed + idx;
       const { article, brand } = toProcess[idx];
+      let offersPreview: OfferWithDelivery[] = [];
       try {
         appendJobLog(id, `→ ${article} / ${brand}: open search`);
         // Стартуем ранний перехват DX до открытия страницы, чтобы не упустить первый POST
@@ -2391,7 +2405,7 @@ export async function POST(req: NextRequest) {
           await debugShot(page, id, `search-before-scrape-${encodeURIComponent(article)}`)
           prices = await scrapeTop3Prices(page, brand, article);
         }
-        let offersPreview: OfferWithDelivery[] = [];
+        offersPreview = [];
         try {
           const offersRaw = await scrapeOffersWithDelivery(page, brand, article);
           const offersEnriched = enrichOffersWithDelivery(offersRaw);

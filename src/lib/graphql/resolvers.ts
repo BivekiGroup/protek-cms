@@ -814,8 +814,9 @@ const getCategoryLevel = async (categoryId: string, context: Context): Promise<n
         where: { id: currentId },
         select: { parentId: true }
       })
-      parentId = category?.parentId ?? null
-      parentMap.set(currentId, parentId)
+      const normalizedParentId = category?.parentId ?? null
+      parentId = normalizedParentId
+      parentMap.set(currentId, normalizedParentId)
     }
 
     if (!parentId) {
