@@ -80,6 +80,7 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: 'desc' },
         take: 1,
         select: {
+          id: true,
           fullName: true,
           shortName: true,
           inn: true,
@@ -89,7 +90,6 @@ export async function GET(req: NextRequest) {
           actualAddress: true,
           bankDetails: {
             orderBy: { createdAt: 'desc' },
-            take: 1,
             select: {
               bik: true,
               accountNumber: true,
@@ -104,27 +104,49 @@ export async function GET(req: NextRequest) {
     take: 1000,
   })
 
-  const users = clients.map((c) => ({
-    code: c.clientNumber,
-    name: c.legalEntities[0]?.fullName ?? c.legalEntities[0]?.shortName ?? c.name,
-    inn: c.legalEntities[0]?.inn ?? c.inn ?? '',
-    kpp: c.legalEntities[0]?.registrationReasonCode ?? c.kpp ?? '',
-    ogrn: c.legalEntities[0]?.ogrn ?? c.ogrn ?? '',
-    view: c.legalEntities.length > 0 ? 'legal entity' : mapClientView(c.type),
-    address: {
-      actual: c.legalEntities[0]?.actualAddress ?? c.actualAddress ?? '',
-      legal: c.legalEntities[0]?.legalAddress ?? c.legalAddress ?? '',
-      mailing: extractMailingAddress(c.comment),
-    },
-    contact_information: {
-      telephone: c.phone ?? '',
-      email: c.email ?? '',
-    },
-    bank_requisites: {
-      bik: c.legalEntities[0]?.bankDetails[0]?.bik ?? c.bankBik ?? '',
-      account_number: c.legalEntities[0]?.bankDetails[0]?.accountNumber ?? c.bankAccount ?? '',
-    },
-  }))
+  const users = clients.map((c) => {
+    const legalEntity = c.legalEntities[0]
+
+    // Collect all bank details from legal entity
+    const bankDetailsFromEntity = legalEntity?.bankDetails.map((bd) => ({
+      bik: bd.bik,
+      account_number: bd.accountNumber,
+      bank_name: bd.bankName,
+      correspondent_account: bd.correspondentAccount,
+    })) ?? []
+
+    // Add fallback bank details from client if no legal entity bank details exist
+    const bankRequisites = bankDetailsFromEntity.length > 0
+      ? bankDetailsFromEntity
+      : (c.bankBik || c.bankAccount)
+        ? [{
+            bik: c.bankBik ?? '',
+            account_number: c.bankAccount ?? '',
+            bank_name: '',
+            correspondent_account: '',
+          }]
+        : []
+
+    return {
+      code: c.clientNumber,
+      legal_entity_id: legalEntity?.id ?? '',
+      name: legalEntity?.fullName ?? legalEntity?.shortName ?? c.name,
+      inn: legalEntity?.inn ?? c.inn ?? '',
+      kpp: legalEntity?.registrationReasonCode ?? c.kpp ?? '',
+      ogrn: legalEntity?.ogrn ?? c.ogrn ?? '',
+      view: c.legalEntities.length > 0 ? 'legal entity' : mapClientView(c.type),
+      address: {
+        actual: legalEntity?.actualAddress ?? c.actualAddress ?? '',
+        legal: legalEntity?.legalAddress ?? c.legalAddress ?? '',
+        mailing: extractMailingAddress(c.comment),
+      },
+      contact_information: {
+        telephone: c.phone ?? '',
+        email: c.email ?? '',
+      },
+      bank_requisites: bankRequisites,
+    }
+  })
 
   return new Response(JSON.stringify({ users }), { status: 200, headers })
 }

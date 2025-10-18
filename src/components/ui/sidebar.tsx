@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import type { ComponentType, SVGProps } from 'react'
-import { 
-  Home, 
+import {
+  Home,
   Settings,
   Users,
   LogOut,
@@ -26,7 +26,8 @@ import {
   ChevronDown,
   MessageSquare,
   LifeBuoy,
-  RotateCcw
+  RotateCcw,
+  Smartphone
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -72,6 +73,7 @@ const navigationGroups: NavGroup[] = [
       { title: 'Чат с ИИ', href: '/dashboard/ai', icon: Bot },
       { title: 'Мессенджер', href: '/dashboard/messenger', icon: MessageSquare },
       { title: 'Техподдержка', href: '/dashboard/support', icon: LifeBuoy },
+      { title: 'SMS Коды', href: '/dashboard/sms-codes', icon: Smartphone },
       { title: 'Рассылки', href: '/dashboard/newsletter', icon: Mail },
       { title: 'Тест стилей', href: '/dashboard/test-styles', icon: Palette },
       { title: 'Ozon', href: '/dashboard/ozon', icon: Store },

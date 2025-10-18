@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Upload, Plus, X, Trash2, Edit } from 'lucide-react'
 import { CREATE_PRODUCT, UPDATE_PRODUCT } from '@/lib/graphql/mutations'
 import { GET_CHARACTERISTICS, GET_PRODUCTS, GET_PRODUCT_HISTORY } from '@/lib/graphql/queries'
+import toast from 'react-hot-toast'
 
 interface Product {
   id: string
@@ -553,6 +554,7 @@ export const ProductForm = ({
         
         console.log('Результат updateProduct:', result)
         console.log('Опции в результате:', result.data?.updateProduct?.options)
+        toast.success('Товар обновлён')
       } else {
         console.log('Отправляем createProduct с переменными:', {
           input,
@@ -571,12 +573,13 @@ export const ProductForm = ({
         })
         
         console.log('Результат createProduct:', result)
+        toast.success('Товар создан')
       }
 
       onSuccess()
     } catch (error) {
       console.error('Ошибка сохранения товара:', error)
-      alert('Не удалось сохранить товар')
+      toast.error('Не удалось сохранить товар')
     }
   }
 

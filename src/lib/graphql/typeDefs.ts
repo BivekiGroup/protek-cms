@@ -1031,11 +1031,32 @@ export const typeDefs = gql`
     search: String
   }
 
+  # SMS коды для админки
+  type SmsCode {
+    id: ID!
+    phone: String!
+    code: String!
+    sessionId: String
+    attempts: Int!
+    verified: Boolean!
+    expiresAt: DateTime!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  type SmsCodesResponse {
+    codes: [SmsCode!]!
+    total: Int!
+  }
+
   type Query {
     users: [User!]!
     user(id: ID!): User
     hasUsers: Boolean!
     me: User
+
+    # SMS коды
+    smsCodes(limit: Int, offset: Int, phone: String): SmsCodesResponse!
     
     # Счета на пополнение баланса
     balanceInvoices: [BalanceInvoice!]!
@@ -1047,6 +1068,7 @@ export const typeDefs = gql`
     category(id: ID!): Category
     categoryBySlug(slug: String!): Category
     products(categoryId: String, search: String, limit: Int, offset: Int, sort: ProductSortInput): [Product!]!
+    productsByArticle(article: String!, limit: Int): [Product!]!
     productsCount(categoryId: String, search: String): Int!
     product(id: ID!): Product
     productBySlug(slug: String!): Product

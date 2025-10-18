@@ -945,11 +945,17 @@ export const resolvers = {
 
   Category: {
     level: async (parent: { id: string; parentId?: string | null }, _args: unknown, context: Context) => {
+      if (typeof (parent as { level?: number }).level === 'number') {
+        return (parent as { level?: number }).level as number
+      }
       context.categoryParentMap ??= new Map()
       context.categoryParentMap.set(parent.id, parent.parentId ?? null)
       return await getCategoryLevel(parent.id, context)
     },
-    children: async (parent: { id: string }) => {
+    children: async (parent: { id: string; children?: unknown }) => {
+      if (Array.isArray((parent as { children?: unknown[] }).children)) {
+        return (parent as { children: unknown[] }).children
+      }
       return await prisma.category.findMany({
         where: { parentId: parent.id },
         orderBy: { name: 'asc' },
@@ -975,20 +981,29 @@ export const resolvers = {
   },
 
   Product: {
-    categories: async (parent: { id: string }) => {
+    categories: async (parent: { id: string; categories?: unknown }) => {
+      if (Array.isArray((parent as { categories?: unknown[] }).categories)) {
+        return (parent as { categories: unknown[] }).categories
+      }
       const product = await prisma.product.findUnique({
         where: { id: parent.id },
         include: { categories: true }
       })
       return product?.categories || []
     },
-    images: async (parent: { id: string }) => {
+    images: async (parent: { id: string; images?: unknown }) => {
+      if (Array.isArray((parent as { images?: unknown[] }).images)) {
+        return (parent as { images: unknown[] }).images
+      }
       return await prisma.productImage.findMany({
         where: { productId: parent.id },
         orderBy: { order: 'asc' }
       })
     },
-    options: async (parent: { id: string }) => {
+    options: async (parent: { id: string; options?: unknown }) => {
+      if (Array.isArray((parent as { options?: unknown[] }).options)) {
+        return (parent as { options: unknown[] }).options
+      }
       return await prisma.productOption.findMany({
         where: { productId: parent.id },
         include: {
@@ -997,7 +1012,10 @@ export const resolvers = {
         }
       })
     },
-    characteristics: async (parent: { id: string }) => {
+    characteristics: async (parent: { id: string; characteristics?: unknown }) => {
+      if (Array.isArray((parent as { characteristics?: unknown[] }).characteristics)) {
+        return (parent as { characteristics: unknown[] }).characteristics
+      }
       return await prisma.productCharacteristic.findMany({
         where: { productId: parent.id },
         include: { characteristic: true }
@@ -1094,6 +1112,42 @@ export const resolvers = {
       }
     },
 
+    // SMS коды для админки
+    smsCodes: async (
+      _: unknown,
+      { limit = 50, offset = 0, phone }: { limit?: number; offset?: number; phone?: string },
+      context: Context
+    ) => {
+      try {
+        // Проверяем что пользователь авторизован
+        if (!context.userId) {
+          throw new Error('Необходима авторизация')
+        }
+
+        const where = phone
+          ? { phone: { contains: phone } }
+          : {}
+
+        const [codes, total] = await Promise.all([
+          prisma.smsCode.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+          }),
+          prisma.smsCode.count({ where })
+        ])
+
+        return {
+          codes,
+          total
+        }
+      } catch (error) {
+        console.error('Ошибка получения SMS кодов:', error)
+        throw new Error('Не удалось получить список SMS кодов')
+      }
+    },
+
     // Счета на пополнение баланса
     balanceInvoices: async (_: unknown, __: unknown, context: Context) => {
       try {
@@ -1163,15 +1217,60 @@ export const resolvers = {
     },
 
     // Каталог
-    categories: async () => {
+    categories: async (_: unknown, __: unknown, context: Context) => {
       try {
-        return await prisma.category.findMany({
-          orderBy: { name: 'asc' },
+        const categories = await prisma.category.findMany({
+          orderBy: [
+            { parentId: 'asc' },
+            { name: 'asc' }
+          ],
           include: {
-            children: true,
             _count: { select: { products: true } }
           }
         })
+
+        type CategoryNode = (typeof categories)[number] & { children: CategoryNode[]; level?: number }
+
+        context.categoryParentMap = new Map()
+        context.categoryLevelCache = new Map()
+
+        const categoryMap = new Map<string, CategoryNode>()
+        for (const category of categories) {
+          context.categoryParentMap.set(category.id, category.parentId ?? null)
+          categoryMap.set(category.id, { ...category, children: [] })
+        }
+
+        const rootCategories: CategoryNode[] = []
+        for (const category of categoryMap.values()) {
+          if (category.parentId) {
+            const parent = categoryMap.get(category.parentId)
+            if (parent) {
+              parent.children.push(category)
+              continue
+            }
+          }
+          rootCategories.push(category)
+        }
+
+        const sortNodes = (nodes: CategoryNode[]) => {
+          nodes.sort((a, b) => {
+            return a.name.localeCompare(b.name)
+          })
+          nodes.forEach(child => sortNodes(child.children))
+        }
+
+        const assignLevels = (nodes: CategoryNode[], level: number) => {
+          for (const node of nodes) {
+            node.level = level
+            context.categoryLevelCache?.set(node.id, level)
+            assignLevels(node.children, level + 1)
+          }
+        }
+
+        sortNodes(rootCategories)
+        assignLevels(rootCategories, 0)
+
+        return rootCategories
       } catch (error) {
         console.error('Ошибка получения категорий:', error)
         throw new Error('Не удалось получить категории')
@@ -1222,16 +1321,16 @@ export const resolvers = {
       }
     },
 
-    products: async (_: unknown, { categoryId, search, limit = 50, offset = 0, sort }: { 
-      categoryId?: string; search?: string; limit?: number; offset?: number; sort?: ProductSortInput 
+    products: async (_: unknown, { categoryId, search, limit = 50, offset = 0, sort }: {
+      categoryId?: string; search?: string; limit?: number; offset?: number; sort?: ProductSortInput
     }) => {
       try {
         const where: Record<string, unknown> = {}
-        
+
         if (categoryId) {
           where.categories = { some: { id: categoryId } }
         }
-        
+
         if (search) {
           where.OR = [
             { name: { contains: search, mode: 'insensitive' } },
@@ -1247,6 +1346,12 @@ export const resolvers = {
           include: {
             images: { orderBy: { order: 'asc' } },
             categories: true,
+            options: {
+              include: {
+                option: { include: { values: true } },
+                optionValue: true
+              }
+            },
             characteristics: { include: { characteristic: true } }
           },
           orderBy: buildProductOrderBy(sort),
@@ -1256,6 +1361,25 @@ export const resolvers = {
       } catch (error) {
         console.error('Ошибка получения товаров:', error)
         throw new Error('Не удалось получить товары')
+      }
+    },
+
+    productsByArticle: async (_: unknown, { article, limit = 50 }: { article: string; limit?: number }) => {
+      try {
+        return await prisma.product.findMany({
+          where: {
+            article: { contains: article, mode: 'insensitive' }
+          },
+          include: {
+            images: { orderBy: { order: 'asc' } },
+            categories: true
+          },
+          orderBy: { article: 'asc' },
+          take: limit
+        })
+      } catch (error) {
+        console.error('Ошибка поиска товаров по артикулу:', error)
+        throw new Error('Не удалось найти товары')
       }
     },
 
@@ -1340,11 +1464,19 @@ export const resolvers = {
 
     productHistory: async (_: unknown, { productId }: { productId: string }) => {
       try {
-        return await prisma.productHistory.findMany({
+        const history = await prisma.productHistory.findMany({
           where: { productId },
           include: { user: true },
           orderBy: { createdAt: 'desc' }
         })
+        return history.map((entry) => ({
+          ...entry,
+          changes: entry.changes == null
+            ? null
+            : typeof entry.changes === 'string'
+              ? entry.changes
+              : JSON.stringify(entry.changes)
+        }))
       } catch (error) {
         console.error('Ошибка получения истории товара:', error)
         throw new Error('Не удалось получить историю товара')
@@ -8786,9 +8918,9 @@ export const resolvers = {
 
         // Генерируем 5-значный код
         const code = Math.floor(10000 + Math.random() * 90000).toString()
-        
+
         // Сохраняем код в хранилище
-        smsCodeStore.saveCode(phone, code, finalSessionId)
+        await smsCodeStore.saveCode(phone, code, finalSessionId)
         
         // Отправляем SMS через Билайн API
         const smsResult = await smsService.sendVerificationCode(phone, code)
@@ -8823,9 +8955,9 @@ export const resolvers = {
     verifyCode: async (_: unknown, { phone, code, sessionId }: { phone: string; code: string; sessionId: string }) => {
       try {
         console.log(`Верификация кода для ${phone}, код: ${code}, sessionId: ${sessionId}`)
-        
+
         // Проверяем код через наше хранилище
-        const verification = smsCodeStore.verifyCode(phone, code, sessionId)
+        const verification = await smsCodeStore.verifyCode(phone, code, sessionId)
         
         if (!verification.valid) {
           console.log(`Код неверный: ${verification.error}`)
@@ -11575,11 +11707,22 @@ export const resolvers = {
         }
 
         // Проверяем, есть ли уже такой товар в корзине
-        const existingItem = cart.items.find(item => 
-          (item.productId && input.productId && item.productId === input.productId) ||
-          (item.offerKey && input.offerKey && item.offerKey === input.offerKey) ||
-          (item.article === input.article && item.brand === input.brand)
-        );
+        // Приоритет: offerKey (уникальный для каждого предложения) > productId (внутренние товары) > article+brand (fallback)
+        const existingItem = cart.items.find(item => {
+          // Если есть offerKey, сравниваем только его (самый точный идентификатор)
+          if (item.offerKey && input.offerKey) {
+            return item.offerKey === input.offerKey;
+          }
+          // Если есть productId, сравниваем только его (внутренние товары)
+          if (item.productId && input.productId) {
+            return item.productId === input.productId;
+          }
+          // Fallback: сравниваем только если НЕТ ни offerKey, ни productId
+          if (!item.offerKey && !item.productId && !input.offerKey && !input.productId) {
+            return item.article === input.article && item.brand === input.brand;
+          }
+          return false;
+        });
 
         if (existingItem) {
           // Увеличиваем количество

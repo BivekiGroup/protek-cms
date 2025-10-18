@@ -1,3 +1,5 @@
+import { prisma } from './prisma'
+
 interface SMSCodeEntry {
   phone: string
   code: string
@@ -14,19 +16,38 @@ class SMSCodeStore {
   /**
    * Сохранение кода
    */
-  saveCode(phone: string, code: string, sessionId: string): void {
+  async saveCode(phone: string, code: string, sessionId: string): Promise<void> {
     const key = this.getKey(phone, sessionId)
-    
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + this.codeLifetime)
+
     this.codes.set(key, {
       phone,
       code,
       sessionId,
-      createdAt: new Date(),
+      createdAt: now,
       attempts: 0
     })
 
+    // Сохраняем в БД
+    try {
+      await prisma.smsCode.create({
+        data: {
+          phone,
+          code,
+          sessionId,
+          expiresAt,
+          attempts: 0,
+          verified: false,
+        }
+      })
+      console.log(`SMS код сохранен в БД для ${phone}, sessionId: ${sessionId}`)
+    } catch (error) {
+      console.error('Ошибка сохранения SMS кода в БД:', error)
+    }
+
     console.log(`SMS код сохранен для ${phone}, sessionId: ${sessionId}`)
-    
+
     // Автоматическая очистка через время жизни кода
     setTimeout(() => {
       this.codes.delete(key)
@@ -37,59 +58,92 @@ class SMSCodeStore {
   /**
    * Проверка кода
    */
-  verifyCode(phone: string, code: string, sessionId: string): { 
-    valid: boolean 
-    error?: string 
-    attemptsLeft?: number 
-  } {
+  async verifyCode(phone: string, code: string, sessionId: string): Promise<{
+    valid: boolean
+    error?: string
+    attemptsLeft?: number
+  }> {
     const key = this.getKey(phone, sessionId)
     const entry = this.codes.get(key)
 
     if (!entry) {
-      return { 
-        valid: false, 
-        error: 'Код не найден или истек срок действия' 
+      return {
+        valid: false,
+        error: 'Код не найден или истек срок действия'
       }
     }
 
     // Проверяем время жизни кода
     const now = new Date()
     const elapsed = now.getTime() - entry.createdAt.getTime()
-    
+
     if (elapsed > this.codeLifetime) {
       this.codes.delete(key)
-      return { 
-        valid: false, 
-        error: 'Код истек, запросите новый' 
+      return {
+        valid: false,
+        error: 'Код истек, запросите новый'
       }
     }
 
     // Увеличиваем счетчик попыток
     entry.attempts++
 
+    // Обновляем попытки в БД
+    try {
+      await prisma.smsCode.updateMany({
+        where: {
+          phone,
+          sessionId,
+          verified: false,
+        },
+        data: {
+          attempts: entry.attempts,
+        }
+      })
+    } catch (error) {
+      console.error('Ошибка обновления попыток в БД:', error)
+    }
+
     // Проверяем количество попыток
     if (entry.attempts > this.maxAttempts) {
       this.codes.delete(key)
-      return { 
-        valid: false, 
-        error: 'Превышено количество попыток ввода кода' 
+      return {
+        valid: false,
+        error: 'Превышено количество попыток ввода кода'
       }
     }
 
     // Проверяем сам код
     if (entry.code !== code) {
       const attemptsLeft = this.maxAttempts - entry.attempts
-      return { 
-        valid: false, 
-        error: 'Неверный код', 
-        attemptsLeft 
+      return {
+        valid: false,
+        error: 'Неверный код',
+        attemptsLeft
       }
     }
 
-    // Код верный, удаляем из хранилища
+    // Код верный, удаляем из хранилища и обновляем в БД
     this.codes.delete(key)
+
+    // Отмечаем код как верифицированный в БД
+    try {
+      await prisma.smsCode.updateMany({
+        where: {
+          phone,
+          sessionId,
+          verified: false,
+        },
+        data: {
+          verified: true,
+        }
+      })
+    } catch (error) {
+      console.error('Ошибка обновления статуса в БД:', error)
+    }
+
     console.log(`SMS код успешно верифицирован для ${phone}, sessionId: ${sessionId}`)
-    
+
     return { valid: true }
   }
 

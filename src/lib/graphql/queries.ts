@@ -79,6 +79,26 @@ export const GET_AUDIT_LOGS_COUNT = gql`
   }
 `
 
+// SMS коды
+export const GET_SMS_CODES = gql`
+  query GetSmsCodes($limit: Int, $offset: Int, $phone: String) {
+    smsCodes(limit: $limit, offset: $offset, phone: $phone) {
+      codes {
+        id
+        phone
+        code
+        sessionId
+        attempts
+        verified
+        expiresAt
+        createdAt
+        updatedAt
+      }
+      total
+    }
+  }
+`
+
 // Laximo интеграция
 export const GET_LAXIMO_BRANDS = gql`
   query GetLaximoBrands {

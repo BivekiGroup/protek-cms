@@ -130,6 +130,7 @@ export default function OneCCatalogDocs() {
   "users": [
     {
       "code": "001254",
+      "legal_entity_id": "clxyz123abc456def789",
       "name": "Ремни ГРМ ООО",
       "inn": "0123456789",
       "kpp": "123456789",
@@ -144,10 +145,20 @@ export default function OneCCatalogDocs() {
         "telephone": "89186584172",
         "email": "test@mail.ru"
       },
-      "bank_requisites": {
-        "bik": "004525988",
-        "account_number": "40102810545370000003"
-      }
+      "bank_requisites": [
+        {
+          "bik": "004525988",
+          "account_number": "40102810545370000003",
+          "bank_name": "ПАО СБЕРБАНК",
+          "correspondent_account": "30101810400000000225"
+        },
+        {
+          "bik": "044525593",
+          "account_number": "40702810938000012345",
+          "bank_name": "ПАО \"БАНК ВТБ\"",
+          "correspondent_account": "30101810700000000593"
+        }
+      ]
     }
   ]
 }`
@@ -459,9 +470,11 @@ export default function OneCCatalogDocs() {
             Поля:
             <ul className="list-disc pl-5 mt-2 space-y-1">
               <li><b>code</b> соответствует полю <span className="font-mono">clientNumber</span> в CMS.</li>
+              <li><b>legal_entity_id</b>: ID юридического лица (cuid) из таблицы <span className="font-mono">ClientLegalEntity</span>; используется для привязки заказов к конкретному юрлицу клиента.</li>
               <li><b>view</b>: <span className="font-mono">&quot;legal entity&quot;</span> для юр. лиц, <span className="font-mono">&quot;physical entity&quot;</span> для физ. лиц.</li>
               <li>Адреса формируются из <span className="font-mono">actualAddress</span>, <span className="font-mono">legalAddress</span> и строки «Почтовый адрес» из комментария.</li>
-              <li>Контакты и банковские реквизиты берутся из полей клиента (<span className="font-mono">phone</span>, <span className="font-mono">email</span>, <span className="font-mono">bankBik</span>, <span className="font-mono">bankAccount</span>).</li>
+              <li>Контакты берутся из полей клиента (<span className="font-mono">phone</span>, <span className="font-mono">email</span>).</li>
+              <li><b>bank_requisites</b>: массив всех банковских реквизитов юр. лица с полями <span className="font-mono">bik</span>, <span className="font-mono">account_number</span>, <span className="font-mono">bank_name</span>, <span className="font-mono">correspondent_account</span>; если у юрлица нет счетов, берутся из устаревших полей клиента.</li>
             </ul>
           </div>
         </CardContent>
