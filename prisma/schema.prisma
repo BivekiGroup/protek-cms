@@ -276,6 +276,8 @@ model Client {
   name                 String
   email                String?
   phone                String
+  login                String?                 @unique
+  password             String?
   city                 String?
   markup               Float?                  @default(0)
   isConfirmed          Boolean                 @default(false)

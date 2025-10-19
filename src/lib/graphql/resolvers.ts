@@ -9005,7 +9005,54 @@ export const resolvers = {
       }
     },
 
-    registerNewClient: async (_: unknown, { phone, name }: { phone: string; name: string; sessionId: string }) => {
+    loginByCredentials: async (_: unknown, { login, password }: { login: string; password: string }) => {
+      try {
+        console.log(`Попытка входа по логину: ${login}`)
+
+        // Ищем клиента по логину
+        const client = await prisma.client.findFirst({
+          where: { login },
+          include: {
+            profile: true
+          }
+        })
+
+        if (!client) {
+          console.log(`Клиент с логином ${login} не найден`)
+          throw new Error('Неверный логин или пароль')
+        }
+
+        if (!client.password) {
+          console.log(`У клиента ${login} не установлен пароль`)
+          throw new Error('Неверный логин или пароль')
+        }
+
+        // Проверяем пароль
+        const isPasswordValid = await comparePasswords(password, client.password)
+
+        if (!isPasswordValid) {
+          console.log(`Неверный пароль для клиента ${login}`)
+          throw new Error('Неверный логин или пароль')
+        }
+
+        console.log(`Успешный вход для клиента ${login}`)
+        const token = `client_${client.id}_${Date.now()}`
+
+        return {
+          success: true,
+          client,
+          token
+        }
+      } catch (error) {
+        console.error('Ошибка входа по логину/паролю:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось войти в систему')
+      }
+    },
+
+    registerNewClient: async (_: unknown, { phone, name, sessionId, login, password }: { phone: string; name: string; sessionId: string; login?: string; password?: string }) => {
       try {
         // Проверяем, что клиент еще не существует
         const existingClient = await prisma.client.findFirst({
@@ -9016,11 +9063,24 @@ export const resolvers = {
           throw new Error('Клиент с таким номером уже существует')
         }
 
+        // Если указан логин, проверяем что он уникален
+        if (login) {
+          const existingLogin = await prisma.client.findFirst({
+            where: { login }
+          })
+          if (existingLogin) {
+            throw new Error('Этот логин уже занят')
+          }
+        }
+
         // Разбиваем имя на имя и фамилию
         const nameParts = name.trim().split(' ')
         const firstName = nameParts[0] || name
         const lastName = nameParts.slice(1).join(' ') || ''
         const fullName = lastName ? `${firstName} ${lastName}` : firstName
+
+        // Хешируем пароль если он указан
+        const hashedPassword = password ? await hashPassword(password) : undefined
 
         // Создаем нового клиента
         const client = await prisma.client.create({
@@ -9029,6 +9089,8 @@ export const resolvers = {
             type: 'INDIVIDUAL',
             name: fullName,
             phone,
+            login: login || undefined,
+            password: hashedPassword,
             isConfirmed: true,
             balance: 0,
             emailNotifications: false,
@@ -9540,9 +9602,15 @@ export const resolvers = {
           throw new Error('Клиент не авторизован')
         }
 
+        // Хешируем пароль, если он передан
+        const data: any = { ...input }
+        if (data.password) {
+          data.password = await hashPassword(data.password)
+        }
+
         const updatedClient = await prisma.client.update({
           where: { id: actualContext.clientId },
-          data: input,
+          data,
           include: {
             legalEntities: true,
             profile: true,
