@@ -1244,7 +1244,10 @@ export const typeDefs = gql`
     
     # Новые поступления
     newArrivals(limit: Int = 8): [Product!]!
-    
+
+    # Товары по категории
+    productsByCategory(categorySlug: String!, limit: Int = 100): [Product!]!
+
     # Корзина
     getCart: Cart
 
@@ -1497,6 +1500,7 @@ export const typeDefs = gql`
     addToCart(input: AddToCartInput!): AddToCartResult!
     removeFromCart(itemId: ID!): AddToCartResult!
     updateCartItemQuantity(itemId: ID!, quantity: Int!): AddToCartResult!
+    updateCartPrices: UpdateCartPricesResult!
     clearCart: AddToCartResult!
     getCart: Cart
 
@@ -2029,6 +2033,22 @@ export const typeDefs = gql`
     success: Boolean!
     message: String
     cart: Cart
+    error: String
+  }
+
+  type PriceChange {
+    itemId: ID!
+    article: String!
+    brand: String!
+    oldPrice: Float!
+    newPrice: Float!
+  }
+
+  type UpdateCartPricesResult {
+    success: Boolean!
+    message: String
+    cart: Cart
+    priceChanges: [PriceChange!]!
     error: String
   }
 

@@ -170,6 +170,34 @@ const normalizeArticleNumber = (value: string): string =>
 const normalizeBrandName = (value?: string | null): string =>
   (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
 
+// Функция для проверки соответствия бренда из БД бренду из запроса
+// Проверяет, является ли бренд из БД частью составного бренда из запроса
+// Например: "MAHLE" (из БД) является частью "KNECHT/MAHLE" (из запроса)
+const brandMatchesQuery = (dbBrand: string | null | undefined, queryBrand: string | null | undefined): boolean => {
+  if (!queryBrand) return true; // Если бренд не указан в запросе, подходит любой товар
+  if (!dbBrand) return false; // Если у товара нет бренда, он не подходит
+
+  const normalizedDbBrand = normalizeBrandName(dbBrand);
+  const normalizedQueryBrand = normalizeBrandName(queryBrand);
+
+  // Разбиваем бренд из запроса по "/" (может быть составной бренд типа "KNECHT/MAHLE")
+  const queryBrandParts = normalizedQueryBrand.split('/').map(b => b.trim());
+
+  const result = normalizedDbBrand === normalizedQueryBrand || queryBrandParts.includes(normalizedDbBrand);
+
+  console.log('🔍 brandMatchesQuery:', {
+    dbBrand,
+    queryBrand,
+    normalizedDbBrand,
+    normalizedQueryBrand,
+    queryBrandParts,
+    result
+  });
+
+  // Проверяем точное совпадение или вхождение бренда из БД в части составного бренда
+  return result;
+}
+
 const findInternalProductsByArticle = async (
   articleNumber: string,
   brand?: string,
@@ -198,8 +226,8 @@ const findInternalProductsByArticle = async (
 
   let directMatches = await prisma.product.findMany(directQueryArgs as any)
 
-  if (normalizedBrand) {
-    directMatches = directMatches.filter(product => normalizeBrandName(product.brand) === normalizedBrand)
+  if (brand) {
+    directMatches = directMatches.filter(product => brandMatchesQuery(product.brand, brand))
   }
 
   if (directMatches.length > 0) {
@@ -217,12 +245,16 @@ const findInternalProductsByArticle = async (
       AND LOWER(regexp_replace(article, '[^0-9A-Za-z]+', '', 'g')) = ${normalizedArticle}
   `
 
+  console.log('📦 Найдено товаров до фильтрации по бренду:', rawMatches.length, rawMatches.map(r => ({ id: r.id, brand: r.brand })));
+
   const matchingIds = rawMatches
     .filter(row => {
-      if (!normalizedBrand) return true
-      return normalizeBrandName(row.brand) === normalizedBrand
+      if (!brand) return true
+      return brandMatchesQuery(row.brand, brand)
     })
     .map(row => row.id)
+
+  console.log('📦 Осталось товаров после фильтрации по бренду:', matchingIds.length);
 
   if (matchingIds.length === 0) {
     return { products: [], usedNormalization: true }
@@ -242,9 +274,13 @@ const findInternalProductsByArticle = async (
 
   let normalizedMatches = await prisma.product.findMany(normalizedQueryArgs as any)
 
-  if (normalizedBrand) {
-    normalizedMatches = normalizedMatches.filter(product => normalizeBrandName(product.brand) === normalizedBrand)
+  console.log('📦 Загружено товаров из БД по ID:', normalizedMatches.length);
+
+  if (brand) {
+    normalizedMatches = normalizedMatches.filter(product => brandMatchesQuery(product.brand, brand))
   }
+
+  console.log('📦 Осталось товаров после повторной фильтрации по бренду:', normalizedMatches.length);
 
   return { products: normalizedMatches, usedNormalization: true }
 }
@@ -5006,6 +5042,94 @@ export const resolvers = {
       } catch (error) {
         console.error('Ошибка получения новых поступлений:', error)
         throw new Error('Не удалось получить новые поступления')
+      }
+    },
+
+    // Товары по категории
+    productsByCategory: async (_: unknown, { categorySlug, limit = 100 }: { categorySlug: string; limit?: number }) => {
+      try {
+        // Находим категорию по slug
+        const category = await prisma.category.findUnique({
+          where: { slug: categorySlug },
+          include: {
+            children: true
+          }
+        });
+
+        if (!category) {
+          console.log(`Категория не найдена: ${categorySlug}`);
+          return [];
+        }
+
+        // Собираем все ID категорий (текущая + дочерние)
+        const categoryIds = [category.id, ...category.children.map(c => c.id)];
+
+        // Получаем товары этих категорий
+        const products = await prisma.product.findMany({
+          where: {
+            isVisible: true,
+            categories: {
+              some: {
+                id: {
+                  in: categoryIds
+                }
+              }
+            }
+          },
+          include: {
+            images: {
+              orderBy: { order: 'asc' }
+            },
+            categories: true
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit
+        });
+
+        // Загружаем изображения из PartsIndex если нужно
+        const productsWithImages = await Promise.all(
+          products.map(async (product) => {
+            if (product.images && product.images.length > 0) {
+              return product;
+            }
+
+            if (product.article && product.brand) {
+              try {
+                const partsIndexEnabled = (process.env.PARTSINDEX_ENABLED === 'true') || false;
+                const partsIndexEntity = partsIndexEnabled
+                  ? await partsIndexService.searchEntityByCode(
+                      product.article,
+                      product.brand
+                    )
+                  : null;
+
+                if (partsIndexEntity && partsIndexEntity.images && partsIndexEntity.images.length > 0) {
+                  const partsIndexImages = partsIndexEntity.images.slice(0, 3).map((imageUrl, index) => ({
+                    id: `partsindex-${product.id}-${index}`,
+                    url: imageUrl,
+                    alt: product.name,
+                    order: index,
+                    productId: product.id
+                  }));
+
+                  return {
+                    ...product,
+                    images: partsIndexImages
+                  };
+                }
+              } catch (error) {
+                console.error(`Ошибка получения изображений из PartsIndex для товара ${product.id}:`, error);
+              }
+            }
+
+            return product;
+          })
+        );
+
+        return productsWithImages;
+      } catch (error) {
+        console.error('Ошибка получения товаров категории:', error);
+        throw new Error('Не удалось получить товары категории');
       }
     },
 
@@ -11975,6 +12099,139 @@ export const resolvers = {
         },
       })
       return updated
+    },
+
+    updateCartPrices: async (_: unknown, {}, context: Context) => {
+      try {
+        const clientId = context.clientId;
+        if (!clientId) {
+          return {
+            success: false,
+            error: 'Клиент не идентифицирован',
+            priceChanges: []
+          };
+        }
+
+        // Получаем текущую корзину
+        const cart = await prisma.cart.findUnique({
+          where: { clientId },
+          include: { items: true }
+        });
+
+        if (!cart || cart.items.length === 0) {
+          return {
+            success: true,
+            message: 'Корзина пуста',
+            cart,
+            priceChanges: []
+          };
+        }
+
+        console.log(`🔄 Обновление цен для ${cart.items.length} товаров в корзине`);
+        const priceChanges: Array<{
+          itemId: string;
+          article: string;
+          brand: string;
+          oldPrice: number;
+          newPrice: number;
+        }> = [];
+
+        // Обновляем цены для каждого товара
+        for (const item of cart.items) {
+          try {
+            let newPrice: number | null = null;
+
+            // Для внутренних товаров - проверяем актуальную цену в БД
+            if (item.productId) {
+              const product = await prisma.product.findUnique({
+                where: { id: item.productId },
+                select: { retailPrice: true, wholesalePrice: true }
+              });
+
+              if (product) {
+                newPrice = product.retailPrice || product.wholesalePrice || null;
+                console.log(`💰 Внутренний товар ${item.article} (${item.brand}): старая цена ${item.price}, новая ${newPrice}`);
+              }
+            }
+
+            // Для внешних товаров - получаем актуальную цену из API
+            if (item.isExternal && item.offerKey) {
+              try {
+                const providerSettings = await getIntegrationSettings();
+
+                if (providerSettings.externalProvider === 'trinity') {
+                  const triRes = await trinityService.searchItemsByCodeBrand(item.article, item.brand, {
+                    clientCode: providerSettings.trinityClientCode,
+                    onlyStock: providerSettings.trinityOnlyStock,
+                    online: providerSettings.trinityOnline,
+                    crosses: 'disallow',
+                  });
+
+                  // Находим нужное предложение по offerKey
+                  const matchingOffer = triRes.find(o => {
+                    const offerKey = `TRINITY:${o.code}:${o.producer}:${o.stock || ''}:${o.bid || ''}`;
+                    return offerKey === item.offerKey;
+                  });
+
+                  if (matchingOffer) {
+                    newPrice = matchingOffer.price || null;
+                    console.log(`💰 Внешний товар ${item.article} (${item.brand}): старая цена ${item.price}, новая ${newPrice}`);
+                  }
+                }
+              } catch (error) {
+                console.error(`❌ Ошибка получения внешней цены для ${item.article}:`, error);
+              }
+            }
+
+            // Если получили новую цену и она отличается от старой
+            if (newPrice !== null && Math.abs(newPrice - item.price) > 0.01) {
+              await prisma.cartItem.update({
+                where: { id: item.id },
+                data: { price: newPrice }
+              });
+
+              priceChanges.push({
+                itemId: item.id,
+                article: item.article,
+                brand: item.brand,
+                oldPrice: item.price,
+                newPrice: newPrice
+              });
+
+              console.log(`✅ Цена обновлена для ${item.article}: ${item.price} -> ${newPrice}`);
+            }
+          } catch (error) {
+            console.error(`❌ Ошибка обновления цены для товара ${item.article}:`, error);
+          }
+        }
+
+        // Получаем обновленную корзину
+        const updatedCart = await prisma.cart.findUnique({
+          where: { clientId },
+          include: { items: true }
+        });
+
+        const message = priceChanges.length > 0
+          ? `Обновлено цен: ${priceChanges.length}`
+          : 'Все цены актуальны';
+
+        console.log(`✅ ${message}`);
+
+        return {
+          success: true,
+          message,
+          cart: updatedCart,
+          priceChanges
+        };
+
+      } catch (error) {
+        console.error('❌ Ошибка обновления цен в корзине:', error);
+        return {
+          success: false,
+          error: 'Ошибка обновления цен',
+          priceChanges: []
+        };
+      }
     },
 
     clearCart: async (_: unknown, {}, context: Context) => {
