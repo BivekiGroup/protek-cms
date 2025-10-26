@@ -12174,7 +12174,7 @@ export const resolvers = {
                   });
 
                   if (matchingOffer) {
-                    newPrice = matchingOffer.price || null;
+                    newPrice = typeof matchingOffer.price === 'number' ? matchingOffer.price : (typeof matchingOffer.price === 'string' ? parseFloat(matchingOffer.price) : null);
                     console.log(`💰 Внешний товар ${item.article} (${item.brand}): старая цена ${item.price}, новая ${newPrice}`);
                   }
                 }
