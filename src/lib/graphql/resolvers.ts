@@ -8794,6 +8794,18 @@ export const resolvers = {
           throw new Error('Недостаточно прав')
         }
 
+        // Проверяем, нет ли уже юр. лица с таким ИНН у данного клиента
+        const existingLegalEntity = await prisma.clientLegalEntity.findFirst({
+          where: {
+            clientId,
+            inn: input.inn,
+          },
+        })
+
+        if (existingLegalEntity) {
+          throw new Error('Юридическое лицо с таким ИНН уже существует')
+        }
+
         const legalEntity = await prisma.clientLegalEntity.create({
           data: {
             clientId,
@@ -9782,6 +9794,18 @@ export const resolvers = {
           throw new Error('Клиент не авторизован')
         }
 
+        // Проверяем, нет ли уже юр. лица с таким ИНН у данного клиента
+        const existingLegalEntity = await prisma.clientLegalEntity.findFirst({
+          where: {
+            clientId: actualContext.clientId,
+            inn: input.inn,
+          },
+        })
+
+        if (existingLegalEntity) {
+          throw new Error('Юридическое лицо с таким ИНН уже существует')
+        }
+
         const legalEntity = await prisma.clientLegalEntity.create({
           data: {
             clientId: actualContext.clientId,
@@ -9809,6 +9833,10 @@ export const resolvers = {
         return legalEntity
       } catch (error) {
         console.error('Ошибка создания юридического лица:', error)
+        // Пробрасываем оригинальную ошибку, чтобы пользователь видел конкретную причину
+        if (error instanceof Error) {
+          throw error
+        }
         throw new Error('Не удалось создать юридическое лицо')
       }
     },
