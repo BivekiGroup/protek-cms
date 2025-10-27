@@ -150,6 +150,7 @@ interface Context {
   categoryLevelCache?: Map<string, number>
   categoryParentMap?: Map<string, string | null>
   categoryHierarchyLoaded?: boolean
+  clientDeleted?: boolean // Флаг для удалённых клиентов
 }
 
 // Глобальные настройки интеграций (провайдеров внешних API)
@@ -1748,6 +1749,13 @@ export const resolvers = {
       try {
         const context = getContext()
         console.log('clientMe резолвер: контекст:', context)
+
+        // SECURITY: Проверяем, был ли клиент удалён
+        if (context.clientDeleted) {
+          console.log('clientMe резолвер: клиент был удалён, выбрасываем CLIENT_NOT_FOUND')
+          throw new Error('CLIENT_NOT_FOUND')
+        }
+
         if (!context.clientId) {
           console.log('clientMe резолвер: clientId отсутствует')
           throw new Error('Клиент не авторизован')
@@ -1780,7 +1788,13 @@ export const resolvers = {
           }
         })
         console.log('clientMe резолвер: найден клиент:', client ? client.id : 'null')
-        
+
+        // SECURITY: Если клиент был удален, выбрасываем ошибку для принудительного logout
+        if (!client) {
+          console.log('clientMe резолвер: клиент не найден (возможно удален), выбрасываем ошибку')
+          throw new Error('CLIENT_NOT_FOUND')
+        }
+
         // Принудительно заменяем null bankDetails на пустые массивы
         if (client && client.legalEntities) {
           client.legalEntities = client.legalEntities.map(entity => ({
@@ -1788,10 +1802,16 @@ export const resolvers = {
             bankDetails: entity.bankDetails || []
           }))
         }
-        
+
         return client
       } catch (error) {
         console.error('Ошибка получения данных клиента:', error)
+
+        // Пробрасываем CLIENT_NOT_FOUND без изменений для правильной обработки на фронтенде
+        if (error instanceof Error && error.message === 'CLIENT_NOT_FOUND') {
+          throw error
+        }
+
         throw new Error('Не удалось получить данные клиента')
       }
     },

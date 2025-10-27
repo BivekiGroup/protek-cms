@@ -4,6 +4,7 @@ import { typeDefs } from '@/lib/graphql/typeDefs'
 import { resolvers } from '@/lib/graphql/resolvers'
 import { extractTokenFromHeaders, getUserFromToken } from '@/lib/auth'
 import jwt from 'jsonwebtoken'
+import { prisma } from '@/lib/prisma'
 
 interface Context {
   userId?: string
@@ -14,6 +15,7 @@ interface Context {
   categoryLevelCache?: Map<string, number>
   categoryParentMap?: Map<string, string | null>
   categoryHierarchyLoaded?: boolean
+  clientDeleted?: boolean // Флаг для удалённых клиентов
 }
 
 // Функция для создания контекста
@@ -53,20 +55,39 @@ async function createContext(req: any): Promise<Context> {
   // Если это не админский токен, проверяем, не клиентский ли это токен
   if (token.startsWith('client_')) {
     console.log('GraphQL: найден клиентский токен:', token)
-    
+
     const tokenParts = token.split('_')
     let clientId: string
-    
+
     if (tokenParts.length >= 2) {
       // Это токен формата client_${clientId} или client_${clientId}_${timestamp}
       clientId = tokenParts[1]
       console.log('GraphQL: извлечен clientId из токена:', clientId)
+
+      // SECURITY: Проверяем существование клиента в базе данных
+      try {
+        const clientExists = await prisma.client.findUnique({
+          where: { id: clientId },
+          select: { id: true }
+        })
+
+        if (!clientExists) {
+          console.log('GraphQL: клиент не найден в БД (возможно удален), помечаем как удалённого')
+          return createBaseContext({
+            headers: requestHeaders,
+            clientDeleted: true // Помечаем, что клиент был удалён
+          })
+        }
+      } catch (error) {
+        console.error('GraphQL: ошибка при проверке существования клиента:', error)
+        return createBaseContext({ headers: requestHeaders })
+      }
     } else {
       // Неправильный формат токена
       console.error('GraphQL: неправильный формат клиентского токена:', token)
       return createBaseContext({ headers: requestHeaders })
     }
-    
+
     const context = createBaseContext({
       clientId: clientId,
       headers: requestHeaders
@@ -80,6 +101,26 @@ async function createContext(req: any): Promise<Context> {
     const decoded = jwt.decode(token) as any
     if (decoded && decoded.clientId) {
       console.log('GraphQL: клиент авторизован через JWT:', decoded.clientId)
+
+      // SECURITY: Проверяем существование клиента в базе данных
+      try {
+        const clientExists = await prisma.client.findUnique({
+          where: { id: decoded.clientId },
+          select: { id: true }
+        })
+
+        if (!clientExists) {
+          console.log('GraphQL: JWT клиент не найден в БД (возможно удален), помечаем как удалённого')
+          return createBaseContext({
+            headers: requestHeaders,
+            clientDeleted: true // Помечаем, что клиент был удалён
+          })
+        }
+      } catch (error) {
+        console.error('GraphQL: ошибка при проверке существования JWT клиента:', error)
+        return createBaseContext({ headers: requestHeaders })
+      }
+
       return createBaseContext({
         clientId: decoded.clientId,
         headers: requestHeaders
