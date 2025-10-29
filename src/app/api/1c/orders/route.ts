@@ -127,11 +127,13 @@ function mapOrderToOneCSchema(order: any) {
         code: order.client.clientNumber || '',
         name: order.client.name || order.clientName || '',
         inn: order.client.inn || '',
+        legal_entity_id: order.legalEntityId || '',
       }
     : {
         code: '',
         name: order.clientName || '',
         inn: '',
+        legal_entity_id: order.legalEntityId || '',
       }
 
   return {

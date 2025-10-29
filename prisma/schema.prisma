@@ -786,12 +786,14 @@ model Order {
   clientEmail     String?
   clientPhone     String?
   clientName      String?
+  legalEntityId   String?
   status          OrderStatus @default(PENDING)
   totalAmount     Float
   discountAmount  Float       @default(0)
   finalAmount     Float
   currency        String      @default("RUB")
   deliveryAddress String?
+  deliveryTime    String?
   comment         String?
   cancelReason    String?
   canceledAt      DateTime?

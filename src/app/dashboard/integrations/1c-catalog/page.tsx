@@ -344,14 +344,30 @@ export default function OneCCatalogDocs() {
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Network className="h-4 w-4"/> Эндпоинты</CardTitle></CardHeader>
           <CardContent className="text-sm text-gray-700 space-y-1">
-            <div><Badge>GET</Badge> <span className="font-mono">/api/1c/catalog/health</span></div>
-            <div><Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/products</span></div>
-            <div><Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/categories</span></div>
-            <div><Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/prices</span></div>
-            <div><Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/stocks</span></div>
-            <div><Badge>GET</Badge> <span className="font-mono">/api/1c/catalog/visits</span></div>
-            <div><Badge>GET</Badge> <span className="font-mono">/api/1c/catalog/clients</span></div>
-            <div><Badge>GET</Badge> <span className="font-mono">/api/1c/orders</span></div>
+            <div className="cursor-pointer hover:bg-gray-100 p-1 rounded transition-colors" onClick={() => document.getElementById('endpoint-health')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+              <Badge>GET</Badge> <span className="font-mono">/api/1c/catalog/health</span>
+            </div>
+            <div className="cursor-pointer hover:bg-gray-100 p-1 rounded transition-colors" onClick={() => document.getElementById('endpoint-products')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+              <Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/products</span>
+            </div>
+            <div className="cursor-pointer hover:bg-gray-100 p-1 rounded transition-colors" onClick={() => document.getElementById('endpoint-categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+              <Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/categories</span>
+            </div>
+            <div className="cursor-pointer hover:bg-gray-100 p-1 rounded transition-colors" onClick={() => document.getElementById('endpoint-prices')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+              <Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/prices</span>
+            </div>
+            <div className="cursor-pointer hover:bg-gray-100 p-1 rounded transition-colors" onClick={() => document.getElementById('endpoint-stocks')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+              <Badge>POST</Badge> <span className="font-mono">/api/1c/catalog/stocks</span>
+            </div>
+            <div className="cursor-pointer hover:bg-gray-100 p-1 rounded transition-colors" onClick={() => document.getElementById('endpoint-visits')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+              <Badge>GET</Badge> <span className="font-mono">/api/1c/catalog/visits</span>
+            </div>
+            <div className="cursor-pointer hover:bg-gray-100 p-1 rounded transition-colors" onClick={() => document.getElementById('endpoint-clients')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+              <Badge>GET</Badge> <span className="font-mono">/api/1c/catalog/clients</span>
+            </div>
+            <div className="cursor-pointer hover:bg-gray-100 p-1 rounded transition-colors" onClick={() => document.getElementById('endpoint-orders')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+              <Badge>GET</Badge> <span className="font-mono">/api/1c/orders</span>
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -363,7 +379,7 @@ export default function OneCCatalogDocs() {
         </Card>
       </div>
 
-      <Card>
+      <Card id="endpoint-health">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Health (проверка доступа)</CardTitle>
           <CardDescription>Проверяет ключ, возвращает версию/лимиты. Добавь <span className="font-mono">?debug=1</span> для отладки ключа/IP.</CardDescription>
@@ -373,7 +389,7 @@ export default function OneCCatalogDocs() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="endpoint-products">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Upsert товаров (batch)</CardTitle>
           <CardDescription>Частичный успех возвращает HTTP 207. Отсутствующие поля не затирают существующие значения.</CardDescription>
@@ -404,7 +420,7 @@ export default function OneCCatalogDocs() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="endpoint-categories">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Отправка структуры категорий</CardTitle>
         </CardHeader>
@@ -413,7 +429,7 @@ export default function OneCCatalogDocs() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="endpoint-prices">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Отправка цен товаров</CardTitle>
         </CardHeader>
@@ -422,7 +438,7 @@ export default function OneCCatalogDocs() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="endpoint-stocks">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Отправка остатков</CardTitle>
         </CardHeader>
@@ -431,7 +447,7 @@ export default function OneCCatalogDocs() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="endpoint-orders">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Заказы (list)</CardTitle>
           <CardDescription>Получение заказов. Поддерживает `limit/offset`, `status`, `orderNumber`, `since/to` (формат YYYY-MM-DD).</CardDescription>
@@ -447,7 +463,7 @@ export default function OneCCatalogDocs() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="endpoint-visits">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> История посещений (demo)</CardTitle>
         </CardHeader>
@@ -456,7 +472,7 @@ export default function OneCCatalogDocs() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="endpoint-clients">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/> Контрагенты (юр. лица)</CardTitle>
         </CardHeader>

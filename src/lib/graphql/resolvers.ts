@@ -9,6 +9,8 @@ import { laximoService, laximoDocService, laximoUnitService } from '../laximo-se
 import { autoEuroService } from '../autoeuro-service'
 import { trinityService } from '../trinity-service'
 import { yooKassaService } from '../yookassa-service'
+import { generateLogin, generatePassword } from '../auth-utils'
+import { sendCredentialsEmail } from '../send-credentials-email'
 // PartsAPI/PartsIndex integration removed: provide no-op stubs to keep schema stable
 const partsAPIService = {
   getSearchTree: async (_carId?: number, _carType?: string): Promise<any[]> => [],
@@ -671,6 +673,7 @@ interface CreateOrderInput {
   clientName?: string
   items: OrderItemInput[]
   deliveryAddress?: string
+  deliveryTime?: string
   comment?: string
   paymentMethod?: string
   legalEntityId?: string
@@ -9208,7 +9211,7 @@ export const resolvers = {
       }
     },
 
-    registerNewClient: async (_: unknown, { phone, name, sessionId, login, password }: { phone: string; name: string; sessionId: string; login?: string; password?: string }) => {
+    registerNewClient: async (_: unknown, { phone, name, sessionId, email }: { phone: string; name: string; sessionId: string; email: string }) => {
       try {
         // Проверяем, что клиент еще не существует
         const existingClient = await prisma.client.findFirst({
@@ -9219,24 +9222,43 @@ export const resolvers = {
           throw new Error('Клиент с таким номером уже существует')
         }
 
-        // Если указан логин, проверяем что он уникален
-        if (login) {
-          const existingLogin = await prisma.client.findFirst({
-            where: { login }
-          })
-          if (existingLogin) {
-            throw new Error('Этот логин уже занят')
-          }
+        // Проверяем уникальность email
+        const existingEmail = await prisma.client.findFirst({
+          where: { email }
+        })
+        if (existingEmail) {
+          throw new Error('Этот email уже используется')
         }
+
+        // Генерируем логин из телефона и имени
+        const generatedLogin = generateLogin(phone, name)
+
+        // Проверяем уникальность сгенерированного логина, добавляем случайное число если занят
+        let finalLogin = generatedLogin
+        let loginExists = await prisma.client.findFirst({
+          where: { login: finalLogin }
+        })
+
+        let attempt = 0
+        while (loginExists && attempt < 10) {
+          finalLogin = `${generatedLogin}${Math.floor(Math.random() * 100)}`
+          loginExists = await prisma.client.findFirst({
+            where: { login: finalLogin }
+          })
+          attempt++
+        }
+
+        // Генерируем пароль
+        const generatedPassword = generatePassword()
+
+        // Хешируем пароль
+        const hashedPassword = await hashPassword(generatedPassword)
 
         // Разбиваем имя на имя и фамилию
         const nameParts = name.trim().split(' ')
         const firstName = nameParts[0] || name
         const lastName = nameParts.slice(1).join(' ') || ''
         const fullName = lastName ? `${firstName} ${lastName}` : firstName
-
-        // Хешируем пароль если он указан
-        const hashedPassword = password ? await hashPassword(password) : undefined
 
         // Создаем нового клиента
         const client = await prisma.client.create({
@@ -9245,7 +9267,8 @@ export const resolvers = {
             type: 'INDIVIDUAL',
             name: fullName,
             phone,
-            login: login || undefined,
+            email,
+            login: finalLogin,
             password: hashedPassword,
             isConfirmed: true,
             balance: 0,
@@ -9258,13 +9281,23 @@ export const resolvers = {
           }
         })
 
+        // Отправляем письмо с логином и паролем
+        try {
+          await sendCredentialsEmail(email, finalLogin, generatedPassword, fullName)
+        } catch (emailError) {
+          console.error('Ошибка отправки email с учетными данными:', emailError)
+          // Не прерываем регистрацию, если не получилось отправить email
+        }
+
         // Создаем простой токен
         const token = `client_${client.id}_${Date.now()}`
 
         return {
           success: true,
           client,
-          token
+          token,
+          generatedLogin: finalLogin,
+          generatedPassword
         }
       } catch (error) {
         console.error('Ошибка регистрации клиента:', error)
@@ -10045,9 +10078,11 @@ export const resolvers = {
             clientEmail: input.clientEmail,
             clientPhone: input.clientPhone,
             clientName: input.clientName,
+            legalEntityId: input.legalEntityId,
             totalAmount,
             finalAmount: totalAmount, // Пока без скидок
             deliveryAddress: input.deliveryAddress,
+            deliveryTime: input.deliveryTime,
             comment: `${input.comment || ''}${input.paymentMethod ? ` | Способ оплаты: ${input.paymentMethod}` : ''}${input.legalEntityId ? ` | ЮЛ ID: ${input.legalEntityId}` : ''}`,
             items: {
               create: input.items.map(item => ({

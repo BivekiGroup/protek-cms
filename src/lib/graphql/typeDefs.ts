@@ -1288,6 +1288,8 @@ export const typeDefs = gql`
     success: Boolean!
     client: Client
     token: String
+    generatedLogin: String
+    generatedPassword: String
   }
 
   type BulkOperationResult {
@@ -1405,7 +1407,7 @@ export const typeDefs = gql`
     sendSMSCode(phone: String!, sessionId: String): SMSCodeResponse!
     verifyCode(phone: String!, code: String!, sessionId: String!): VerificationResponse!
     loginByCredentials(login: String!, password: String!): VerificationResponse!
-    registerNewClient(phone: String!, name: String!, sessionId: String!, login: String, password: String): VerificationResponse!
+    registerNewClient(phone: String!, name: String!, sessionId: String!, email: String!): VerificationResponse!
     
     # Гараж клиентов
     createUserVehicle(input: UserVehicleInput!): ClientVehicle!
@@ -2185,6 +2187,7 @@ export const typeDefs = gql`
     clientEmail: String
     clientPhone: String
     clientName: String
+    legalEntityId: String
     status: OrderStatus!
     totalAmount: Float!
     discountAmount: Float!
@@ -2193,6 +2196,7 @@ export const typeDefs = gql`
     items: [OrderItem!]!
     payments: [Payment!]!
     deliveryAddress: String
+    deliveryTime: String
     comment: String
     cancelReason: String
     canceledAt: DateTime
@@ -2249,6 +2253,7 @@ export const typeDefs = gql`
     clientName: String
     items: [OrderItemInput!]!
     deliveryAddress: String
+    deliveryTime: String
     comment: String
     paymentMethod: String
     legalEntityId: String
