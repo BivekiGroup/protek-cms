@@ -61,11 +61,15 @@ async function createContext(req: any): Promise<Context> {
 
     if (tokenParts.length >= 2) {
       // Это токен формата client_${clientId} или client_${clientId}_${timestamp}
-      clientId = tokenParts[1]
+      // Для анонимных сессий формат: client_anon_<random>_<timestamp>
+      // Нужно собрать все части после 'client_' обратно
+      clientId = tokenParts.slice(1).join('_')
       console.log('GraphQL: извлечен clientId из токена:', clientId)
 
-      // Пропускаем проверку для анонимных клиентов (anon)
-      if (clientId !== 'anon') {
+      // Пропускаем проверку для анонимных клиентов (начинаются с anon_)
+      const isAnonymous = clientId.startsWith('anon_')
+
+      if (!isAnonymous) {
         // SECURITY: Проверяем существование клиента в базе данных только для авторизованных
         try {
           const clientExists = await prisma.client.findUnique({
@@ -84,6 +88,8 @@ async function createContext(req: any): Promise<Context> {
           console.error('GraphQL: ошибка при проверке существования клиента:', error)
           return createBaseContext({ headers: requestHeaders })
         }
+      } else {
+        console.log('GraphQL: анонимная сессия, пропускаем проверку в БД:', clientId)
       }
     } else {
       // Неправильный формат токена
@@ -105,8 +111,10 @@ async function createContext(req: any): Promise<Context> {
     if (decoded && decoded.clientId) {
       console.log('GraphQL: клиент авторизован через JWT:', decoded.clientId)
 
-      // Проверяем только реальных клиентов, а не анонимных
-      if (decoded.clientId !== 'anon') {
+      // Проверяем только реальных клиентов, а не анонимных (начинаются с anon_)
+      const isAnonymous = decoded.clientId.startsWith('anon_')
+
+      if (!isAnonymous) {
         // SECURITY: Проверяем существование клиента в базе данных
         try {
           const clientExists = await prisma.client.findUnique({
@@ -125,6 +133,8 @@ async function createContext(req: any): Promise<Context> {
           console.error('GraphQL: ошибка при проверке существования JWT клиента:', error)
           return createBaseContext({ headers: requestHeaders })
         }
+      } else {
+        console.log('GraphQL: JWT анонимная сессия, пропускаем проверку в БД:', decoded.clientId)
       }
 
       return createBaseContext({

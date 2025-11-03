@@ -47,7 +47,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // Проверяем токен при загрузке
   useEffect(() => {
-    const savedToken = Cookies.get('auth-token')
+    const savedToken = Cookies.get('cms-token')
     const savedUser = Cookies.get('auth-user')
 
     if (savedToken && savedUser) {
@@ -57,11 +57,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(parsedUser)
       } catch (error) {
         console.error('Ошибка парсинга данных пользователя:', error)
-        Cookies.remove('auth-token')
+        Cookies.remove('cms-token')
         Cookies.remove('auth-user')
       }
     }
-    
+
     setIsLoading(false)
   }, [])
 
@@ -75,9 +75,35 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       const { token: newToken, user: newUser } = data.login
 
-      // Сохраняем в cookies
-      Cookies.set('auth-token', newToken, { expires: 7 }) // 7 дней
-      Cookies.set('auth-user', JSON.stringify(newUser), { expires: 7 })
+      console.log('🔑 AuthProvider: сохраняем токен в cookie:', newToken ? `${newToken.substring(0, 20)}...` : 'null')
+
+      // Сохраняем в cookies с явными опциями для доступности на всех страницах
+      const cookieOptions = {
+        expires: 7, // 7 дней
+        path: '/', // Доступно на всех страницах
+        sameSite: 'lax' as const, // Защита от CSRF
+        secure: false // Отключаем secure для локальной разработки
+      }
+
+      // Пробуем два способа сохранения токена (используем cms-token вместо auth-token)
+      Cookies.set('cms-token', newToken, cookieOptions)
+
+      // Дублируем установку через document.cookie на случай проблем с js-cookie
+      const expiryDate = new Date()
+      expiryDate.setDate(expiryDate.getDate() + 7)
+      document.cookie = `cms-token=${encodeURIComponent(newToken)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax`
+
+      Cookies.set('auth-user', JSON.stringify(newUser), cookieOptions)
+
+      // Проверяем, что cookie действительно сохранились
+      const savedToken = Cookies.get('cms-token')
+      console.log('✅ AuthProvider: токен сохранён в cookie:', savedToken ? `${savedToken.substring(0, 20)}...` : 'не найден!')
+      console.log('📝 AuthProvider: все cookies после сохранения:', document.cookie)
+
+      // Дополнительная проверка через document.cookie
+      const allCookies = document.cookie.split(';').map(c => c.trim())
+      const tokenCookie = allCookies.find(c => c.startsWith('cms-token='))
+      console.log('🔍 AuthProvider: прямая проверка cms-token через document.cookie:', tokenCookie)
 
       setToken(newToken)
       setUser(newUser)
@@ -94,8 +120,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       console.error('Ошибка выхода:', error)
     } finally {
       // Удаляем данные независимо от результата запроса
-      Cookies.remove('auth-token')
-      Cookies.remove('auth-user')
+      Cookies.remove('cms-token', { path: '/' })
+      Cookies.remove('auth-user', { path: '/' })
       setToken(null)
       setUser(null)
     }

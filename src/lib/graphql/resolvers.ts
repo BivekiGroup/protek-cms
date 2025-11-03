@@ -65,6 +65,7 @@ interface CreateUserInput {
   lastName: string
   email: string
   password: string
+  companyName?: string
   avatar?: string
   role?: 'ADMIN' | 'MODERATOR' | 'USER'
 }
@@ -78,6 +79,7 @@ interface UpdateProfileInput {
   firstName?: string
   lastName?: string
   email?: string
+  companyName?: string
   avatar?: string
 }
 
@@ -85,6 +87,7 @@ interface UpdateUserInput {
   firstName?: string
   lastName?: string
   email?: string
+  companyName?: string
   avatar?: string
   role?: 'ADMIN' | 'MODERATOR' | 'USER'
 }
@@ -1704,6 +1707,53 @@ export const resolvers = {
       } catch (error) {
         console.error('Ошибка подсчета клиентов:', error)
         throw new Error('Не удалось подсчитать клиентов')
+      }
+    },
+
+    unverifiedClients: async (_: unknown, { limit = 50, offset = 0 }: { limit?: number; offset?: number }, context: Context) => {
+      try {
+        // Проверяем авторизацию администратора
+        const actualContext = context || getContext()
+        if (!actualContext.userId) {
+          throw new Error('Требуется авторизация администратора')
+        }
+
+        return await prisma.client.findMany({
+          where: {
+            isVerified: false
+          },
+          include: {
+            profile: true,
+            manager: true
+          },
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: limit,
+          skip: offset
+        })
+      } catch (error) {
+        console.error('Ошибка получения непроверенных клиентов:', error)
+        throw new Error('Не удалось получить список непроверенных клиентов')
+      }
+    },
+
+    unverifiedClientsCount: async (_: unknown, __: unknown, context: Context) => {
+      try {
+        // Проверяем авторизацию администратора
+        const actualContext = context || getContext()
+        if (!actualContext.userId) {
+          throw new Error('Требуется авторизация администратора')
+        }
+
+        return await prisma.client.count({
+          where: {
+            isVerified: false
+          }
+        })
+      } catch (error) {
+        console.error('Ошибка подсчета непроверенных клиентов:', error)
+        throw new Error('Не удалось подсчитать непроверенных клиентов')
       }
     },
 
@@ -4238,22 +4288,27 @@ export const resolvers = {
     },
 
     // Заказы и платежи
-    orders: async (_: unknown, { clientId, status, search, limit = 50, offset = 0 }: { 
-      clientId?: string; 
-      status?: string; 
+    orders: async (_: unknown, { clientId, status, paymentMethod, search, limit = 50, offset = 0 }: {
+      clientId?: string;
+      status?: string;
+      paymentMethod?: string;
       search?: string;
-      limit?: number; 
-      offset?: number 
+      limit?: number;
+      offset?: number
     }, context: Context) => {
       try {
         const where: any = {}
-        
+
         if (clientId) {
           where.clientId = clientId
         }
-        
+
         if (status) {
           where.status = status
+        }
+
+        if (paymentMethod) {
+          where.paymentMethod = paymentMethod
         }
 
         if (search) {
@@ -5496,7 +5551,7 @@ export const resolvers = {
     },
     createUser: async (_: unknown, { input }: { input: CreateUserInput }, context: Context) => {
       try {
-        const { firstName, lastName, email, password, avatar, role } = input
+        const { firstName, lastName, email, password, companyName, avatar, role } = input
 
         // Проверяем, существует ли пользователь с таким email
         const existingUser = await prisma.user.findUnique({
@@ -5517,6 +5572,7 @@ export const resolvers = {
             lastName,
             email,
             password: hashedPassword,
+            companyName,
             avatar,
             role: role || 'USER'
           }
@@ -5635,6 +5691,7 @@ export const resolvers = {
             ...(input.firstName && { firstName: input.firstName }),
             ...(input.lastName && { lastName: input.lastName }),
             ...(input.email && { email: input.email }),
+            ...(input.companyName !== undefined && { companyName: input.companyName }),
             ...(input.avatar && { avatar: input.avatar }),
           }
         })
@@ -5776,6 +5833,7 @@ export const resolvers = {
             ...(input.firstName && { firstName: input.firstName }),
             ...(input.lastName && { lastName: input.lastName }),
             ...(input.email && { email: input.email }),
+            ...(input.companyName !== undefined && { companyName: input.companyName }),
             ...(input.avatar !== undefined && { avatar: input.avatar }),
             ...(input.role && { role: input.role }),
           }
@@ -7592,17 +7650,28 @@ export const resolvers = {
 
     deleteClient: async (_: unknown, { id }: { id: string }, context: Context) => {
       try {
+        console.log('🗑️ deleteClient вызван с контекстом:', {
+          userId: context.userId,
+          userRole: context.userRole,
+          userEmail: context.userEmail,
+          clientId: context.clientId,
+          hasHeaders: !!context.headers
+        })
+
         if (!context.userId) {
+          console.error('❌ deleteClient: userId отсутствует в контексте')
           throw new Error('Пользователь не авторизован')
         }
 
+        console.log('✅ deleteClient: удаляем клиента с ID:', id)
         await prisma.client.delete({
           where: { id }
         })
 
+        console.log('✅ deleteClient: клиент успешно удалён')
         return true
       } catch (error) {
-        console.error('Ошибка удаления клиента:', error)
+        console.error('❌ Ошибка удаления клиента:', error)
         if (error instanceof Error) {
           throw error
         }
@@ -9308,6 +9377,217 @@ export const resolvers = {
       }
     },
 
+    // Новая система авторизации с паролем
+    registerClientWithPassword: async (_: unknown, { input }: { input: { phone: string; firstName: string; lastName: string; companyName?: string; email: string } }) => {
+      try {
+        console.log(`Регистрация нового клиента: ${input.phone}, ${input.firstName} ${input.lastName}`)
+
+        // Проверяем, что клиент еще не существует
+        const existingClient = await prisma.client.findFirst({
+          where: { phone: input.phone }
+        })
+
+        if (existingClient) {
+          throw new Error('Клиент с таким номером телефона уже существует')
+        }
+
+        // Проверяем уникальность email
+        if (input.email) {
+          const existingEmail = await prisma.client.findFirst({
+            where: { email: input.email }
+          })
+          if (existingEmail) {
+            throw new Error('Этот email уже используется')
+          }
+        }
+
+        // Создаем нового клиента БЕЗ пароля (ожидает проверки менеджером)
+        const client = await prisma.client.create({
+          data: {
+            clientNumber: `CL${Date.now()}`,
+            type: 'INDIVIDUAL',
+            name: `${input.firstName} ${input.lastName}`.trim(),
+            firstName: input.firstName,
+            lastName: input.lastName,
+            companyName: input.companyName,
+            phone: input.phone,
+            email: input.email,
+            password: null,     // Пароль пока не установлен
+            isVerified: false,  // Ждет проверки менеджером
+            isConfirmed: false,
+            balance: 0,
+            emailNotifications: true,
+            smsNotifications: false,
+            pushNotifications: false
+          },
+          include: {
+            profile: true
+          }
+        })
+
+        console.log(`Клиент зарегистрирован (ожидает проверки менеджером): ${client.clientNumber}`)
+
+        return {
+          success: true,
+          client,
+          token: null,  // Токен НЕ возвращаем - пользователь ждет проверки
+          generatedLogin: null,
+          generatedPassword: null
+        }
+      } catch (error) {
+        console.error('Ошибка регистрации клиента:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось зарегистрировать клиента')
+      }
+    },
+
+    loginWithPassword: async (_: unknown, { phone, password }: { phone: string; password: string }) => {
+      try {
+        console.log(`Попытка входа по телефону и паролю: ${phone}`)
+
+        // Ищем клиента по телефону
+        const client = await prisma.client.findFirst({
+          where: { phone },
+          include: {
+            profile: true
+          }
+        })
+
+        if (!client) {
+          console.log(`Клиент с телефоном ${phone} не найден`)
+          throw new Error('Неверный номер телефона или пароль')
+        }
+
+        if (!client.password) {
+          console.log(`У клиента ${phone} не установлен пароль`)
+          throw new Error('Неверный номер телефона или пароль')
+        }
+
+        // Проверяем, подтвержден ли клиент
+        if (!client.isVerified) {
+          console.log(`Клиент ${phone} не прошел проверку менеджером`)
+          throw new Error('Ваш аккаунт ожидает проверки менеджером. Мы свяжемся с вами в ближайшее время.')
+        }
+
+        // Проверяем пароль
+        const isPasswordValid = await comparePasswords(password, client.password)
+
+        if (!isPasswordValid) {
+          console.log(`Неверный пароль для клиента ${phone}`)
+          throw new Error('Неверный номер телефона или пароль')
+        }
+
+        console.log(`Успешный вход для клиента ${phone}`)
+        const token = `client_${client.id}_${Date.now()}`
+
+        return {
+          success: true,
+          client,
+          token,
+          generatedLogin: null,
+          generatedPassword: null
+        }
+      } catch (error) {
+        console.error('Ошибка входа по телефону/паролю:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось войти в систему')
+      }
+    },
+
+    verifyClient: async (_: unknown, { clientId }: { clientId: string }, context: Context) => {
+      try {
+        console.log(`Верификация клиента: ${clientId}`)
+
+        // Проверяем авторизацию администратора
+        const actualContext = context || getContext()
+        if (!actualContext.userId) {
+          throw new Error('Требуется авторизация администратора')
+        }
+
+        // Получаем клиента
+        const client = await prisma.client.findUnique({
+          where: { id: clientId },
+          include: {
+            profile: true
+          }
+        })
+
+        if (!client) {
+          throw new Error('Клиент не найден')
+        }
+
+        if (client.isVerified) {
+          throw new Error('Клиент уже подтвержден')
+        }
+
+        // Генерируем логин и новый пароль
+        const generatedLogin = generateLogin(client.phone, client.name)
+
+        // Проверяем уникальность логина
+        let finalLogin = generatedLogin
+        let loginExists = await prisma.client.findFirst({
+          where: { login: finalLogin, id: { not: clientId } }
+        })
+
+        let attempt = 0
+        while (loginExists && attempt < 10) {
+          finalLogin = `${generatedLogin}${Math.floor(Math.random() * 100)}`
+          loginExists = await prisma.client.findFirst({
+            where: { login: finalLogin, id: { not: clientId } }
+          })
+          attempt++
+        }
+
+        const generatedPassword = generatePassword()
+        const hashedPassword = await hashPassword(generatedPassword)
+
+        // Обновляем клиента
+        const updatedClient = await prisma.client.update({
+          where: { id: clientId },
+          data: {
+            isVerified: true,
+            isConfirmed: true,
+            login: finalLogin,
+            password: hashedPassword
+          },
+          include: {
+            profile: true
+          }
+        })
+
+        console.log(`Клиент подтвержден: ${updatedClient.clientNumber}, логин: ${finalLogin}`)
+
+        // Отправляем email с учетными данными
+        if (client.email) {
+          try {
+            await sendCredentialsEmail(client.email, finalLogin, generatedPassword, client.name)
+            console.log(`Email с учетными данными отправлен на: ${client.email}`)
+          } catch (emailError) {
+            console.error('Ошибка отправки email с учетными данными:', emailError)
+            // Не прерываем верификацию, если не получилось отправить email
+          }
+        }
+
+        return {
+          success: true,
+          client: updatedClient,
+          token: null,
+          generatedLogin: finalLogin,
+          generatedPassword
+        }
+      } catch (error) {
+        console.error('Ошибка верификации клиента:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось подтвердить клиента')
+      }
+    },
+
     // Мутации для гаража клиентов
     createUserVehicle: async (_: unknown, { input }: { input: ClientVehicleInput }, context: Context) => {
       try {
@@ -10074,11 +10354,13 @@ export const resolvers = {
         const order = await prisma.order.create({
           data: {
             orderNumber,
-            clientId: cleanClientId,
+            client: cleanClientId ? { connect: { id: cleanClientId } } : undefined,
             clientEmail: input.clientEmail,
             clientPhone: input.clientPhone,
             clientName: input.clientName,
             legalEntityId: input.legalEntityId,
+            paymentMethod: input.paymentMethod,
+            status: input.paymentMethod === 'invoice' ? 'PENDING' : 'PROCESSING',
             totalAmount,
             finalAmount: totalAmount, // Пока без скидок
             deliveryAddress: input.deliveryAddress,
@@ -10155,6 +10437,54 @@ export const resolvers = {
         }
 
         console.log('createOrder: заказ создан:', order.orderNumber)
+
+        // Генерируем PDF счет сразу, если способ оплаты - "По счёту"
+        if (input.paymentMethod === 'invoice') {
+          try {
+            console.log('createOrder: генерируем PDF счет для заказа', order.orderNumber)
+            const { renderToBuffer } = await import('@react-pdf/renderer')
+            const React = await import('react')
+            const InvoicePDF = (await import('@/components/invoice/InvoicePDF')).default
+            const { uploadBuffer } = await import('@/lib/s3')
+
+            // Получаем полный заказ с items для PDF
+            const fullOrder = await prisma.order.findUnique({
+              where: { id: order.id },
+              include: {
+                client: true,
+                items: {
+                  include: {
+                    product: true
+                  }
+                }
+              }
+            })
+
+            if (fullOrder) {
+              // Генерируем PDF
+              const pdfBuffer = await renderToBuffer(React.createElement(InvoicePDF, { order: fullOrder }))
+
+              // Загружаем в S3
+              const key = `invoices/${order.orderNumber}-${Date.now()}.pdf`
+              const uploadResult = await uploadBuffer(pdfBuffer, key, 'application/pdf')
+
+              console.log('createOrder: PDF счет загружен в S3:', uploadResult.url)
+
+              // Сохраняем URL в заказе
+              await prisma.order.update({
+                where: { id: order.id },
+                data: { invoiceUrl: uploadResult.url }
+              })
+
+              console.log('createOrder: invoiceUrl сохранен в БД')
+            }
+          } catch (pdfError) {
+            console.error('createOrder: ошибка генерации PDF счета:', pdfError)
+            // Не бросаем ошибку, чтобы заказ все равно был создан
+            // PDF можно будет сгенерировать позже через API route
+          }
+        }
+
         return order
       } catch (error) {
         console.error('Ошибка создания заказа:', error)
@@ -11958,8 +12288,15 @@ export const resolvers = {
     // Корзина
     addToCart: async (_: unknown, { input }: { input: any }, context: Context) => {
       try {
+        console.log('🛒 addToCart called with context:', {
+          clientId: context.clientId,
+          userId: context.userId,
+          clientDeleted: context.clientDeleted
+        });
+
         const clientId = context.clientId;
         if (!clientId) {
+          console.error('❌ No clientId in context');
           return {
             success: false,
             error: 'Клиент не идентифицирован'
@@ -11967,6 +12304,30 @@ export const resolvers = {
         }
 
         console.log('🛒 Adding to cart for client:', clientId);
+
+        // Проверяем, это анонимный клиент или реальный
+        const isAnonymous = clientId.startsWith('anon_');
+
+        // Если это анонимный клиент, создаем временного клиента в БД, если его еще нет
+        if (isAnonymous) {
+          const existingClient = await prisma.client.findUnique({
+            where: { id: clientId }
+          });
+
+          if (!existingClient) {
+            console.log('🆕 Creating anonymous client:', clientId);
+            await prisma.client.create({
+              data: {
+                id: clientId,
+                clientNumber: `ANON_${Date.now()}`,
+                type: 'INDIVIDUAL',
+                name: 'Гость',
+                phone: 'anonymous',
+                isVerified: false
+              }
+            });
+          }
+        }
 
         // Находим или создаем корзину
         let cart = await prisma.cart.findUnique({

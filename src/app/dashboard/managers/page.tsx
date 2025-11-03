@@ -22,6 +22,7 @@ interface User {
   firstName: string
   lastName: string
   email: string
+  companyName?: string
   avatar?: string
   role: 'ADMIN' | 'MODERATOR' | 'USER'
   createdAt: string
@@ -33,6 +34,7 @@ interface CreateUserInput {
   lastName: string
   email: string
   password: string
+  companyName?: string
   avatar?: string
   role?: 'ADMIN' | 'MODERATOR' | 'USER'
 }
@@ -41,6 +43,7 @@ interface UpdateUserInput {
   firstName?: string
   lastName?: string
   email?: string
+  companyName?: string
   avatar?: string
   role?: 'ADMIN' | 'MODERATOR' | 'USER'
 }
@@ -79,6 +82,7 @@ const CreateUserDialog = ({ onUserCreated }: { onUserCreated: () => void }) => {
     lastName: '',
     email: '',
     password: '',
+    companyName: '',
     avatar: '',
     role: 'USER'
   })
@@ -92,6 +96,7 @@ const CreateUserDialog = ({ onUserCreated }: { onUserCreated: () => void }) => {
         lastName: '',
         email: '',
         password: '',
+        companyName: '',
         avatar: '',
         role: 'USER'
       })
@@ -156,6 +161,15 @@ const CreateUserDialog = ({ onUserCreated }: { onUserCreated: () => void }) => {
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="companyName">Название компании</Label>
+            <Input
+              id="companyName"
+              value={formData.companyName}
+              onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+              placeholder="Необязательно"
             />
           </div>
           <div className="space-y-2">
@@ -245,6 +259,7 @@ const EditUserDialog = ({ user, onUserUpdated }: { user: User; onUserUpdated: ()
     firstName: user.firstName,
     lastName: user.lastName,
     email: user.email,
+    companyName: user.companyName || '',
     avatar: user.avatar || '',
     role: user.role
   })
@@ -313,6 +328,15 @@ const EditUserDialog = ({ user, onUserUpdated }: { user: User; onUserUpdated: ()
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="companyName">Название компании</Label>
+            <Input
+              id="companyName"
+              value={formData.companyName}
+              onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+              placeholder="Необязательно"
             />
           </div>
           <div className="space-y-2">

@@ -39,6 +39,7 @@ model User {
   lastName       String
   email          String                 @unique
   password       String
+  companyName    String?
   avatar         String?
   role           UserRole               @default(ADMIN)
   createdAt      DateTime               @default(now())
@@ -278,6 +279,10 @@ model Client {
   phone                String
   login                String?                 @unique
   password             String?
+  firstName            String?
+  lastName             String?
+  companyName          String?
+  isVerified           Boolean                 @default(false)
   city                 String?
   markup               Float?                  @default(0)
   isConfirmed          Boolean                 @default(false)
@@ -787,6 +792,8 @@ model Order {
   clientPhone     String?
   clientName      String?
   legalEntityId   String?
+  paymentMethod   String?
+  invoiceUrl      String?
   status          OrderStatus @default(PENDING)
   totalAmount     Float
   discountAmount  Float       @default(0)

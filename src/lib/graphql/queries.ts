@@ -7,6 +7,7 @@ export const GET_USERS = gql`
       firstName
       lastName
       email
+      companyName
       avatar
       role
       createdAt
@@ -22,6 +23,7 @@ export const GET_USER = gql`
       firstName
       lastName
       email
+      companyName
       avatar
       role
       createdAt
@@ -37,6 +39,7 @@ export const GET_ME = gql`
       firstName
       lastName
       email
+      companyName
       avatar
       role
       createdAt
@@ -164,6 +167,7 @@ export const CREATE_USER = gql`
       firstName
       lastName
       email
+      companyName
       avatar
       role
       createdAt
@@ -179,6 +183,7 @@ export const UPDATE_PROFILE = gql`
       firstName
       lastName
       email
+      companyName
       avatar
       role
       createdAt
@@ -194,6 +199,7 @@ export const UPDATE_USER = gql`
       firstName
       lastName
       email
+      companyName
       avatar
       role
       createdAt

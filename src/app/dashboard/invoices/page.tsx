@@ -59,6 +59,31 @@ const GET_BALANCE_INVOICES = gql`
   }
 `
 
+const GET_ORDER_INVOICES = gql`
+  query GetOrderInvoices {
+    orders(paymentMethod: "invoice", limit: 100) {
+      orders {
+        id
+        orderNumber
+        status
+        finalAmount
+        currency
+        invoiceUrl
+        paymentMethod
+        createdAt
+        client {
+          id
+          name
+          phone
+        }
+        clientName
+        clientPhone
+      }
+      total
+    }
+  }
+`
+
 const UPDATE_INVOICE_STATUS = gql`
   mutation UpdateInvoiceStatus($invoiceId: String!, $status: InvoiceStatus!) {
     updateInvoiceStatus(invoiceId: $invoiceId, status: $status) {
@@ -116,10 +141,17 @@ const statusLabels = {
 }
 
 export default function InvoicesPage() {
+  const [activeTab, setActiveTab] = useState<'balance' | 'orders'>('balance')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  
+
   const { data, loading, error, refetch } = useQuery(GET_BALANCE_INVOICES, {
-    fetchPolicy: 'cache-and-network'
+    fetchPolicy: 'cache-and-network',
+    skip: activeTab !== 'balance'
+  })
+
+  const { data: ordersData, loading: ordersLoading, error: ordersError, refetch: refetchOrders } = useQuery(GET_ORDER_INVOICES, {
+    fetchPolicy: 'cache-and-network',
+    skip: activeTab !== 'orders'
   })
 
   const [updateInvoiceStatus] = useMutation(UPDATE_INVOICE_STATUS, {
@@ -238,10 +270,116 @@ export default function InvoicesPage() {
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
 
+  const orderInvoices = ordersData?.orders?.orders || []
+
   return (
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Управление счетами</h1>
+      </div>
+
+      {/* Вкладки */}
+      <div className="flex gap-2 mb-6 border-b">
+        <button
+          onClick={() => setActiveTab('balance')}
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeTab === 'balance'
+              ? 'border-b-2 border-blue-600 text-blue-600'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Счета на пополнение баланса
+        </button>
+        <button
+          onClick={() => setActiveTab('orders')}
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeTab === 'orders'
+              ? 'border-b-2 border-blue-600 text-blue-600'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Счета на оплату заказов
+        </button>
+      </div>
+
+      {/* Счета на оплату заказов */}
+      {activeTab === 'orders' && (
+        <>
+          {ordersLoading ? (
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : ordersError ? (
+            <div className="text-red-600 text-center py-8">
+              Ошибка загрузки: {ordersError.message}
+            </div>
+          ) : (
+            <>
+              <div className="flex justify-end mb-4">
+                <Button onClick={() => refetchOrders()}>Обновить</Button>
+              </div>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Номер заказа</TableHead>
+                      <TableHead>Клиент</TableHead>
+                      <TableHead>Сумма</TableHead>
+                      <TableHead>Статус</TableHead>
+                      <TableHead>Создан</TableHead>
+                      <TableHead>Действия</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orderInvoices.map((order: any) => (
+                      <TableRow key={order.id}>
+                        <TableCell className="font-medium">{order.orderNumber}</TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{order.client?.name || order.clientName}</div>
+                            <div className="text-sm text-gray-500">{order.client?.phone || order.clientPhone}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>{formatCurrency(order.finalAmount, order.currency)}</TableCell>
+                        <TableCell>
+                          <Badge className={order.status === 'PENDING' ? statusColors.PENDING : statusColors.PAID}>
+                            {order.status === 'PENDING' ? 'Ожидает оплаты' : statusLabels[order.status as keyof typeof statusLabels] || order.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{formatDate(order.createdAt)}</TableCell>
+                        <TableCell>
+                          {order.invoiceUrl ? (
+                            <a
+                              href={order.invoiceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              Скачать счёт
+                            </a>
+                          ) : (
+                            <span className="text-gray-400">Счёт не сгенерирован</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {orderInvoices.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    Заказы с оплатой по счёту не найдены
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* Балансовые счета */}
+      {activeTab === 'balance' && (
+        <>
+      <div className="flex justify-between items-center mb-6">
         
         <div className="flex gap-4">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -402,7 +540,8 @@ export default function InvoicesPage() {
         )}
       </div>
       
-      {/* Статистика */}
+      {/* Статистика балансовых счетов */}
+      {activeTab === 'balance' && (
       <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-yellow-50 p-4 rounded-lg">
           <div className="text-2xl font-bold text-yellow-800">
@@ -436,6 +575,9 @@ export default function InvoicesPage() {
           <div className="text-sm text-blue-600">Общая сумма оплат</div>
         </div>
       </div>
+      )}
+        </>
+      )}
     </div>
   )
 } 

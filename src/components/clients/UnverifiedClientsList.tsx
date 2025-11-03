@@ -1,0 +1,274 @@
+"use client"
+
+import { useState } from 'react'
+import { useQuery, useMutation } from '@apollo/client'
+import { gql } from '@apollo/client'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { CheckCircle, UserCheck } from 'lucide-react'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { toast } from 'sonner'
+import { formatDistanceToNow } from 'date-fns'
+import { ru } from 'date-fns/locale'
+
+// GraphQL Queries
+const GET_UNVERIFIED_CLIENTS = gql`
+  query GetUnverifiedClients($limit: Int, $offset: Int) {
+    unverifiedClients(limit: $limit, offset: $offset) {
+      id
+      clientNumber
+      name
+      firstName
+      lastName
+      email
+      phone
+      createdAt
+    }
+    unverifiedClientsCount
+  }
+`
+
+const VERIFY_CLIENT = gql`
+  mutation VerifyClient($clientId: ID!) {
+    verifyClient(clientId: $clientId) {
+      success
+      client {
+        id
+        clientNumber
+        name
+        isVerified
+      }
+      generatedLogin
+      generatedPassword
+    }
+  }
+`
+
+// Типы данных
+interface UnverifiedClient {
+  id: string
+  clientNumber: string
+  name: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  phone: string
+  createdAt: string
+}
+
+export const UnverifiedClientsList = () => {
+  const [selectedClient, setSelectedClient] = useState<UnverifiedClient | null>(null)
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
+
+  const { data, loading, error, refetch } = useQuery(GET_UNVERIFIED_CLIENTS, {
+    variables: {
+      limit: 100,
+      offset: 0
+    }
+  })
+
+  const [verifyClient, { loading: verifying }] = useMutation(VERIFY_CLIENT, {
+    onCompleted: (data) => {
+      if (data.verifyClient.success) {
+        toast.success(`Клиент ${data.verifyClient.client.name} успешно подтвержден!`)
+        toast.info(`Логин: ${data.verifyClient.generatedLogin}`)
+        toast.info(`Пароль: ${data.verifyClient.generatedPassword}`)
+        toast.success('Учетные данные отправлены на email клиента')
+        refetch()
+        setIsConfirmDialogOpen(false)
+        setSelectedClient(null)
+      }
+    },
+    onError: (error) => {
+      toast.error(`Ошибка: ${error.message}`)
+    }
+  })
+
+  const handleVerifyClick = (client: UnverifiedClient) => {
+    setSelectedClient(client)
+    setIsConfirmDialogOpen(true)
+  }
+
+  const handleConfirmVerify = () => {
+    if (selectedClient) {
+      verifyClient({
+        variables: {
+          clientId: selectedClient.id
+        }
+      })
+    }
+  }
+
+  const clients = data?.unverifiedClients || []
+  const totalCount = data?.unverifiedClientsCount || 0
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Клиенты, ожидающие проверки</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8">
+            <p className="text-muted-foreground">Загрузка...</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Клиенты, ожидающие проверки</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8">
+            <p className="text-red-500">Ошибка загрузки: {error.message}</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Клиенты, ожидающие проверки</CardTitle>
+            <Badge variant="secondary">
+              <UserCheck className="mr-1 h-4 w-4" />
+              {totalCount}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {clients.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Нет непроверенных клиентов</h3>
+              <p className="text-muted-foreground">
+                Все зарегистрированные клиенты прошли проверку
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Номер</TableHead>
+                    <TableHead>ФИО</TableHead>
+                    <TableHead>Телефон</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Дата регистрации</TableHead>
+                    <TableHead className="text-right">Действия</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {clients.map((client: UnverifiedClient) => (
+                    <TableRow key={client.id}>
+                      <TableCell className="font-medium">
+                        {client.clientNumber}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{client.name}</span>
+                          {client.firstName && client.lastName && (
+                            <span className="text-sm text-muted-foreground">
+                              {client.firstName} {client.lastName}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>{client.phone}</TableCell>
+                      <TableCell>{client.email || '-'}</TableCell>
+                      <TableCell>
+                        <span className="text-sm">
+                          {formatDistanceToNow(new Date(client.createdAt), {
+                            addSuffix: true,
+                            locale: ru
+                          })}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          onClick={() => handleVerifyClick(client)}
+                          disabled={verifying}
+                        >
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Подтвердить
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Подтверждение клиента</DialogTitle>
+            <DialogDescription>
+              Вы уверены, что хотите подтвердить клиента?
+            </DialogDescription>
+          </DialogHeader>
+          {selectedClient && (
+            <div className="space-y-2 py-4">
+              <p><strong>ФИО:</strong> {selectedClient.name}</p>
+              <p><strong>Телефон:</strong> {selectedClient.phone}</p>
+              <p><strong>Email:</strong> {selectedClient.email || 'Не указан'}</p>
+              <div className="mt-4 p-4 bg-blue-50 rounded-md">
+                <p className="text-sm text-blue-900">
+                  После подтверждения система автоматически:
+                </p>
+                <ul className="list-disc list-inside text-sm text-blue-900 mt-2 space-y-1">
+                  <li>Сгенерирует логин и пароль</li>
+                  <li>Отправит учетные данные на email клиента</li>
+                  <li>Активирует доступ к личному кабинету</li>
+                </ul>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsConfirmDialogOpen(false)}
+              disabled={verifying}
+            >
+              Отмена
+            </Button>
+            <Button
+              onClick={handleConfirmVerify}
+              disabled={verifying}
+            >
+              {verifying ? 'Подтверждение...' : 'Подтвердить клиента'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}

@@ -111,6 +111,7 @@ export const typeDefs = gql`
     firstName: String!
     lastName: String!
     email: String!
+    companyName: String
     avatar: String
     role: UserRole!
     createdAt: DateTime!
@@ -282,6 +283,10 @@ export const typeDefs = gql`
     email: String
     phone: String!
     login: String
+    firstName: String
+    lastName: String
+    companyName: String
+    isVerified: Boolean!
     city: String
     markup: Float
     isConfirmed: Boolean!
@@ -657,6 +662,7 @@ export const typeDefs = gql`
     lastName: String!
     email: String!
     password: String!
+    companyName: String
     avatar: String
     role: UserRole
   }
@@ -665,6 +671,7 @@ export const typeDefs = gql`
     firstName: String
     lastName: String
     email: String
+    companyName: String
     avatar: String
   }
 
@@ -672,6 +679,7 @@ export const typeDefs = gql`
     firstName: String
     lastName: String
     email: String
+    companyName: String
     avatar: String
     role: UserRole
   }
@@ -787,6 +795,14 @@ export const typeDefs = gql`
     bankBik: String
     correspondentAccount: String
     password: String
+  }
+
+  input RegisterClientInput {
+    phone: String!
+    firstName: String!
+    lastName: String!
+    companyName: String
+    email: String!
   }
 
   input ClientVehicleInput {
@@ -1083,6 +1099,8 @@ export const typeDefs = gql`
     clients(filter: ClientFilterInput, search: String, limit: Int, offset: Int, sortBy: String, sortOrder: String): [Client!]!
     client(id: ID!): Client
     clientsCount(filter: ClientFilterInput, search: String): Int!
+    unverifiedClients(limit: Int, offset: Int): [Client!]!
+    unverifiedClientsCount: Int!
     clientProfiles: [ClientProfile!]!
     clientProfile(id: ID!): ClientProfile
     clientStatuses: [ClientStatus!]!
@@ -1201,7 +1219,7 @@ export const typeDefs = gql`
     ): PartsIndexEntityDetail
     
     # Заказы и платежи
-    orders(clientId: String, status: OrderStatus, search: String, limit: Int, offset: Int): OrdersResponse!
+    orders(clientId: String, status: OrderStatus, paymentMethod: String, search: String, limit: Int, offset: Int): OrdersResponse!
     order(id: ID!): Order
     orderByNumber(orderNumber: String!): Order
     payments(orderId: String, status: PaymentStatus): [Payment!]!
@@ -1408,6 +1426,11 @@ export const typeDefs = gql`
     verifyCode(phone: String!, code: String!, sessionId: String!): VerificationResponse!
     loginByCredentials(login: String!, password: String!): VerificationResponse!
     registerNewClient(phone: String!, name: String!, sessionId: String!, email: String!): VerificationResponse!
+
+    # Новая система авторизации с паролем
+    registerClientWithPassword(input: RegisterClientInput!): VerificationResponse!
+    loginWithPassword(phone: String!, password: String!): VerificationResponse!
+    verifyClient(clientId: ID!): VerificationResponse!
     
     # Гараж клиентов
     createUserVehicle(input: UserVehicleInput!): ClientVehicle!
@@ -2198,6 +2221,8 @@ export const typeDefs = gql`
     deliveryAddress: String
     deliveryTime: String
     comment: String
+    paymentMethod: String
+    invoiceUrl: String
     cancelReason: String
     canceledAt: DateTime
     returnReason: String

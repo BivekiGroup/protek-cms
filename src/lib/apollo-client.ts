@@ -30,12 +30,20 @@ const authLink = setContext((_, { headers }) => {
       // Простой способ получить cookie
       const cookies = document.cookie.split(';')
       console.log('Apollo Client: все cookies:', cookies)
-      const authCookie = cookies.find(cookie => cookie.trim().startsWith('auth-token='))
-      console.log('Apollo Client: найден auth-token cookie:', authCookie)
+      console.log('Apollo Client: document.cookie raw:', document.cookie)
+
+      // Пробуем сначала новое имя cms-token, потом старое auth-token (для обратной совместимости)
+      let authCookie = cookies.find(cookie => cookie.trim().startsWith('cms-token='))
+      if (!authCookie) {
+        authCookie = cookies.find(cookie => cookie.trim().startsWith('auth-token='))
+        console.log('Apollo Client: cms-token не найден, ищем auth-token (deprecated)')
+      }
+
+      console.log('Apollo Client: найден cookie:', authCookie)
       if (authCookie) {
         token = decodeURIComponent(authCookie.split('=')[1] || '')
         console.log('Apollo Client: извлеченный токен:', token ? `${token.substring(0, 20)}...` : 'null')
-        
+
         // Проверяем, что токен выглядит как JWT (имеет 3 части, разделенные точками)
         if (token && token.split('.').length === 3) {
           console.log('Apollo Client: токен выглядит как валидный JWT')
@@ -44,7 +52,7 @@ const authLink = setContext((_, { headers }) => {
           token = null
         }
       } else {
-        console.log('Apollo Client: auth-token cookie не найден')
+        console.log('Apollo Client: токен не найден ни в cms-token, ни в auth-token')
       }
     } catch (error) {
       console.error('Apollo Client: ошибка при извлечении токена:', error)

@@ -6,6 +6,7 @@ import { ClientsList } from '@/components/clients/ClientsList'
 import { ProfilesList } from '@/components/clients/ProfilesList'
 import { DiscountsList } from '@/components/clients/DiscountsList'
 import { StatusesList } from '@/components/clients/StatusesList'
+import { UnverifiedClientsList } from '@/components/clients/UnverifiedClientsList'
 
 export default function ClientsPage() {
   const [activeTab, setActiveTab] = useState('clients')
@@ -17,8 +18,9 @@ export default function ClientsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="clients">Клиенты</TabsTrigger>
+          <TabsTrigger value="unverified">Ожидают проверки</TabsTrigger>
           <TabsTrigger value="profiles">Профили</TabsTrigger>
           <TabsTrigger value="discounts">Скидки</TabsTrigger>
           <TabsTrigger value="statuses">Статус</TabsTrigger>
@@ -26,6 +28,10 @@ export default function ClientsPage() {
 
         <TabsContent value="clients" className="space-y-4">
           <ClientsList />
+        </TabsContent>
+
+        <TabsContent value="unverified" className="space-y-4">
+          <UnverifiedClientsList />
         </TabsContent>
 
         <TabsContent value="profiles" className="space-y-4">

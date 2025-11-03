@@ -53,7 +53,7 @@ export default function LoginPage() {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Вход в систему</CardTitle>
           <CardDescription>
-            Введите ваши данные для входа в админ панель
+            Введите логин и пароль для входа
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -65,17 +65,17 @@ export default function LoginPage() {
                 </div>
               )}
 
-              {/* Email */}
+              {/* Email/Логин */}
               <FormField
                 control={form.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel>Логин (email)</FormLabel>
                     <FormControl>
                       <Input
                         type="email"
-                        placeholder="admin@example.com"
+                        placeholder="your@email.com"
                         {...field}
                       />
                     </FormControl>
@@ -110,6 +110,20 @@ export default function LoginPage() {
               >
                 {isLoading ? 'Вход...' : 'Войти'}
               </Button>
+
+              <div className="text-center pt-4">
+                <p className="text-sm text-gray-600">
+                  Нет аккаунта?{' '}
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="p-0 h-auto font-semibold text-red-600 hover:text-red-700"
+                    onClick={() => router.push('/register')}
+                  >
+                    Зарегистрироваться
+                  </Button>
+                </p>
+              </div>
             </form>
           </Form>
         </CardContent>
