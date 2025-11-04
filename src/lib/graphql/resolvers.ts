@@ -10462,6 +10462,7 @@ export const resolvers = {
 
             if (fullOrder) {
               // Генерируем PDF
+              // @ts-expect-error - InvoicePDF возвращает Document, renderToBuffer принимает его
               const pdfBuffer = await renderToBuffer(React.createElement(InvoicePDF, { order: fullOrder }))
 
               // Загружаем в S3

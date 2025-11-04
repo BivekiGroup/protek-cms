@@ -227,7 +227,7 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({ order }) => {
       <Page size="A4" style={styles.page}>
         {/* Шапка компании */}
         <View style={styles.header}>
-          <Text style={styles.companyName}>ООО "ПРОТЕКАВТО"</Text>
+          <Text style={styles.companyName}>ООО &quot;ПРОТЕКАВТО&quot;</Text>
           <Text style={styles.companyInfo}>ИНН 7701234567 / КПП 770101001</Text>
           <Text style={styles.companyInfo}>123456, г. Москва, ул. Примерная, д. 1</Text>
         </View>
@@ -249,11 +249,11 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({ order }) => {
           {/* Поставщик */}
           <View style={styles.infoBlock}>
             <Text style={styles.infoTitle}>Поставщик</Text>
-            <Text style={styles.infoText}>ООО "ПРОТЕКАВТО"</Text>
+            <Text style={styles.infoText}>ООО &quot;ПРОТЕКАВТО&quot;</Text>
             <Text style={styles.infoText}>ИНН: 7701234567 / КПП: 770101001</Text>
             <Text style={styles.infoText}>Адрес: 123456, г. Москва, ул. Примерная, д. 1</Text>
             <Text style={styles.infoText}>Р/с: 40702810123456789012</Text>
-            <Text style={styles.infoText}>Банк: ПАО "Сбербанк"</Text>
+            <Text style={styles.infoText}>Банк: ПАО &quot;Сбербанк&quot;</Text>
             <Text style={styles.infoText}>БИК: 044525225 / К/с: 30101810400000000225</Text>
           </View>
 
@@ -302,7 +302,7 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({ order }) => {
             return (
               <View
                 key={item.id}
-                style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}
+                style={index % 2 === 1 ? [styles.tableRow, styles.tableRowAlt] : styles.tableRow}
               >
                 <Text style={[styles.tableCell, styles.col1]}>{index + 1}</Text>
                 <View style={styles.col2}>

@@ -41,8 +41,8 @@ export async function GET(
       }
       // Менеджеры и админы могут скачивать счета любых клиентов
       // Если это клиент, получаем его clientId из токена
-      if (payload.role === 'client' && payload.clientId) {
-        clientId = payload.clientId
+      if (payload.role === 'client' && 'clientId' in payload) {
+        clientId = payload.clientId as string
       }
     }
 
@@ -96,6 +96,7 @@ export async function GET(
     console.log('📄 Generating new PDF invoice for order:', order.orderNumber)
 
     // Генерируем PDF используя @react-pdf/renderer
+    // @ts-expect-error - InvoicePDF возвращает Document, renderToBuffer принимает его
     const pdfBuffer = await renderToBuffer(React.createElement(InvoicePDF, { order }))
 
     // Загружаем PDF в S3
