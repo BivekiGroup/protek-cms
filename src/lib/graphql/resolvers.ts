@@ -9233,37 +9233,37 @@ export const resolvers = {
       }
     },
 
-    loginByCredentials: async (_: unknown, { login, password }: { login: string; password: string }) => {
+    loginByCredentials: async (_: unknown, { email, password }: { email: string; password: string }) => {
       try {
-        console.log(`Попытка входа по логину: ${login}`)
+        console.log(`Попытка входа по email: ${email}`)
 
-        // Ищем клиента по логину
+        // Ищем клиента по email
         const client = await prisma.client.findFirst({
-          where: { login },
+          where: { email },
           include: {
             profile: true
           }
         })
 
         if (!client) {
-          console.log(`Клиент с логином ${login} не найден`)
-          throw new Error('Неверный логин или пароль')
+          console.log(`Клиент с email ${email} не найден`)
+          throw new Error('Неверный email или пароль')
         }
 
         if (!client.password) {
-          console.log(`У клиента ${login} не установлен пароль`)
-          throw new Error('Неверный логин или пароль')
+          console.log(`У клиента ${email} не установлен пароль`)
+          throw new Error('Неверный email или пароль')
         }
 
         // Проверяем пароль
         const isPasswordValid = await comparePasswords(password, client.password)
 
         if (!isPasswordValid) {
-          console.log(`Неверный пароль для клиента ${login}`)
-          throw new Error('Неверный логин или пароль')
+          console.log(`Неверный пароль для клиента ${email}`)
+          throw new Error('Неверный email или пароль')
         }
 
-        console.log(`Успешный вход для клиента ${login}`)
+        console.log(`Успешный вход для клиента ${email}`)
         const token = `client_${client.id}_${Date.now()}`
 
         return {
@@ -9272,7 +9272,7 @@ export const resolvers = {
           token
         }
       } catch (error) {
-        console.error('Ошибка входа по логину/паролю:', error)
+        console.error('Ошибка входа по email/паролю:', error)
         if (error instanceof Error) {
           throw error
         }
@@ -9299,25 +9299,7 @@ export const resolvers = {
           throw new Error('Этот email уже используется')
         }
 
-        // Генерируем логин из телефона и имени
-        const generatedLogin = generateLogin(phone, name)
-
-        // Проверяем уникальность сгенерированного логина, добавляем случайное число если занят
-        let finalLogin = generatedLogin
-        let loginExists = await prisma.client.findFirst({
-          where: { login: finalLogin }
-        })
-
-        let attempt = 0
-        while (loginExists && attempt < 10) {
-          finalLogin = `${generatedLogin}${Math.floor(Math.random() * 100)}`
-          loginExists = await prisma.client.findFirst({
-            where: { login: finalLogin }
-          })
-          attempt++
-        }
-
-        // Генерируем пароль
+        // Генерируем пароль (login больше не используется, авторизация по email)
         const generatedPassword = generatePassword()
 
         // Хешируем пароль
@@ -9337,7 +9319,6 @@ export const resolvers = {
             name: fullName,
             phone,
             email,
-            login: finalLogin,
             password: hashedPassword,
             isConfirmed: true,
             balance: 0,
@@ -9350,9 +9331,9 @@ export const resolvers = {
           }
         })
 
-        // Отправляем письмо с логином и паролем
+        // Отправляем письмо с email и паролем (теперь вход по email, а не по login)
         try {
-          await sendCredentialsEmail(email, finalLogin, generatedPassword, fullName)
+          await sendCredentialsEmail(email, email, generatedPassword, fullName)
         } catch (emailError) {
           console.error('Ошибка отправки email с учетными данными:', emailError)
           // Не прерываем регистрацию, если не получилось отправить email
@@ -9365,7 +9346,7 @@ export const resolvers = {
           success: true,
           client,
           token,
-          generatedLogin: finalLogin,
+          generatedLogin: email, // Возвращаем email вместо login для обратной совместимости
           generatedPassword
         }
       } catch (error) {
@@ -9524,24 +9505,7 @@ export const resolvers = {
           throw new Error('Клиент уже подтвержден')
         }
 
-        // Генерируем логин и новый пароль
-        const generatedLogin = generateLogin(client.phone, client.name)
-
-        // Проверяем уникальность логина
-        let finalLogin = generatedLogin
-        let loginExists = await prisma.client.findFirst({
-          where: { login: finalLogin, id: { not: clientId } }
-        })
-
-        let attempt = 0
-        while (loginExists && attempt < 10) {
-          finalLogin = `${generatedLogin}${Math.floor(Math.random() * 100)}`
-          loginExists = await prisma.client.findFirst({
-            where: { login: finalLogin, id: { not: clientId } }
-          })
-          attempt++
-        }
-
+        // Генерируем только новый пароль (login больше не используется, авторизация по email)
         const generatedPassword = generatePassword()
         const hashedPassword = await hashPassword(generatedPassword)
 
@@ -9551,7 +9515,6 @@ export const resolvers = {
           data: {
             isVerified: true,
             isConfirmed: true,
-            login: finalLogin,
             password: hashedPassword
           },
           include: {
@@ -9559,12 +9522,12 @@ export const resolvers = {
           }
         })
 
-        console.log(`Клиент подтвержден: ${updatedClient.clientNumber}, логин: ${finalLogin}`)
+        console.log(`Клиент подтвержден: ${updatedClient.clientNumber}, email: ${client.email}`)
 
-        // Отправляем email с учетными данными
+        // Отправляем email с email и паролем (теперь вход по email, а не по login)
         if (client.email) {
           try {
-            await sendCredentialsEmail(client.email, finalLogin, generatedPassword, client.name)
+            await sendCredentialsEmail(client.email, client.email, generatedPassword, client.name)
             console.log(`Email с учетными данными отправлен на: ${client.email}`)
           } catch (emailError) {
             console.error('Ошибка отправки email с учетными данными:', emailError)
@@ -9576,7 +9539,7 @@ export const resolvers = {
           success: true,
           client: updatedClient,
           token: null,
-          generatedLogin: finalLogin,
+          generatedLogin: client.email, // Возвращаем email вместо login для обратной совместимости
           generatedPassword
         }
       } catch (error) {

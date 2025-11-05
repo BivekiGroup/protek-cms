@@ -282,7 +282,6 @@ export const typeDefs = gql`
     name: String!
     email: String
     phone: String!
-    login: String
     firstName: String
     lastName: String
     companyName: String
@@ -771,7 +770,6 @@ export const typeDefs = gql`
     name: String!
     email: String
     phone: String!
-    login: String
     city: String
     markup: Float
     isConfirmed: Boolean
@@ -1424,7 +1422,7 @@ export const typeDefs = gql`
     checkClientByPhone(phone: String!): ClientAuthResponse!
     sendSMSCode(phone: String!, sessionId: String): SMSCodeResponse!
     verifyCode(phone: String!, code: String!, sessionId: String!): VerificationResponse!
-    loginByCredentials(login: String!, password: String!): VerificationResponse!
+    loginByCredentials(email: String!, password: String!): VerificationResponse!
     registerNewClient(phone: String!, name: String!, sessionId: String!, email: String!): VerificationResponse!
 
     # Новая система авторизации с паролем

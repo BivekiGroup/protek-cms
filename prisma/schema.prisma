@@ -277,7 +277,6 @@ model Client {
   name                 String
   email                String?
   phone                String
-  login                String?                 @unique
   password             String?
   firstName            String?
   lastName             String?
