@@ -24,14 +24,29 @@ function checkAuth(req: NextRequest): { ok: true } | { ok: false; status: number
   return { ok: true }
 }
 
+function normalizeArticle(article?: string | null) {
+  if (!article) return ''
+  return article.replace(/\s+/g, '').replace(/[-–—]+/g, '').trim().toUpperCase()
+}
+
 const itemSchema = z.object({
-  sku: z.string().trim().min(1),
+  sku: z.string().trim().min(1, 'SKU не может быть пустым'),
   // Принимаем цену как строку или число (включая 0)
   price: z.union([
     z.string().trim().min(1),
     z.number().nonnegative()
   ]),
-})
+}).refine(
+  (data) => {
+    // Дополнительная проверка: если sku пустой после trim, отклоняем
+    const normalized = normalizeArticle(data.sku)
+    return normalized.length > 0
+  },
+  {
+    message: 'SKU содержит только пробелы или недопустимые символы',
+    path: ['sku']
+  }
+)
 
 export async function OPTIONS() {
   return new Response(null, { status: 204, headers: getCorsHeaders() })
@@ -91,9 +106,4 @@ function parsePrice(s: string | number): number {
   }
   if (!Number.isFinite(n) || n < 0) return 0
   return n
-}
-
-function normalizeArticle(article?: string | null) {
-  if (!article) return ''
-  return article.replace(/\s+/g, '').replace(/[-–—]+/g, '').trim().toUpperCase()
 }
