@@ -1,13 +1,24 @@
 "use client"
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ShoppingCart, Users, ExternalLink, Clock, AlertCircle } from 'lucide-react'
-import { useQuery } from '@apollo/client'
+import { useQuery, useMutation } from '@apollo/client'
 import { GET_DASHBOARD_CLIENTS, GET_DASHBOARD_ORDERS } from '@/lib/graphql/queries'
-import { useMemo } from 'react'
+import { CONFIRM_CLIENT } from '@/lib/graphql/mutations'
+import { useMemo, useState } from 'react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { toast } from 'sonner'
 
 const statusLabels: Record<string, string> = {
   PENDING: 'Ожидает оплаты',
@@ -59,6 +70,10 @@ function formatCurrency(amount?: number, currency?: string) {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+  const [selectedClient, setSelectedClient] = useState<any>(null)
+
   const { data: ordersData, loading: ordersLoading } = useQuery(GET_DASHBOARD_ORDERS, {
     variables: { status: 'PENDING', limit: 5, offset: 0 },
     fetchPolicy: 'no-cache',
@@ -68,7 +83,7 @@ export default function DashboardPage() {
     new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   ), [])
 
-  const { data: clientsData, loading: clientsLoading } = useQuery(GET_DASHBOARD_CLIENTS, {
+  const { data: clientsData, loading: clientsLoading, refetch: refetchClients } = useQuery(GET_DASHBOARD_CLIENTS, {
     variables: {
       filter: { registeredFrom: registeredFromISO },
       limit: 5,
@@ -79,10 +94,38 @@ export default function DashboardPage() {
     fetchPolicy: 'no-cache',
   })
 
+  const [confirmClient, { loading: confirmLoading }] = useMutation(CONFIRM_CLIENT, {
+    onCompleted: () => {
+      toast.success('Клиент подтвержден, письмо отправлено на почту')
+      setConfirmDialogOpen(false)
+      setSelectedClient(null)
+      refetchClients()
+    },
+    onError: (error) => {
+      toast.error(`Ошибка подтверждения: ${error.message}`)
+    }
+  })
+
   const newOrders = ordersData?.orders?.orders || []
   const ordersTotal = ordersData?.orders?.total || 0
   const recentClients = clientsData?.clients || []
   const recentClientsTotal = clientsData?.clientsCount || 0
+
+  const handleClientClick = (client: any) => {
+    if (!client.isConfirmed) {
+      // Открываем модалку подтверждения
+      setSelectedClient(client)
+      setConfirmDialogOpen(true)
+    } else {
+      // Переходим на страницу редактирования
+      router.push(`/dashboard/clients/${client.id}`)
+    }
+  }
+
+  const handleConfirmClient = async () => {
+    if (!selectedClient) return
+    await confirmClient({ variables: { id: selectedClient.id } })
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -213,7 +256,11 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-4">
               {recentClients.map((client: any) => (
-                <div key={client.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                <div
+                  key={client.id}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                  onClick={() => handleClientClick(client)}
+                >
                   <div className="flex items-center space-x-4">
                     <div>
                       <div className="font-semibold">{client.name}</div>
@@ -232,6 +279,34 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Модалка подтверждения клиента */}
+      <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Подтверждение клиента</DialogTitle>
+            <DialogDescription>
+              Вы собираетесь подтвердить клиента <strong>{selectedClient?.name}</strong>.
+              После подтверждения на email <strong>{selectedClient?.email || 'не указан'}</strong> будет отправлено уведомление.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDialogOpen(false)}
+              disabled={confirmLoading}
+            >
+              Отмена
+            </Button>
+            <Button
+              onClick={handleConfirmClient}
+              disabled={confirmLoading}
+            >
+              {confirmLoading ? 'Подтверждение...' : 'Подтвердить и отправить письмо'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

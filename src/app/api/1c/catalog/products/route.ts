@@ -103,6 +103,9 @@ const productItemSchema = z.object({
   stock: z.number().int().optional(),
   weight: z.number().finite().nonnegative().optional(),
   dimensions: z.string().trim().optional(),
+  depth: z.number().finite().nonnegative().optional(),
+  width: z.number().finite().nonnegative().optional(),
+  height: z.number().finite().nonnegative().optional(),
   images: z.array(z.string().url()).optional(),
   // New: 1C can send images as base64 strings or objects { filename, content, contentType }
   images_base64: z
@@ -197,6 +200,9 @@ export async function POST(req: NextRequest) {
       stock: typeof raw.stock === 'number' ? raw.stock : undefined,
       weight: raw.weight,
       dimensions: raw.dimensions?.trim(),
+      depth: raw.depth,
+      width: raw.width,
+      height: raw.height,
       images: (raw.images || []).map((u) => String(u).trim()).filter(Boolean),
       images_base64: Array.isArray(raw.images_base64) ? raw.images_base64 : undefined,
       category_code: raw.category_code?.trim(),
@@ -338,6 +344,9 @@ export async function POST(req: NextRequest) {
             stock: norm.stock ?? 0,
             weight: norm.weight,
             dimensions: norm.dimensions,
+            depth: norm.depth,
+            width: norm.width,
+            height: norm.height,
             isVisible: norm.isVisible ?? true,
           },
           include: productInclude,
@@ -354,6 +363,9 @@ export async function POST(req: NextRequest) {
         if (norm.stock !== undefined) updateData.stock = norm.stock
         if (norm.weight !== undefined) updateData.weight = norm.weight
         if (norm.dimensions !== undefined) updateData.dimensions = norm.dimensions
+        if (norm.depth !== undefined) updateData.depth = norm.depth
+        if (norm.width !== undefined) updateData.width = norm.width
+        if (norm.height !== undefined) updateData.height = norm.height
         if (norm.isVisible !== undefined) updateData.isVisible = norm.isVisible
         if (norm.onecProductId && norm.onecProductId !== product.onecProductId) updateData.onecProductId = norm.onecProductId
 

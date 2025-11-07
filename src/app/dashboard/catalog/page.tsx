@@ -161,16 +161,17 @@ export default function CatalogPage() {
   return (
     <div className="flex h-full bg-gray-50">
       {/* Левое меню категорий */}
-      <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">Каталог товаров</h2>
+      <div className="w-56 bg-white border-r border-gray-200 flex flex-col">
+        <div className="p-3 border-b border-gray-200">
+          <h2 className="text-base font-semibold text-gray-900 mb-2">Каталог</h2>
           <Button
             onClick={() => setShowCategoryForm(true)}
             className="w-full"
             variant="outline"
+            size="sm"
           >
-            <Plus className="w-4 h-4 mr-2" />
-            Добавить категорию
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            Добавить
           </Button>
         </div>
 

@@ -403,7 +403,7 @@ export const ProductList = ({
     )
   }
 
-  const gridTemplate = 'grid grid-cols-[30px_minmax(62px,95px)_minmax(52px,80px)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(68px,100px)_minmax(52px,80px)_minmax(62px,96px)_minmax(62px,96px)_minmax(48px,72px)_minmax(70px,100px)] items-center gap-1'
+  const gridTemplate = 'grid grid-cols-[26px_minmax(55px,70px)_minmax(42px,56px)_minmax(110px,1fr)_minmax(90px,180px)_minmax(60px,80px)_minmax(48px,65px)_minmax(55px,75px)_minmax(55px,75px)_minmax(42px,52px)_minmax(60px,75px)] items-center gap-1'
 
   const isInteractive = (target: EventTarget | null) => {
     if (!(target instanceof HTMLElement)) {
@@ -469,9 +469,9 @@ export const ProductList = ({
         </div>
 
         {/* Заголовок таблицы */}
-        <div className="bg-gray-50 rounded-lg px-2.5 py-0 overflow-x-auto">
+        <div className="bg-gray-50 rounded-lg px-2 py-0 overflow-x-auto">
           <div className="min-w-full">
-            <div className={`${gridTemplate} py-0 text-[11px] leading-[16px] font-medium text-gray-600 uppercase tracking-[0.05em]`}>
+            <div className={`${gridTemplate} py-0 text-[10.5px] leading-[14px] font-medium text-gray-600 uppercase tracking-[0.05em]`}>
               <div className="flex justify-center">
                 <Checkbox
                   checked={selectAll}
@@ -485,10 +485,10 @@ export const ProductList = ({
               <div className="min-w-0 whitespace-nowrap">{renderSortableHeader('category', 'Категория')}</div>
               <div className="min-w-0 whitespace-nowrap">{renderSortableHeader('article', 'Артикул')}</div>
               <div className="whitespace-nowrap">{renderSortableHeader('stock', 'Остаток')}</div>
-              <div className="whitespace-nowrap">{renderSortableHeader('wholesalePrice', 'Цена опт')}</div>
               <div className="whitespace-nowrap">{renderSortableHeader('retailPrice', 'Цена сайт')}</div>
+              <div className="whitespace-nowrap">{renderSortableHeader('wholesalePrice', 'Цена опт')}</div>
               <div className="whitespace-nowrap">{renderSortableHeader('isVisible', 'Сайт')}</div>
-              <div className="flex justify-end pr-4 text-gray-400 whitespace-nowrap normal-case">Действия</div>
+              <div className="flex justify-end pr-2 text-gray-400 whitespace-nowrap normal-case">Действия</div>
             </div>
           </div>
         </div>
@@ -502,7 +502,7 @@ export const ProductList = ({
             >
               <div className="w-full">
                 <div
-                  className={`${gridTemplate} py-0.5 text-[11.5px] leading-snug cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500`}
+                  className={`${gridTemplate} py-0.5 text-[11px] leading-snug cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500`}
                   role="button"
                   tabIndex={0}
                   title="Открыть редактирование товара"
@@ -589,13 +589,13 @@ export const ProductList = ({
                     </span>
                   </div>
 
-                  {/* Цена опт */}
+                  {/* Цена на сайте */}
                   <div>
                     <div className="flex items-center gap-1.5">
                       <Input
                         data-row-interactive="true"
-                        value={getPriceValue(product, 'wholesale')}
-                        onChange={(event) => handlePriceChange(product.id, 'wholesale', event.target.value)}
+                        value={getPriceValue(product, 'retail')}
+                        onChange={(event) => handlePriceChange(product.id, 'retail', event.target.value)}
                         onBlur={() => handlePriceSubmit(product)}
                         onKeyDown={(event) => handlePriceKeyDown(event, product)}
                         placeholder="—"
@@ -609,13 +609,13 @@ export const ProductList = ({
                     </div>
                   </div>
 
-                  {/* Цена на сайте */}
+                  {/* Цена опт */}
                   <div>
                     <div className="flex items-center gap-1.5">
                       <Input
                         data-row-interactive="true"
-                        value={getPriceValue(product, 'retail')}
-                        onChange={(event) => handlePriceChange(product.id, 'retail', event.target.value)}
+                        value={getPriceValue(product, 'wholesale')}
+                        onChange={(event) => handlePriceChange(product.id, 'wholesale', event.target.value)}
                         onBlur={() => handlePriceSubmit(product)}
                         onKeyDown={(event) => handlePriceKeyDown(event, product)}
                         placeholder="—"
@@ -640,31 +640,31 @@ export const ProductList = ({
                   </div>
 
                   {/* Действия */}
-                  <div className="flex flex-nowrap items-center gap-1 justify-end pr-1.5">
+                  <div className="flex flex-nowrap items-center gap-0.5 justify-end pr-1">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8"
+                      className="h-7 w-7"
                       data-row-interactive="true"
                       onClick={(event) => {
                         event.stopPropagation()
                         window.open(buildFrontendProductUrl(product), '_blank')
                       }}
                     >
-                      <ExternalLink className="w-4 h-4" />
+                      <ExternalLink className="w-3.5 h-3.5" />
                       <span className="sr-only">Открыть на сайте</span>
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8"
+                      className="h-7 w-7"
                       data-row-interactive="true"
                       onClick={(event) => {
                         event.stopPropagation()
                         handleDeleteProduct(product.id)
                       }}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                       <span className="sr-only">Удалить</span>
                     </Button>
                   </div>

@@ -73,7 +73,7 @@ const CategoryItem = ({
 
   const hasChildren = category.children && category.children.length > 0
   const isSelected = selectedCategoryId === category.id
-  const paddingLeft = level * 16 + 12
+  const paddingLeft = level * 12 + 8
 
   const handleToggle = () => {
     if (hasChildren) {
@@ -113,43 +113,43 @@ const CategoryItem = ({
 
   return (
     <>
-      <div 
+      <div
         className={cn(
-          "flex items-center py-2 px-3 hover:bg-gray-50 cursor-pointer group",
+          "flex items-center py-1.5 px-2 hover:bg-gray-50 cursor-pointer group",
           isSelected && "bg-blue-50 border-r-2 border-blue-500"
         )}
         style={{ paddingLeft }}
       >
         {/* Иконка раскрытия */}
-        <div className="w-4 h-4 mr-2 flex items-center justify-center">
+        <div className="w-3.5 h-3.5 mr-1.5 flex items-center justify-center">
           {hasChildren && (
             <button onClick={handleToggle} className="p-0.5 hover:bg-gray-200 rounded">
               {isExpanded ? (
-                <ChevronDown className="w-3 h-3" />
+                <ChevronDown className="w-2.5 h-2.5" />
               ) : (
-                <ChevronRight className="w-3 h-3" />
+                <ChevronRight className="w-2.5 h-2.5" />
               )}
             </button>
           )}
         </div>
 
         {/* Название категории */}
-        <div 
+        <div
           className="flex-1 flex items-center min-w-0"
           onClick={handleSelect}
         >
           <span className={cn(
-            "truncate text-sm",
+            "truncate text-xs",
             isSelected ? "font-medium text-blue-700" : "text-gray-700",
             category.isHidden && "opacity-50 italic"
           )}>
             {category.name}
             {category.isHidden && (
-              <EyeOff className="w-3 h-3 inline ml-1" />
+              <EyeOff className="w-2.5 h-2.5 inline ml-1" />
             )}
           </span>
           {category._count && category._count.products > 0 && (
-            <span className="ml-2 text-xs text-gray-400">
+            <span className="ml-1.5 text-[10px] text-gray-400">
               ({category._count.products})
             </span>
           )}
@@ -161,9 +161,9 @@ const CategoryItem = ({
             <Button
               variant="ghost"
               size="sm"
-              className="w-6 h-6 p-0 opacity-0 group-hover:opacity-100"
+              className="w-5 h-5 p-0 opacity-0 group-hover:opacity-100"
             >
-              <Settings className="w-3 h-3" />
+              <Settings className="w-2.5 h-2.5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">

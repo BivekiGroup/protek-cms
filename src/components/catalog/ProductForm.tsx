@@ -583,7 +583,39 @@ export const ProductForm = ({
     }
   }
 
-  const selectedCategories = categories.filter(cat => formData.categoryIds.includes(cat.id))
+  // Рекурсивная функция для поиска категорий по ID в дереве категорий
+  const findCategoriesById = (cats: Category[], ids: string[]): Category[] => {
+    const found: Category[] = []
+
+    const searchCategory = (cat: Category) => {
+      if (ids.includes(cat.id)) {
+        found.push(cat)
+      }
+      if (cat.children && cat.children.length > 0) {
+        cat.children.forEach(searchCategory)
+      }
+    }
+
+    cats.forEach(searchCategory)
+    return found
+  }
+
+  // Функция для развёртывания дерева категорий в плоский список
+  const flattenCategories = (cats: Category[], level: number = 0): Category[] => {
+    const result: Category[] = []
+
+    cats.forEach(cat => {
+      result.push({ ...cat, level })
+      if (cat.children && cat.children.length > 0) {
+        result.push(...flattenCategories(cat.children, level + 1))
+      }
+    })
+
+    return result
+  }
+
+  const selectedCategories = findCategoriesById(categories, formData.categoryIds)
+  const flatCategories = flattenCategories(categories)
 
   return (
     <div>
@@ -995,7 +1027,7 @@ export const ProductForm = ({
             
             {showCategorySelector && (
               <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
-                {categories.map((category) => (
+                {flatCategories.map((category) => (
                   <div key={category.id} className="flex items-center space-x-2">
                     <Checkbox
                       id={`category-${category.id}`}

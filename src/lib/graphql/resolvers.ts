@@ -1603,17 +1603,24 @@ export const resolvers = {
         const orderBy: Record<string, string> = {}
         orderBy[sortBy] = sortOrder
 
-        return await prisma.client.findMany({
+        const clients = await prisma.client.findMany({
           where,
           include: {
             profile: true,
             vehicles: true,
-            discounts: true
+            discounts: true,
+            legalEntities: true
           },
           orderBy,
           take: limit,
           skip: offset
         })
+
+        // Обеспечиваем, что legalEntities всегда массив, а не null
+        return clients.map(client => ({
+          ...client,
+          legalEntities: client.legalEntities || []
+        }))
       } catch (error) {
         console.error('Ошибка получения клиентов:', error)
         throw new Error('Не удалось получить клиентов')
@@ -1622,7 +1629,7 @@ export const resolvers = {
 
     client: async (_: unknown, { id }: { id: string }) => {
       try {
-        return await prisma.client.findUnique({
+        const client = await prisma.client.findUnique({
           where: { id },
           include: {
             profile: true,
@@ -1652,6 +1659,14 @@ export const resolvers = {
             }
           }
         })
+
+        if (!client) return null
+
+        // Обеспечиваем, что legalEntities всегда массив, а не null
+        return {
+          ...client,
+          legalEntities: client.legalEntities || []
+        }
       } catch (error) {
         console.error('Ошибка получения клиента:', error)
         throw new Error('Не удалось получить клиента')
@@ -1848,15 +1863,16 @@ export const resolvers = {
           throw new Error('CLIENT_NOT_FOUND')
         }
 
-        // Принудительно заменяем null bankDetails на пустые массивы
-        if (client && client.legalEntities) {
-          client.legalEntities = client.legalEntities.map(entity => ({
+        // Принудительно заменяем null на пустые массивы
+        const normalizedClient = {
+          ...client,
+          legalEntities: (client.legalEntities || []).map(entity => ({
             ...entity,
             bankDetails: entity.bankDetails || []
           }))
         }
 
-        return client
+        return normalizedClient
       } catch (error) {
         console.error('Ошибка получения данных клиента:', error)
 
@@ -7576,11 +7592,15 @@ export const resolvers = {
           include: {
             profile: true,
             vehicles: true,
-            discounts: true
+            discounts: true,
+            legalEntities: true
           }
         })
 
-        return client
+        return {
+          ...client,
+          legalEntities: client.legalEntities || []
+        }
       } catch (error) {
         console.error('Ошибка создания клиента:', error)
         if (error instanceof Error) {
@@ -7634,11 +7654,15 @@ export const resolvers = {
           include: {
             profile: true,
             vehicles: true,
-            discounts: true
+            discounts: true,
+            legalEntities: true
           }
         })
 
-        return client
+        return {
+          ...client,
+          legalEntities: client.legalEntities || []
+        }
       } catch (error) {
         console.error('Ошибка обновления клиента:', error)
         if (error instanceof Error) {
@@ -7691,11 +7715,15 @@ export const resolvers = {
           include: {
             profile: true,
             vehicles: true,
-            discounts: true
+            discounts: true,
+            legalEntities: true
           }
         })
 
-        return client
+        return {
+          ...client,
+          legalEntities: client.legalEntities || []
+        }
       } catch (error) {
         console.error('Ошибка подтверждения клиента:', error)
         if (error instanceof Error) {

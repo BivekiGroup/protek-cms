@@ -81,6 +81,11 @@ export default function ClientCardPage() {
 
   const client = data.client
 
+  // Определяем реальный тип клиента на основе наличия юридических лиц
+  const actualClientType = (client.legalEntities && client.legalEntities.length > 0)
+    ? 'Юридическое лицо'
+    : 'Физическое лицо'
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Заголовок */}
@@ -99,7 +104,7 @@ export default function ClientCardPage() {
             {client.name}
           </h1>
           <p className="text-muted-foreground">
-            Клиент #{client.clientNumber} • {client.type === 'INDIVIDUAL' ? 'Физическое лицо' : 'Юридическое лицо'}
+            Клиент #{client.clientNumber} • {actualClientType}
           </p>
         </div>
       </div>

@@ -804,6 +804,12 @@ export const GET_CLIENTS = gql`
         validFrom
         validTo
       }
+      legalEntities {
+        id
+        shortName
+        fullName
+        inn
+      }
       createdAt
       updatedAt
     }

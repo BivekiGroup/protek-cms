@@ -159,6 +159,9 @@ model Product {
   retailPrice                  Float?
   weight                       Float?
   dimensions                   String?
+  depth                        Float?
+  width                        Float?
+  height                       Float?
   unit                         String                  @default("шт")
   isVisible                    Boolean                 @default(true)
   applyDiscounts               Boolean                 @default(true)

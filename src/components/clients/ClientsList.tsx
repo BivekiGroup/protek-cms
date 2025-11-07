@@ -7,22 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Download, 
-  Upload,
-  Edit,
-  LogIn,
-  MoreHorizontal
-} from 'lucide-react'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+  Plus,
+  Search,
+  Filter,
+  Download,
+  Upload,
+  LogIn
+} from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -48,10 +40,17 @@ interface Client {
   phone: string
   markup?: number
   isConfirmed: boolean
+  inn?: string
   profile?: {
     name: string
     baseMarkup: number
   }
+  legalEntities?: Array<{
+    id: string
+    shortName: string
+    fullName: string
+    inn?: string
+  }>
   createdAt: string
 }
 
@@ -196,8 +195,31 @@ export const ClientsList = () => {
     })
   }
 
-  const getClientTypeLabel = (type: 'INDIVIDUAL' | 'LEGAL_ENTITY') => {
-    return type === 'INDIVIDUAL' ? 'Физ. лицо' : 'Юр. лицо'
+  const getClientTypeLabel = (client: Client) => {
+    // Если у клиента есть хотя бы одно юридическое лицо, показываем "Юр. лицо"
+    if (client.legalEntities && client.legalEntities.length > 0) {
+      return 'Юр. лицо'
+    }
+    // Иначе смотрим на тип клиента
+    return client.type === 'INDIVIDUAL' ? 'Физ. лицо' : 'Юр. лицо'
+  }
+
+  const getClientProfileType = (client: Client) => {
+    // Определяем тип профиля: ИП или ООО на основе первого юр.лица
+    if (client.legalEntities && client.legalEntities.length > 0) {
+      const firstLegal = client.legalEntities[0]
+      // Определяем по форме или можно добавить дополнительную логику
+      return firstLegal.shortName?.includes('ИП') ? 'ИП' : 'ООО'
+    }
+    return '—'
+  }
+
+  const getClientINN = (client: Client) => {
+    // Берем ИНН из первого юр.лица или из основного клиента
+    if (client.legalEntities && client.legalEntities.length > 0 && client.legalEntities[0].inn) {
+      return client.legalEntities[0].inn
+    }
+    return client.inn || '—'
   }
 
   if (loading) {
@@ -289,10 +311,11 @@ export const ClientsList = () => {
               <TableRow>
                 <TableHead>Номер клиента</TableHead>
                 <TableHead>Тип профиля</TableHead>
-                <TableHead>Имя</TableHead>
-                <TableHead>E-mail</TableHead>
+                <TableHead>ИНН</TableHead>
                 <TableHead>Наценка</TableHead>
+                <TableHead>Контактное лицо</TableHead>
                 <TableHead>Номер телефона</TableHead>
+                <TableHead>E-mail</TableHead>
                 <TableHead>Дата регистрации</TableHead>
                 <TableHead>Статус регистрации</TableHead>
                 <TableHead>Действия</TableHead>
@@ -300,56 +323,39 @@ export const ClientsList = () => {
             </TableHeader>
             <TableBody>
               {filteredClients.map((client: Client) => (
-                <TableRow key={client.id}>
+                <TableRow
+                  key={client.id}
+                  className="cursor-pointer hover:bg-gray-50"
+                  onClick={() => handleClientClick(client.id)}
+                >
                   <TableCell className="font-medium">
                     {client.clientNumber}
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">
-                      {getClientTypeLabel(client.type)}
+                      {getClientProfileType(client)}
                     </Badge>
                   </TableCell>
-                  <TableCell>
-                    <button
-                      onClick={() => handleClientClick(client.id)}
-                      className="text-blue-600 hover:text-blue-800 hover:underline text-left"
-                    >
-                      {client.name}
-                    </button>
-                  </TableCell>
-                  <TableCell>{client.email || '—'}</TableCell>
+                  <TableCell>{getClientINN(client)}</TableCell>
                   <TableCell>{client.markup ? `${client.markup}%` : '—'}</TableCell>
+                  <TableCell>{client.name}</TableCell>
                   <TableCell>{client.phone}</TableCell>
+                  <TableCell>{client.email || '—'}</TableCell>
                   <TableCell>{formatDate(client.createdAt)}</TableCell>
                   <TableCell>
                     <Badge variant={client.isConfirmed ? "default" : "destructive"}>
                       {client.isConfirmed ? 'Подтвержден' : 'Не подтвержден'}
                     </Badge>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleLoginAsClient(client)}
-                        title="Войти от имени пользователя"
-                      >
-                        <LogIn className="h-4 w-4" />
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEditClient(client.id)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Редактировать
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleLoginAsClient(client)}
+                      title="Войти от имени пользователя"
+                    >
+                      <LogIn className="h-4 w-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}

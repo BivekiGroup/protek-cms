@@ -54,6 +54,11 @@ interface Client {
   bankName?: string
   bankBik?: string
   correspondentAccount?: string
+  legalEntities?: Array<{
+    id: string
+    shortName: string
+    fullName: string
+  }>
   balanceHistory: Array<{
     id: string
     userId: string
@@ -78,9 +83,14 @@ interface GeneralSettingsProps {
 }
 
 export const GeneralSettings = ({ client, onUpdate }: GeneralSettingsProps) => {
+  // Определяем реальный тип клиента на основе наличия юридических лиц
+  const actualClientType = (client.legalEntities && client.legalEntities.length > 0)
+    ? 'LEGAL_ENTITY'
+    : 'INDIVIDUAL'
+
   const [formData, setFormData] = useState({
     name: client.name,
-    type: client.type,
+    type: actualClientType,
     email: client.email || '',
     phone: client.phone,
     profileId: client.profileId || '',
@@ -88,18 +98,6 @@ export const GeneralSettings = ({ client, onUpdate }: GeneralSettingsProps) => {
     emailNotifications: client.emailNotifications,
     smsNotifications: client.smsNotifications,
     pushNotifications: client.pushNotifications,
-    legalEntityType: client.legalEntityType || '',
-    legalEntityName: client.legalEntityName || '',
-    inn: client.inn || '',
-    kpp: client.kpp || '',
-    ogrn: client.ogrn || '',
-    okpo: client.okpo || '',
-    legalAddress: client.legalAddress || '',
-    actualAddress: client.actualAddress || '',
-    bankAccount: client.bankAccount || '',
-    bankName: client.bankName || '',
-    bankBik: client.bankBik || '',
-    correspondentAccount: client.correspondentAccount || '',
     comment: client.comment || ''
   })
 
@@ -221,18 +219,15 @@ export const GeneralSettings = ({ client, onUpdate }: GeneralSettingsProps) => {
             </div>
             <div className="space-y-2">
               <Label>Тип пользователя</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value) => handleInputChange('type', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="INDIVIDUAL">Физическое лицо</SelectItem>
-                  <SelectItem value="LEGAL_ENTITY">Юридическое лицо</SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                value={actualClientType === 'INDIVIDUAL' ? 'Физическое лицо' : 'Юридическое лицо'}
+                disabled
+              />
+              <p className="text-xs text-muted-foreground">
+                {actualClientType === 'LEGAL_ENTITY'
+                  ? `Определяется автоматически (есть ${client.legalEntities?.length || 0} юр. лиц)`
+                  : 'Определяется автоматически (нет юр. лиц)'}
+              </p>
             </div>
             <div className="space-y-2">
               <Label>E-mail</Label>
@@ -339,99 +334,6 @@ export const GeneralSettings = ({ client, onUpdate }: GeneralSettingsProps) => {
               </Select>
             </div>
           </div>
-
-          {/* Поля для юридических лиц */}
-          {formData.type === 'LEGAL_ENTITY' && (
-            <div className="space-y-4">
-              <Label className="text-base font-medium">Данные юридического лица</Label>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Тип юрлица</Label>
-                  <Input
-                    value={formData.legalEntityType}
-                    onChange={(e) => handleInputChange('legalEntityType', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Наименование юрлица</Label>
-                  <Input
-                    value={formData.legalEntityName}
-                    onChange={(e) => handleInputChange('legalEntityName', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>ИНН</Label>
-                  <Input
-                    value={formData.inn}
-                    onChange={(e) => handleInputChange('inn', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>КПП</Label>
-                  <Input
-                    value={formData.kpp}
-                    onChange={(e) => handleInputChange('kpp', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>ОГРН</Label>
-                  <Input
-                    value={formData.ogrn}
-                    onChange={(e) => handleInputChange('ogrn', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>ОКПО</Label>
-                  <Input
-                    value={formData.okpo}
-                    onChange={(e) => handleInputChange('okpo', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Юридический адрес</Label>
-                  <Input
-                    value={formData.legalAddress}
-                    onChange={(e) => handleInputChange('legalAddress', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Фактический адрес</Label>
-                  <Input
-                    value={formData.actualAddress}
-                    onChange={(e) => handleInputChange('actualAddress', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Расчетный счет</Label>
-                  <Input
-                    value={formData.bankAccount}
-                    onChange={(e) => handleInputChange('bankAccount', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Название банка</Label>
-                  <Input
-                    value={formData.bankName}
-                    onChange={(e) => handleInputChange('bankName', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>БИК</Label>
-                  <Input
-                    value={formData.bankBik}
-                    onChange={(e) => handleInputChange('bankBik', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Кор счет</Label>
-                  <Input
-                    value={formData.correspondentAccount}
-                    onChange={(e) => handleInputChange('correspondentAccount', e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Баланс */}
           <div className="space-y-4">
