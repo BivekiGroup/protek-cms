@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from 'react'
-import { useQuery } from '@apollo/client'
+import { useQuery, useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,7 +23,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { GET_CLIENTS } from '@/lib/graphql/queries'
+import { CONFIRM_CLIENT } from '@/lib/graphql/mutations'
 import { CreateClientModal } from './CreateClientModal'
 import { ImportClientsModal } from './ImportClientsModal'
 import { ClientsFilters, FilterValues } from './ClientsFilters'
@@ -59,15 +68,29 @@ export const ClientsList = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false)
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [filters, setFilters] = useState<FilterValues>({
     type: 'ALL',
     isConfirmed: 'ALL',
     hasEmail: 'ALL',
     hasProfile: 'ALL'
   })
-  
+
   const router = useRouter()
-  const { data, loading, error } = useQuery(GET_CLIENTS)
+  const { data, loading, error, refetch } = useQuery(GET_CLIENTS)
+
+  const [confirmClient, { loading: confirmLoading }] = useMutation(CONFIRM_CLIENT, {
+    onCompleted: () => {
+      toast.success('Клиент подтвержден, письмо отправлено на почту')
+      setConfirmDialogOpen(false)
+      setSelectedClient(null)
+      refetch()
+    },
+    onError: (error) => {
+      toast.error(`Ошибка подтверждения: ${error.message}`)
+    }
+  })
 
   const frontendOrigin = useMemo(() => {
     return (process.env.NEXT_PUBLIC_FRONTEND_ORIGIN || (process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://protekauto.ru'))
@@ -144,6 +167,19 @@ export const ClientsList = () => {
     router.push(`/dashboard/clients/${clientId}`)
   }
 
+  const handleStatusClick = (e: React.MouseEvent, client: Client) => {
+    e.stopPropagation()
+    if (!client.isConfirmed) {
+      setSelectedClient(client)
+      setConfirmDialogOpen(true)
+    }
+  }
+
+  const handleConfirmClient = async () => {
+    if (!selectedClient) return
+    await confirmClient({ variables: { id: selectedClient.id } })
+  }
+
   const handleApplyFilters = (newFilters: FilterValues) => {
     setFilters(newFilters)
   }
@@ -204,12 +240,47 @@ export const ClientsList = () => {
     return client.type === 'INDIVIDUAL' ? 'Физ. лицо' : 'Юр. лицо'
   }
 
+  const abbreviateName = (name: string) => {
+    // Функция для сокращения ФИО до формата "Фамилия И. О."
+    const parts = name.trim().split(/\s+/)
+    if (parts.length === 0) return name
+
+    if (parts.length === 1) {
+      return parts[0] // Только фамилия или название
+    } else if (parts.length === 2) {
+      return `${parts[0]} ${parts[1][0]}.` // Фамилия И.
+    } else {
+      // Фамилия И. О.
+      return `${parts[0]} ${parts[1][0]}. ${parts[2][0]}.`
+    }
+  }
+
   const getClientProfileType = (client: Client) => {
-    // Определяем тип профиля: ИП или ООО на основе первого юр.лица
+    // Определяем тип профиля: ИП или ООО на основе первого юр.лица с названием
     if (client.legalEntities && client.legalEntities.length > 0) {
       const firstLegal = client.legalEntities[0]
-      // Определяем по форме или можно добавить дополнительную логику
-      return firstLegal.shortName?.includes('ИП') ? 'ИП' : 'ООО'
+      const shortName = firstLegal.shortName || ''
+
+      // Определяем тип и возвращаем с сокращенным названием
+      if (shortName.includes('ИП')) {
+        const nameWithoutPrefix = shortName.replace(/^ИП\s+/i, '')
+        return `ИП ${abbreviateName(nameWithoutPrefix)}`
+      } else if (shortName.includes('ООО')) {
+        const nameWithoutPrefix = shortName.replace(/^ООО\s+/i, '')
+        return `ООО ${nameWithoutPrefix}` // ООО обычно не ФИО, оставляем как есть
+      } else if (shortName.includes('АО')) {
+        const nameWithoutPrefix = shortName.replace(/^АО\s+/i, '')
+        return `АО ${nameWithoutPrefix}`
+      } else if (shortName.includes('ПАО')) {
+        const nameWithoutPrefix = shortName.replace(/^ПАО\s+/i, '')
+        return `ПАО ${nameWithoutPrefix}`
+      } else if (shortName.includes('ЗАО')) {
+        const nameWithoutPrefix = shortName.replace(/^ЗАО\s+/i, '')
+        return `ЗАО ${nameWithoutPrefix}`
+      } else {
+        // Если не можем определить тип, просто возвращаем короткое название
+        return shortName
+      }
     }
     return '—'
   }
@@ -342,8 +413,12 @@ export const ClientsList = () => {
                   <TableCell>{client.phone}</TableCell>
                   <TableCell>{client.email || '—'}</TableCell>
                   <TableCell>{formatDate(client.createdAt)}</TableCell>
-                  <TableCell>
-                    <Badge variant={client.isConfirmed ? "default" : "destructive"}>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Badge
+                      variant={client.isConfirmed ? "default" : "destructive"}
+                      className={!client.isConfirmed ? "cursor-pointer hover:opacity-80" : ""}
+                      onClick={(e) => handleStatusClick(e, client)}
+                    >
                       {client.isConfirmed ? 'Подтвержден' : 'Не подтвержден'}
                     </Badge>
                   </TableCell>
@@ -387,6 +462,34 @@ export const ClientsList = () => {
         onApplyFilters={handleApplyFilters}
         currentFilters={filters}
       />
+
+      {/* Модалка подтверждения клиента */}
+      <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Подтверждение клиента</DialogTitle>
+            <DialogDescription>
+              Вы собираетесь подтвердить клиента <strong>{selectedClient?.name}</strong>.
+              После подтверждения на email <strong>{selectedClient?.email || 'не указан'}</strong> будет отправлено уведомление.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDialogOpen(false)}
+              disabled={confirmLoading}
+            >
+              Отмена
+            </Button>
+            <Button
+              onClick={handleConfirmClient}
+              disabled={confirmLoading}
+            >
+              {confirmLoading ? 'Подтверждение...' : 'Подтвердить и отправить письмо'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 } 

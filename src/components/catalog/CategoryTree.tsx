@@ -59,6 +59,13 @@ interface CategoryItemProps {
   level?: number
 }
 
+// Рекурсивная функция для подсчета товаров во всей ветке категорий
+const getTotalProductCount = (category: Category): number => {
+  const directCount = category._count?.products || 0
+  const childrenCount = category.children?.reduce((sum, child) => sum + getTotalProductCount(child), 0) || 0
+  return directCount + childrenCount
+}
+
 const CategoryItem = ({ 
   category, 
   selectedCategoryId, 
@@ -74,6 +81,8 @@ const CategoryItem = ({
   const hasChildren = category.children && category.children.length > 0
   const isSelected = selectedCategoryId === category.id
   const paddingLeft = level * 12 + 8
+  const totalProducts = getTotalProductCount(category)
+  const hasProducts = totalProducts > 0
 
   const handleToggle = () => {
     if (hasChildren) {
@@ -140,7 +149,10 @@ const CategoryItem = ({
         >
           <span className={cn(
             "truncate text-xs",
-            isSelected ? "font-medium text-blue-700" : "text-gray-700",
+            isSelected && hasProducts && "font-medium text-blue-700",
+            isSelected && !hasProducts && "font-medium text-blue-400",
+            !isSelected && hasProducts && "text-gray-700",
+            !isSelected && !hasProducts && "text-gray-400",
             category.isHidden && "opacity-50 italic"
           )}>
             {category.name}
@@ -148,11 +160,12 @@ const CategoryItem = ({
               <EyeOff className="w-2.5 h-2.5 inline ml-1" />
             )}
           </span>
-          {category._count && category._count.products > 0 && (
-            <span className="ml-1.5 text-[10px] text-gray-400">
-              ({category._count.products})
-            </span>
-          )}
+          <span className={cn(
+            "ml-1.5 text-[10px]",
+            hasProducts ? "text-gray-500 font-medium" : "text-gray-300"
+          )}>
+            ({totalProducts})
+          </span>
         </div>
 
         {/* Меню действий */}
@@ -242,21 +255,19 @@ export const CategoryTree = ({
 
   return (
     <div className="py-2">
-      {/* Пункт "Все товары" */}
-      <div 
-        className={cn(
-          "flex items-center py-2 px-3 hover:bg-gray-50 cursor-pointer",
-          selectedCategoryId === null && "bg-blue-50 border-r-2 border-blue-500"
-        )}
-        onClick={() => onCategorySelect(null)}
-      >
-        <div className="w-4 h-4 mr-2" />
-        <span className={cn(
-          "text-sm",
-          selectedCategoryId === null ? "font-medium text-blue-700" : "text-gray-700"
-        )}>
+      {/* Кнопка "Все товары" */}
+      <div className="px-3 pb-3">
+        <Button
+          variant={selectedCategoryId === null ? "default" : "outline"}
+          size="sm"
+          className={cn(
+            "w-full justify-start text-sm font-medium",
+            selectedCategoryId === null && "bg-blue-600 hover:bg-blue-700 text-white"
+          )}
+          onClick={() => onCategorySelect(null)}
+        >
           Все товары
-        </span>
+        </Button>
       </div>
 
       {/* Разделитель */}

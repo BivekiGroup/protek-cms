@@ -514,18 +514,27 @@ export const GET_CATEGORIES = gql`
         slug
         isHidden
         level
+        _count {
+          products
+        }
         children {
           id
           name
           slug
           isHidden
           level
+          _count {
+            products
+          }
           children {
             id
             name
             slug
             isHidden
             level
+            _count {
+              products
+            }
           }
         }
       }

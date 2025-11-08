@@ -38,7 +38,13 @@ const GET_UNVERIFIED_CLIENTS = gql`
       lastName
       email
       phone
+      companyName
       createdAt
+      legalEntities {
+        id
+        inn
+        shortName
+      }
     }
     unverifiedClientsCount
   }
@@ -69,7 +75,13 @@ interface UnverifiedClient {
   lastName?: string
   email?: string
   phone: string
+  companyName?: string
   createdAt: string
+  legalEntities?: Array<{
+    id: string
+    inn: string
+    shortName: string
+  }>
 }
 
 export const UnverifiedClientsList = () => {
@@ -176,6 +188,8 @@ export const UnverifiedClientsList = () => {
                   <TableRow>
                     <TableHead>Номер</TableHead>
                     <TableHead>ФИО</TableHead>
+                    <TableHead>Компания</TableHead>
+                    <TableHead>ИНН</TableHead>
                     <TableHead>Телефон</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Дата регистрации</TableHead>
@@ -197,6 +211,14 @@ export const UnverifiedClientsList = () => {
                             </span>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {client.companyName ||
+                         client.legalEntities?.[0]?.shortName ||
+                         '-'}
+                      </TableCell>
+                      <TableCell>
+                        {client.legalEntities?.[0]?.inn || '-'}
                       </TableCell>
                       <TableCell>{client.phone}</TableCell>
                       <TableCell>{client.email || '-'}</TableCell>
@@ -238,6 +260,12 @@ export const UnverifiedClientsList = () => {
           {selectedClient && (
             <div className="space-y-2 py-4">
               <p><strong>ФИО:</strong> {selectedClient.name}</p>
+              {(selectedClient.companyName || selectedClient.legalEntities?.[0]?.shortName) && (
+                <p><strong>Компания:</strong> {selectedClient.companyName || selectedClient.legalEntities?.[0]?.shortName}</p>
+              )}
+              {selectedClient.legalEntities?.[0]?.inn && (
+                <p><strong>ИНН:</strong> {selectedClient.legalEntities[0].inn}</p>
+              )}
               <p><strong>Телефон:</strong> {selectedClient.phone}</p>
               <p><strong>Email:</strong> {selectedClient.email || 'Не указан'}</p>
               <div className="mt-4 p-4 bg-blue-50 rounded-md">

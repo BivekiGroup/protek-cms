@@ -79,9 +79,19 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // Генерируем номер клиента
-        const clientCount = await prisma.client.count()
-        const clientNumber = `CL${(clientCount + 1).toString().padStart(6, '0')}`
+        // Генерируем номер клиента (CL + 4 цифры)
+        const lastClient = await prisma.client.findFirst({
+          where: {
+            clientNumber: {
+              startsWith: 'CL'
+            }
+          },
+          orderBy: { clientNumber: 'desc' }
+        })
+        const lastNumber = lastClient
+          ? parseInt(lastClient.clientNumber.replace(/^CL/, ''))
+          : 999
+        const clientNumber = `CL${(lastNumber + 1).toString().padStart(4, '0')}`
 
         // Создаем клиента
         await prisma.client.create({

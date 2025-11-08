@@ -1739,7 +1739,8 @@ export const resolvers = {
           },
           include: {
             profile: true,
-            manager: true
+            manager: true,
+            legalEntities: true
           },
           orderBy: {
             createdAt: 'desc'
@@ -2153,6 +2154,41 @@ export const resolvers = {
       } catch (error) {
         console.error('Ошибка получения статуса клиента:', error)
         throw new Error('Не удалось получить статус клиента')
+      }
+    },
+
+    verifyInn: async (_: unknown, { inn }: { inn: string }) => {
+      try {
+        const apiKey = process.env.DADATA_API_KEY
+        if (!apiKey) {
+          console.error('DADATA_API_KEY не настроен')
+          return { success: false, company: null }
+        }
+
+        const response = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Token ${apiKey}`,
+          },
+          body: JSON.stringify({ query: inn }),
+        })
+
+        if (!response.ok) {
+          console.error('Ошибка DaData API:', response.status)
+          return { success: false, company: null }
+        }
+
+        const data = await response.json()
+        if (data.suggestions && data.suggestions.length > 0) {
+          return { success: true, company: data.suggestions[0].data }
+        }
+
+        return { success: false, company: null }
+      } catch (error) {
+        console.error('Ошибка проверки ИНН:', error)
+        return { success: false, company: null }
       }
     },
 
@@ -7550,14 +7586,22 @@ export const resolvers = {
           throw new Error('Пользователь не авторизован')
         }
 
-        // Генерируем номер клиента, если не указан
+        // Генерируем номер клиента, если не указан (CL + 4 цифры)
         let clientNumber = input.clientNumber
         if (!clientNumber) {
           const lastClient = await prisma.client.findFirst({
+            where: {
+              clientNumber: {
+                startsWith: 'CL'
+              }
+            },
             orderBy: { clientNumber: 'desc' }
           })
-          const lastNumber = lastClient ? parseInt(lastClient.clientNumber) : 100000
-          clientNumber = (lastNumber + 1).toString()
+          // Извлекаем последний номер или начинаем с 1000
+          const lastNumber = lastClient
+            ? parseInt(lastClient.clientNumber.replace(/^CL/, ''))
+            : 999
+          clientNumber = `CL${(lastNumber + 1).toString().padStart(4, '0')}`
         }
 
         const client = await prisma.client.create({
@@ -9387,9 +9431,26 @@ export const resolvers = {
     },
 
     // Новая система авторизации с паролем
-    registerClientWithPassword: async (_: unknown, { input }: { input: { phone: string; firstName: string; lastName: string; companyName?: string; email: string } }) => {
+    registerClientWithPassword: async (_: unknown, { input }: {
+      input: {
+        inn: string;
+        phone: string;
+        firstName: string;
+        lastName: string;
+        companyName?: string;
+        email: string;
+        legalEntityData?: {
+          shortName: string;
+          fullName: string;
+          inn: string;
+          kpp?: string;
+          ogrn?: string;
+          address?: string;
+        }
+      }
+    }) => {
       try {
-        console.log(`Регистрация нового клиента: ${input.phone}, ${input.firstName} ${input.lastName}`)
+        console.log(`Регистрация нового клиента: ${input.phone}, ${input.firstName} ${input.lastName}, ИНН: ${input.inn}`)
 
         // Проверяем, что клиент еще не существует
         const existingClient = await prisma.client.findFirst({
@@ -9410,11 +9471,34 @@ export const resolvers = {
           }
         }
 
+        // Проверяем уникальность ИНН
+        const existingInn = await prisma.clientLegalEntity.findFirst({
+          where: { inn: input.inn }
+        })
+
+        if (existingInn) {
+          throw new Error('Организация с таким ИНН уже зарегистрирована')
+        }
+
+        // Генерируем новый номер клиента
+        const lastClient = await prisma.client.findFirst({
+          where: {
+            clientNumber: {
+              startsWith: 'CL'
+            }
+          },
+          orderBy: { clientNumber: 'desc' }
+        })
+        const lastNumber = lastClient
+          ? parseInt(lastClient.clientNumber.replace(/^CL/, ''))
+          : 999
+        const clientNumber = `CL${(lastNumber + 1).toString().padStart(4, '0')}`
+
         // Создаем нового клиента БЕЗ пароля (ожидает проверки менеджером)
         const client = await prisma.client.create({
           data: {
-            clientNumber: `CL${Date.now()}`,
-            type: 'INDIVIDUAL',
+            clientNumber,
+            type: 'LEGAL_ENTITY',  // Теперь всегда юр.лицо, т.к. требуется ИНН
             name: `${input.firstName} ${input.lastName}`.trim(),
             firstName: input.firstName,
             lastName: input.lastName,
@@ -9427,14 +9511,30 @@ export const resolvers = {
             balance: 0,
             emailNotifications: true,
             smsNotifications: false,
-            pushNotifications: false
+            pushNotifications: false,
+            // Создаем юридическое лицо сразу при регистрации
+            legalEntities: input.legalEntityData ? {
+              create: {
+                shortName: input.legalEntityData.shortName,
+                fullName: input.legalEntityData.fullName,
+                inn: input.legalEntityData.inn,
+                ogrn: input.legalEntityData.ogrn || '',
+                form: 'ООО',  // Временное значение, можно уточнить позже
+                legalAddress: input.legalEntityData.address || 'Не указан',
+                taxSystem: 'УСН'  // Временное значение по умолчанию
+              }
+            } : undefined
           },
           include: {
-            profile: true
+            profile: true,
+            legalEntities: true
           }
         })
 
         console.log(`Клиент зарегистрирован (ожидает проверки менеджером): ${client.clientNumber}`)
+        if (input.legalEntityData) {
+          console.log(`Создано юр.лицо с ИНН: ${input.legalEntityData.inn}`)
+        }
 
         return {
           success: true,

@@ -128,149 +128,158 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Главная панель</h1>
-        <p className="text-gray-600">Обзор новых заказов и новых клиентов</p>
+    <div className="p-4 space-y-4">
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Главная панель</h1>
+        <p className="text-sm text-gray-600">Обзор новых заказов и новых клиентов</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Новые заказы</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{ordersLoading ? '…' : ordersTotal}</div>
-            <p className="text-xs text-muted-foreground">Требуют обработки</p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 md:grid-cols-3 mb-4">
+        <Link href="/dashboard/orders">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Новые заказы</CardTitle>
+              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">{ordersLoading ? '…' : ordersTotal}</div>
+              <p className="text-xs text-muted-foreground">Требуют обработки</p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Новые клиенты (7 дней)</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{clientsLoading ? '…' : recentClientsTotal}</div>
-            <p className="text-xs text-muted-foreground">Зарегистрировались за неделю</p>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/clients">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Новые клиенты (7 дней)</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">{clientsLoading ? '…' : recentClientsTotal}</div>
+              <p className="text-xs text-muted-foreground">Зарегистрировались за неделю</p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Неподтверждённые клиенты</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{clientsLoading ? '…' : (recentClients.filter((c: any) => !c.isConfirmed).length)}</div>
-            <p className="text-xs text-muted-foreground">Требуют подтверждения</p>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/clients?tab=unverified">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Неподтверждённые клиенты</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-orange-600">{clientsLoading ? '…' : (recentClients.filter((c: any) => !c.isConfirmed).length)}</div>
+              <p className="text-xs text-muted-foreground">Требуют подтверждения</p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between py-3">
           <div>
-            <CardTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5" />
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShoppingCart className="h-4 w-4" />
               Новые заказы
             </CardTitle>
-            <CardDescription>Заказы, требующие обработки</CardDescription>
+            <CardDescription className="text-xs">Заказы, требующие обработки</CardDescription>
           </div>
-          <Button variant="outline" asChild>
+          <Button variant="outline" size="sm" asChild>
             <Link href="/dashboard/orders">
               Все заказы
-              <ExternalLink className="ml-2 h-4 w-4" />
+              <ExternalLink className="ml-2 h-3 w-3" />
             </Link>
           </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
           {ordersLoading ? (
-            <div className="text-center py-8 text-gray-500">Загрузка…</div>
+            <div className="text-center py-6 text-sm text-gray-500">Загрузка…</div>
           ) : newOrders.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">Нет новых заказов</div>
+            <div className="text-center py-6 text-sm text-gray-500">Нет новых заказов</div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-2">
               {newOrders.map((order: any) => (
-                <div key={order.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <div className="flex items-center space-x-4">
-                    <div>
-                      <Link href={`/dashboard/orders`} className="font-semibold text-blue-600 hover:text-blue-800">#{order.orderNumber}</Link>
-                      <div className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleString('ru-RU')}</div>
+                <Link key={order.id} href={`/dashboard/orders`}>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+                    <div className="flex items-center space-x-3">
+                      <div>
+                        <div className="font-semibold text-sm text-blue-600">#{order.orderNumber}</div>
+                        <div className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleString('ru-RU')}</div>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        {order.clientName || order.clientPhone || 'Клиент'}
+                      </div>
+                      <div className="font-semibold text-sm">{formatCurrency(order.finalAmount, order.currency)}</div>
                     </div>
-                    <div>
-                      <Link href={`/dashboard/clients`} className="text-blue-600 hover:text-blue-800">{order.clientName || order.clientPhone || 'Клиент'}</Link>
+                    <div className="flex items-center space-x-2">
+                      <Badge variant="secondary" className={`text-xs ${statusBadgeColor(order.status)}`}>
+                        {statusLabels[order.status] || order.status}
+                      </Badge>
+                      {order.status === 'CANCELED' && (<AlertCircle className="h-3 w-3 text-red-500" />)}
                     </div>
-                    <div className="font-semibold">{formatCurrency(order.finalAmount, order.currency)}</div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Badge variant="secondary" className={statusBadgeColor(order.status)}>
-                      {statusLabels[order.status] || order.status}
-                    </Badge>
-                    {order.status === 'CANCELED' && (<AlertCircle className="h-4 w-4 text-red-500" />)}
-                  </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Аналитика</CardTitle>
-            <ExternalLink className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm text-gray-700 mb-3">Поисковые запросы и просмотры товаров</div>
-            <Button asChild variant="outline">
-              <Link href="/dashboard/analytics">Открыть</Link>
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Link href="/dashboard/analytics">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Аналитика</CardTitle>
+              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm text-gray-700">Поисковые запросы и просмотры товаров</div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between py-3">
           <div>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Users className="h-4 w-4" />
               Новые клиенты (7 дней)
             </CardTitle>
-            <CardDescription>Последние регистрации</CardDescription>
+            <CardDescription className="text-xs">Последние регистрации</CardDescription>
           </div>
-          <Button variant="outline" asChild>
+          <Button variant="outline" size="sm" asChild>
             <Link href="/dashboard/clients">
               Все клиенты
-              <ExternalLink className="ml-2 h-4 w-4" />
+              <ExternalLink className="ml-2 h-3 w-3" />
             </Link>
           </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
           {clientsLoading ? (
-            <div className="text-center py-8 text-gray-500">Загрузка…</div>
+            <div className="text-center py-6 text-sm text-gray-500">Загрузка…</div>
           ) : recentClients.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">Нет новых клиентов за период</div>
+            <div className="text-center py-6 text-sm text-gray-500">Нет новых клиентов за период</div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-2">
               {recentClients.map((client: any) => (
                 <div
                   key={client.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
                   onClick={() => handleClientClick(client)}
                 >
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-3">
                     <div>
-                      <div className="font-semibold">{client.name}</div>
-                      <div className="text-sm text-gray-500">{client.phone || client.email || '—'}</div>
+                      <div className="font-semibold text-sm">{client.name}</div>
+                      <div className="text-xs text-gray-500">{client.phone || client.email || '—'}</div>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Badge variant={client.isConfirmed ? 'secondary' : 'destructive'}>{client.isConfirmed ? 'Подтверждён' : 'Не подтверждён'}</Badge>
+                    <Badge variant={client.isConfirmed ? 'secondary' : 'destructive'} className="text-xs">
+                      {client.isConfirmed ? 'Подтверждён' : 'Не подтверждён'}
+                    </Badge>
                     <span title={new Date(client.createdAt).toLocaleString('ru-RU')}>
-                      <Clock className="h-4 w-4 text-gray-400" />
+                      <Clock className="h-3 w-3 text-gray-400" />
                     </span>
                   </div>
                 </div>

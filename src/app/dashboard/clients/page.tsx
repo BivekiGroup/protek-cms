@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientsList } from '@/components/clients/ClientsList'
 import { ProfilesList } from '@/components/clients/ProfilesList'
@@ -9,7 +10,15 @@ import { StatusesList } from '@/components/clients/StatusesList'
 import { UnverifiedClientsList } from '@/components/clients/UnverifiedClientsList'
 
 export default function ClientsPage() {
-  const [activeTab, setActiveTab] = useState('clients')
+  const searchParams = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState(tabParam || 'clients')
+
+  useEffect(() => {
+    if (tabParam) {
+      setActiveTab(tabParam)
+    }
+  }, [tabParam])
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">

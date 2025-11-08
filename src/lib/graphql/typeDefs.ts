@@ -315,7 +315,7 @@ export const typeDefs = gql`
     deliveryAddresses: [ClientDeliveryAddress!]!
     contacts: [ClientContact!]!
     contracts: [ClientContract!]!
-    legalEntities: [ClientLegalEntity!]!
+    legalEntities: [ClientLegalEntity!]
     bankDetails: [ClientBankDetails!]!
     balanceHistory: [ClientBalanceHistory!]!
     favorites: [Favorite!]!
@@ -443,6 +443,11 @@ export const typeDefs = gql`
     model: String
     searchDate: DateTime!
     searchQuery: String
+  }
+
+  type InnVerificationResult {
+    success: Boolean!
+    company: JSON
   }
 
   type VehicleSearchResult {
@@ -795,12 +800,23 @@ export const typeDefs = gql`
     password: String
   }
 
+  input LegalEntityDataInput {
+    shortName: String!
+    fullName: String!
+    inn: String!
+    kpp: String
+    ogrn: String
+    address: String
+  }
+
   input RegisterClientInput {
+    inn: String!
     phone: String!
     firstName: String!
     lastName: String!
     companyName: String
     email: String!
+    legalEntityData: LegalEntityDataInput
   }
 
   input ClientVehicleInput {
@@ -1103,6 +1119,7 @@ export const typeDefs = gql`
     clientProfile(id: ID!): ClientProfile
     clientStatuses: [ClientStatus!]!
     clientStatus(id: ID!): ClientStatus
+    verifyInn(inn: String!): InnVerificationResult
     
     # Скидки и промокоды
     discounts: [Discount!]!
