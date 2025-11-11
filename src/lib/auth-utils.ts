@@ -27,9 +27,9 @@ export function generateLogin(phone: string, fullName: string): string {
 
 /**
  * Генерирует случайный пароль
- * 12 символов: заглавные, строчные буквы, цифры и спецсимволы
+ * 6 символов: заглавные, строчные буквы, цифры и спецсимволы
  */
-export function generatePassword(length: number = 12): string {
+export function generatePassword(length: number = 6): string {
   const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
   const lowercase = 'abcdefghijklmnopqrstuvwxyz'
   const digits = '0123456789'

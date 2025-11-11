@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { renderToBuffer } from '@react-pdf/renderer'
-import React from 'react'
-import InvoicePDF from '@/components/invoice/InvoicePDF'
+import { generateInvoicePDF } from '@/lib/generateInvoicePDF'
 import { uploadBuffer } from '@/lib/s3'
 
 export async function GET(
@@ -22,23 +20,20 @@ export async function GET(
     const token = authHeader.substring(7)
 
     // Проверяем тип токена
-    let isPublicAccess = false
     let clientId: string | null = null
 
     if (token.startsWith('client_')) {
-      // Временный публичный доступ - токен содержит orderId
-      const tokenOrderId = token.substring(7)
-      // Проверяем, что orderId в токене совпадает с запрашиваемым
-      if (tokenOrderId !== id) {
-        return NextResponse.json({ error: 'Недействительный токен доступа' }, { status: 403 })
-      }
-      isPublicAccess = true
+      // Клиентский токен из localStorage - содержит clientId
+      const tokenClientId = token.substring(7)
+      console.log('🔍 Client token detected, clientId:', tokenClientId)
+      clientId = tokenClientId
     } else {
       // Для обычных JWT токенов - проверяем, это менеджер или админ
       const payload = verifyToken(token)
       if (!payload) {
         return NextResponse.json({ error: 'Недействительный токен' }, { status: 401 })
       }
+      console.log('🔍 JWT token verified, role:', payload.role)
       // Менеджеры и админы могут скачивать счета любых клиентов
       // Если это клиент, получаем его clientId из токена
       if (payload.role === 'client' && 'clientId' in payload) {
@@ -49,9 +44,10 @@ export async function GET(
     // Ищем заказ
     const whereCondition: any = { id: id }
 
-    // Если это авторизованный клиент (не публичный доступ), фильтруем по clientId
-    if (clientId && !isPublicAccess) {
+    // Если это клиент (не менеджер/админ), фильтруем по clientId
+    if (clientId) {
       whereCondition.clientId = clientId
+      console.log('🔍 Filtering order by clientId:', clientId)
     }
 
     const order = await prisma.order.findFirst({
@@ -87,34 +83,47 @@ export async function GET(
       return NextResponse.json({ error: 'Счет доступен только для заказов с оплатой по счету' }, { status: 400 })
     }
 
-    // Если счет уже был сгенерирован, возвращаем его URL
+    // Проверяем, нужно ли генерировать PDF
+    let pdfBuffer: Buffer
+
     if (order.invoiceUrl) {
-      console.log('✅ Invoice already exists, redirecting to:', order.invoiceUrl)
-      return NextResponse.redirect(order.invoiceUrl)
+      console.log('✅ Invoice already exists, fetching from S3:', order.invoiceUrl)
+      // Если счет уже существует, скачиваем его из S3
+      const response = await fetch(order.invoiceUrl)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch existing invoice from S3: ${response.status}`)
+      }
+      pdfBuffer = Buffer.from(await response.arrayBuffer())
+    } else {
+      console.log('📄 Generating new PDF invoice for order:', order.orderNumber)
+
+      // Генерируем PDF используя PDFKit
+      pdfBuffer = await generateInvoicePDF(order as any)
+
+      // Загружаем PDF в S3
+      const key = `invoices/${order.orderNumber}-${Date.now()}.pdf`
+      const uploadResult = await uploadBuffer(pdfBuffer, key, 'application/pdf')
+
+      console.log('☁️ PDF uploaded to S3:', uploadResult.url)
+
+      // Сохраняем URL счета в базу данных
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { invoiceUrl: uploadResult.url }
+      })
+
+      console.log('✅ Invoice URL saved to database')
     }
 
-    console.log('📄 Generating new PDF invoice for order:', order.orderNumber)
-
-    // Генерируем PDF используя @react-pdf/renderer
-    // @ts-expect-error - InvoicePDF возвращает Document, renderToBuffer принимает его
-    const pdfBuffer = await renderToBuffer(React.createElement(InvoicePDF, { order }))
-
-    // Загружаем PDF в S3
-    const key = `invoices/${order.orderNumber}-${Date.now()}.pdf`
-    const uploadResult = await uploadBuffer(pdfBuffer, key, 'application/pdf')
-
-    console.log('☁️ PDF uploaded to S3:', uploadResult.url)
-
-    // Сохраняем URL счета в базу данных
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { invoiceUrl: uploadResult.url }
+    // Возвращаем PDF напрямую вместо редиректа (чтобы избежать CORS проблем)
+    return new NextResponse(pdfBuffer, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="Invoice-${order.orderNumber}.pdf"`,
+        'Access-Control-Allow-Origin': process.env.FRONTEND_ORIGIN || 'http://localhost:3001',
+      }
     })
-
-    console.log('✅ Invoice URL saved to database')
-
-    // Перенаправляем на URL в S3
-    return NextResponse.redirect(uploadResult.url)
 
   } catch (error) {
     console.error('Ошибка создания PDF счета:', error)

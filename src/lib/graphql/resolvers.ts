@@ -10395,16 +10395,24 @@ export const resolvers = {
           }
         }
         
-        // Генерируем номер заказа
-        const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+        // Генерируем короткий номер заказа (ORD-001-ABC12)
+        // Используем счетчик заказов для уникальности
+        const ordersCount = await prisma.order.count()
+        const orderSequence = (ordersCount + 1).toString().padStart(3, '0')
+        const randomSuffix = Math.random().toString(36).substr(2, 5).toUpperCase()
+        const orderNumber = `ORD-${orderSequence}-${randomSuffix}`
         
+        // Логируем входные данные для отладки
+        console.log('createOrder: input.paymentMethod =', input.paymentMethod)
+        console.log('createOrder: определяем статус:', input.paymentMethod === 'invoice' ? 'PENDING' : 'PROCESSING')
+
         // Вычисляем общую сумму
         const totalAmount = input.items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-        
+
         // Определяем clientId, убирая префикс client_ если он есть
         const clientId = actualContext.clientId || input.clientId
-        const cleanClientId = clientId && clientId.startsWith('client_') 
-          ? clientId.substring(7) 
+        const cleanClientId = clientId && clientId.startsWith('client_')
+          ? clientId.substring(7)
           : clientId
 
         // Проверяем баланс для оплаты с баланса
@@ -10451,7 +10459,7 @@ export const resolvers = {
             clientName: input.clientName,
             legalEntityId: input.legalEntityId,
             paymentMethod: input.paymentMethod,
-            status: input.paymentMethod === 'invoice' ? 'PENDING' : 'PROCESSING',
+            status: input.paymentMethod === 'invoice' ? PrismaOrderStatus.PENDING : PrismaOrderStatus.PROCESSING,
             totalAmount,
             finalAmount: totalAmount, // Пока без скидок
             deliveryAddress: input.deliveryAddress,
@@ -10527,22 +10535,25 @@ export const resolvers = {
           }
         }
 
-        console.log('createOrder: заказ создан:', order.orderNumber)
+        console.log('createOrder: заказ создан:', order.orderNumber, 'со статусом:', order.status)
 
         // Генерируем PDF счет сразу, если способ оплаты - "По счёту"
         if (input.paymentMethod === 'invoice') {
+          console.log('createOrder: способ оплаты = invoice, начинаем генерацию PDF счета')
           try {
             console.log('createOrder: генерируем PDF счет для заказа', order.orderNumber)
-            const { renderToBuffer } = await import('@react-pdf/renderer')
-            const React = await import('react')
-            const InvoicePDF = (await import('@/components/invoice/InvoicePDF')).default
+            const { generateInvoicePDF } = await import('@/lib/generateInvoicePDF')
             const { uploadBuffer } = await import('@/lib/s3')
 
             // Получаем полный заказ с items для PDF
             const fullOrder = await prisma.order.findUnique({
               where: { id: order.id },
               include: {
-                client: true,
+                client: {
+                  include: {
+                    legalEntities: true
+                  }
+                },
                 items: {
                   include: {
                     product: true
@@ -10552,9 +10563,8 @@ export const resolvers = {
             })
 
             if (fullOrder) {
-              // Генерируем PDF
-              // @ts-expect-error - InvoicePDF возвращает Document, renderToBuffer принимает его
-              const pdfBuffer = await renderToBuffer(React.createElement(InvoicePDF, { order: fullOrder }))
+              // Генерируем PDF используя PDFKit
+              const pdfBuffer = await generateInvoicePDF(fullOrder as any)
 
               // Загружаем в S3
               const key = `invoices/${order.orderNumber}-${Date.now()}.pdf`
@@ -10562,13 +10572,25 @@ export const resolvers = {
 
               console.log('createOrder: PDF счет загружен в S3:', uploadResult.url)
 
-              // Сохраняем URL в заказе
-              await prisma.order.update({
+              // Сохраняем URL в заказе и обновляем объект order
+              const updatedOrder = await prisma.order.update({
                 where: { id: order.id },
-                data: { invoiceUrl: uploadResult.url }
+                data: { invoiceUrl: uploadResult.url },
+                include: {
+                  client: true,
+                  items: {
+                    include: {
+                      product: true
+                    }
+                  },
+                  payments: true
+                }
               })
 
               console.log('createOrder: invoiceUrl сохранен в БД')
+
+              // Возвращаем обновленный заказ с invoiceUrl
+              return updatedOrder
             }
           } catch (pdfError) {
             console.error('createOrder: ошибка генерации PDF счета:', pdfError)

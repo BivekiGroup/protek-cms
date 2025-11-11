@@ -1333,6 +1333,11 @@ export const GET_ORDERS = gql`
           name
           email
           phone
+          legalEntities {
+            id
+            shortName
+            fullName
+          }
         }
         clientEmail
         clientPhone

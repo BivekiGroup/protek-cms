@@ -1,15 +1,19 @@
 import React from 'react'
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer'
+import path from 'path'
 
-// Регистрируем шрифты для поддержки кириллицы
+// Регистрируем локальные TTF шрифты Roboto с полной поддержкой кириллицы
+const fontsDir = path.join(process.cwd(), 'public', 'fonts')
+
 Font.register({
   family: 'Roboto',
   fonts: [
     {
-      src: 'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.woff',
+      src: path.join(fontsDir, 'Roboto-Regular.ttf'),
+      fontWeight: 'normal',
     },
     {
-      src: 'https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmWUlfBBc4.woff',
+      src: path.join(fontsDir, 'Roboto-Bold.ttf'),
       fontWeight: 'bold',
     },
   ],
