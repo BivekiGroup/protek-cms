@@ -193,6 +193,7 @@ export const typeDefs = gql`
     characteristics: [ProductCharacteristic!]!
     relatedProducts: [Product!]!
     accessoryProducts: [Product!]!
+    firstExternalOffer: ExternalOffer
     createdAt: DateTime!
     updatedAt: DateTime!
   }
@@ -1276,7 +1277,7 @@ export const typeDefs = gql`
     news(id: ID!): News
     
     # Новые поступления
-    newArrivals(limit: Int = 8): [Product!]!
+    newArrivals(limit: Int = 6): [Product!]!
 
     # Товары по категории
     productsByCategory(categorySlug: String!, limit: Int = 100): [Product!]!
@@ -2111,6 +2112,7 @@ export const typeDefs = gql`
     totalOffers: Int!
     stockCalculation: StockCalculation!
     isInCart: Boolean!
+    categories: [Category!]!
   }
 
   type StockCalculation {

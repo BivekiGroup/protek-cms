@@ -3010,11 +3010,30 @@ export const resolvers = {
             articleNumber: articleNumber || '',
             brand: brand || '',
             name: 'По запросу',
+            description: null,
+            weight: null,
+            dimensions: null,
+            images: [],
+            characteristics: [],
+            partsIndexImages: [],
+            partsIndexCharacteristics: [],
             internalOffers: [],
             externalOffers: [],
             analogs: [],
             hasInternalStock: false,
-            totalOffers: 0
+            totalOffers: 0,
+            stockCalculation: {
+              totalInternalStock: 0,
+              totalExternalStock: 0,
+              availableInternalOffers: 0,
+              availableExternalOffers: 0,
+              hasInternalStock: false,
+              hasExternalStock: false,
+              totalStock: 0,
+              hasAnyStock: false
+            },
+            isInCart: false,
+            categories: []
           }
         }
 
@@ -3303,7 +3322,8 @@ export const resolvers = {
         let partsIndexCharacteristics: any[] = []
         let productWeight: number | null = null
         let productDimensions: string | null = null
-        
+        let productCategories: any[] = []
+
         // Приоритет: внутренняя база -> PartsIndex -> AutoEuro
         if (internalProducts.length > 0) {
           const firstProduct = internalProducts[0]
@@ -3311,6 +3331,7 @@ export const resolvers = {
           productDescription = firstProduct.description || ''
           productImages = firstProduct.images
           productCharacteristics = firstProduct.characteristics
+          productCategories = firstProduct.categories || []
           if (typeof firstProduct.weight === 'number') {
             productWeight = firstProduct.weight
           }
@@ -3396,7 +3417,8 @@ export const resolvers = {
           hasInternalStock: stockCalculation.hasInternalStock,
           totalOffers: internalOffers.length + externalOffers.length,
           stockCalculation,
-          isInCart: isMainProductInCart
+          isInCart: isMainProductInCart,
+          categories: productCategories
         }
 
         // Детализированное логирование результатов поиска
@@ -4830,18 +4852,115 @@ export const resolvers = {
           orderBy: { sortOrder: 'asc' }
         })
 
-        // Для товаров без изображений пытаемся получить их из PartsIndex
-        const productsWithImages = await Promise.all(
+        // Для товаров без изображений или без цены/наличия пытаемся получить данные из внешних источников
+        const productsWithEnhancedData = await Promise.all(
           bestPriceProducts.map(async (bestPriceProduct) => {
             const product = bestPriceProduct.product
-            
-            // Если у товара уже есть изображения, возвращаем как есть
-            if (product.images && product.images.length > 0) {
-              return bestPriceProduct
+            let updatedProduct = { ...product }
+            let firstExternalOffer: any = null
+
+            // Проверяем, нужно ли искать внешнее предложение (нет цены или наличия)
+            const needsExternalOffer = (!product.retailPrice && !product.wholesalePrice) || !product.stock || product.stock === 0
+
+            if (needsExternalOffer && product.article && product.brand) {
+              try {
+                console.log(`🔍 Ищем внешнее предложение для товара ${product.id} (${product.article} ${product.brand})`)
+                const providerSettings = await getIntegrationSettings()
+
+                if (providerSettings.externalProvider === 'trinity') {
+                  const triRes = await trinityService.searchItemsByCodeBrand(product.article, product.brand, {
+                    clientCode: providerSettings.trinityClientCode,
+                    onlyStock: providerSettings.trinityOnlyStock,
+                    online: providerSettings.trinityOnline,
+                    crosses: 'disallow',
+                  })
+
+                  const parseQuantity = (val: unknown): number => {
+                    if (typeof val === 'number') return Number.isFinite(val) ? Math.max(0, Math.floor(val)) : 0
+                    if (typeof val === 'string') {
+                      const m = val.match(/\d+/)
+                      return m ? parseInt(m[0], 10) : 0
+                    }
+                    return 0
+                  }
+
+                  if (triRes && triRes.length > 0) {
+                    const firstOffer = triRes[0]
+                    const [minStr, maxStr] = (firstOffer.deliverydays || '').split('/')
+                    const min = Number.parseInt(minStr || '0', 10)
+                    const max = Number.parseInt(maxStr || String(min || 0), 10)
+                    const offerKey = `TRINITY:${firstOffer.code}:${firstOffer.producer}:${firstOffer.stock || ''}:${firstOffer.bid || ''}`
+
+                    firstExternalOffer = {
+                      offerKey,
+                      brand: firstOffer.producer,
+                      code: firstOffer.code,
+                      name: firstOffer.caption,
+                      price: parseFloat(String(firstOffer.price)),
+                      currency: firstOffer.currency || 'RUB',
+                      deliveryTime: isNaN(min) ? 0 : min,
+                      deliveryTimeMax: isNaN(max) ? (isNaN(min) ? 0 : min) : max,
+                      quantity: parseQuantity(firstOffer.rest),
+                      warehouse: firstOffer.stock || 'Trinity-Parts',
+                      warehouseName: firstOffer.stock || null,
+                      rejects: 0,
+                      supplier: 'Trinity',
+                      canPurchase: true,
+                      isInCart: false
+                    }
+                    console.log(`✅ Найдено внешнее предложение для товара ${product.id}: ${firstExternalOffer.price} ${firstExternalOffer.currency}`)
+                  }
+                } else {
+                  const autoEuroResult = await autoEuroService.searchItems({
+                    code: product.article,
+                    brand: product.brand,
+                    with_crosses: false,
+                    with_offers: true
+                  })
+
+                  if (autoEuroResult.success && autoEuroResult.data && autoEuroResult.data.length > 0) {
+                    const firstOffer = autoEuroResult.data[0]
+                    const parseQuantityAE = (val: any): number => {
+                      if (typeof val === 'number') return Number.isFinite(val) ? Math.max(0, Math.floor(val)) : 0
+                      if (typeof val === 'string') {
+                        const m = val.match(/\d+/)
+                        return m ? parseInt(m[0], 10) : 0
+                      }
+                      return 0
+                    }
+                    const calculateDeliveryDays = (timeStr: string): number => {
+                      if (!timeStr) return 0
+                      const match = timeStr.match(/\d+/)
+                      return match ? parseInt(match[0], 10) : 0
+                    }
+
+                    firstExternalOffer = {
+                      offerKey: firstOffer.offer_key,
+                      brand: firstOffer.brand,
+                      code: firstOffer.code,
+                      name: firstOffer.name,
+                      price: parseFloat(firstOffer.price.toString()),
+                      currency: firstOffer.currency || 'RUB',
+                      deliveryTime: calculateDeliveryDays(firstOffer.delivery_time || ''),
+                      deliveryTimeMax: calculateDeliveryDays(firstOffer.delivery_time_max || ''),
+                      quantity: parseQuantityAE(firstOffer.amount),
+                      warehouse: firstOffer.warehouse_name || 'Внешний склад',
+                      warehouseName: firstOffer.warehouse_name || null,
+                      rejects: firstOffer.rejects || 0,
+                      supplier: 'AutoEuro',
+                      canPurchase: true,
+                      isInCart: false
+                    }
+                    console.log(`✅ Найдено внешнее предложение для товара ${product.id}: ${firstExternalOffer.price} ${firstExternalOffer.currency}`)
+                  }
+                }
+              } catch (error) {
+                console.error(`❌ Ошибка получения внешнего предложения для товара ${product.id}:`, error)
+              }
             }
 
-            // Если нет изображений и есть артикул и бренд, пытаемся получить из PartsIndex
-            if (product.article && product.brand) {
+            // Если у товара нет изображений и есть артикул и бренд, пытаемся получить из PartsIndex
+            if ((!product.images || product.images.length === 0) && product.article && product.brand) {
               try {
                 const partsIndexEnabled = (process.env.PARTSINDEX_ENABLED === 'true') || false
                 const partsIndexEntity = partsIndexEnabled
@@ -4861,12 +4980,9 @@ export const resolvers = {
                     productId: product.id
                   }))
 
-                  return {
-                    ...bestPriceProduct,
-                    product: {
-                      ...product,
-                      images: partsIndexImages
-                    }
+                  updatedProduct = {
+                    ...updatedProduct,
+                    images: partsIndexImages
                   }
                 }
               } catch (error) {
@@ -4874,11 +4990,17 @@ export const resolvers = {
               }
             }
 
-            return bestPriceProduct
+            return {
+              ...bestPriceProduct,
+              product: {
+                ...updatedProduct,
+                firstExternalOffer
+              }
+            }
           })
         )
 
-        return productsWithImages
+        return productsWithEnhancedData
       } catch (error) {
         console.error('Ошибка получения товаров с лучшей ценой:', error)
         throw new Error('Не удалось получить товары с лучшей ценой')
@@ -4922,18 +5044,115 @@ export const resolvers = {
           orderBy: { sortOrder: 'asc' }
         })
 
-        // Для товаров без изображений пытаемся получить их из PartsIndex
-        const productsWithImages = await Promise.all(
+        // Для товаров без изображений или без цены/наличия пытаемся получить данные из внешних источников
+        const productsWithEnhancedData = await Promise.all(
           topSalesProducts.map(async (topSalesProduct) => {
             const product = topSalesProduct.product
-            
-            // Если у товара уже есть изображения, возвращаем как есть
-            if (product.images && product.images.length > 0) {
-              return topSalesProduct
+            let updatedProduct = { ...product }
+            let firstExternalOffer: any = null
+
+            // Проверяем, нужно ли искать внешнее предложение (нет цены или наличия)
+            const needsExternalOffer = (!product.retailPrice && !product.wholesalePrice) || !product.stock || product.stock === 0
+
+            if (needsExternalOffer && product.article && product.brand) {
+              try {
+                console.log(`🔍 Ищем внешнее предложение для топ продажи ${product.id} (${product.article} ${product.brand})`)
+                const providerSettings = await getIntegrationSettings()
+
+                if (providerSettings.externalProvider === 'trinity') {
+                  const triRes = await trinityService.searchItemsByCodeBrand(product.article, product.brand, {
+                    clientCode: providerSettings.trinityClientCode,
+                    onlyStock: providerSettings.trinityOnlyStock,
+                    online: providerSettings.trinityOnline,
+                    crosses: 'disallow',
+                  })
+
+                  const parseQuantity = (val: unknown): number => {
+                    if (typeof val === 'number') return Number.isFinite(val) ? Math.max(0, Math.floor(val)) : 0
+                    if (typeof val === 'string') {
+                      const m = val.match(/\d+/)
+                      return m ? parseInt(m[0], 10) : 0
+                    }
+                    return 0
+                  }
+
+                  if (triRes && triRes.length > 0) {
+                    const firstOffer = triRes[0]
+                    const [minStr, maxStr] = (firstOffer.deliverydays || '').split('/')
+                    const min = Number.parseInt(minStr || '0', 10)
+                    const max = Number.parseInt(maxStr || String(min || 0), 10)
+                    const offerKey = `TRINITY:${firstOffer.code}:${firstOffer.producer}:${firstOffer.stock || ''}:${firstOffer.bid || ''}`
+
+                    firstExternalOffer = {
+                      offerKey,
+                      brand: firstOffer.producer,
+                      code: firstOffer.code,
+                      name: firstOffer.caption,
+                      price: parseFloat(String(firstOffer.price)),
+                      currency: firstOffer.currency || 'RUB',
+                      deliveryTime: isNaN(min) ? 0 : min,
+                      deliveryTimeMax: isNaN(max) ? (isNaN(min) ? 0 : min) : max,
+                      quantity: parseQuantity(firstOffer.rest),
+                      warehouse: firstOffer.stock || 'Trinity-Parts',
+                      warehouseName: firstOffer.stock || null,
+                      rejects: 0,
+                      supplier: 'Trinity',
+                      canPurchase: true,
+                      isInCart: false
+                    }
+                    console.log(`✅ Найдено внешнее предложение для топ продажи ${product.id}: ${firstExternalOffer.price} ${firstExternalOffer.currency}`)
+                  }
+                } else {
+                  const autoEuroResult = await autoEuroService.searchItems({
+                    code: product.article,
+                    brand: product.brand,
+                    with_crosses: false,
+                    with_offers: true
+                  })
+
+                  if (autoEuroResult.success && autoEuroResult.data && autoEuroResult.data.length > 0) {
+                    const firstOffer = autoEuroResult.data[0]
+                    const parseQuantityAE = (val: any): number => {
+                      if (typeof val === 'number') return Number.isFinite(val) ? Math.max(0, Math.floor(val)) : 0
+                      if (typeof val === 'string') {
+                        const m = val.match(/\d+/)
+                        return m ? parseInt(m[0], 10) : 0
+                      }
+                      return 0
+                    }
+                    const calculateDeliveryDays = (timeStr: string): number => {
+                      if (!timeStr) return 0
+                      const match = timeStr.match(/\d+/)
+                      return match ? parseInt(match[0], 10) : 0
+                    }
+
+                    firstExternalOffer = {
+                      offerKey: firstOffer.offer_key,
+                      brand: firstOffer.brand,
+                      code: firstOffer.code,
+                      name: firstOffer.name,
+                      price: parseFloat(firstOffer.price.toString()),
+                      currency: firstOffer.currency || 'RUB',
+                      deliveryTime: calculateDeliveryDays(firstOffer.delivery_time || ''),
+                      deliveryTimeMax: calculateDeliveryDays(firstOffer.delivery_time_max || ''),
+                      quantity: parseQuantityAE(firstOffer.amount),
+                      warehouse: firstOffer.warehouse_name || 'Внешний склад',
+                      warehouseName: firstOffer.warehouse_name || null,
+                      rejects: firstOffer.rejects || 0,
+                      supplier: 'AutoEuro',
+                      canPurchase: true,
+                      isInCart: false
+                    }
+                    console.log(`✅ Найдено внешнее предложение для топ продажи ${product.id}: ${firstExternalOffer.price} ${firstExternalOffer.currency}`)
+                  }
+                }
+              } catch (error) {
+                console.error(`❌ Ошибка получения внешнего предложения для топ продажи ${product.id}:`, error)
+              }
             }
 
-            // Если нет изображений и есть артикул и бренд, пытаемся получить из PartsIndex
-            if (product.article && product.brand) {
+            // Если у товара нет изображений и есть артикул и бренд, пытаемся получить из PartsIndex
+            if ((!product.images || product.images.length === 0) && product.article && product.brand) {
               try {
                 const partsIndexEnabled = (process.env.PARTSINDEX_ENABLED === 'true') || false
                 const partsIndexEntity = partsIndexEnabled
@@ -4953,12 +5172,9 @@ export const resolvers = {
                     productId: product.id
                   }))
 
-                  return {
-                    ...topSalesProduct,
-                    product: {
-                      ...product,
-                      images: partsIndexImages
-                    }
+                  updatedProduct = {
+                    ...updatedProduct,
+                    images: partsIndexImages
                   }
                 }
               } catch (error) {
@@ -4966,11 +5182,17 @@ export const resolvers = {
               }
             }
 
-            return topSalesProduct
+            return {
+              ...topSalesProduct,
+              product: {
+                ...updatedProduct,
+                firstExternalOffer
+              }
+            }
           })
         )
 
-        return productsWithImages
+        return productsWithEnhancedData
       } catch (error) {
         console.error('Ошибка получения топ продаж:', error)
         throw new Error('Не удалось получить топ продаж')
@@ -5087,7 +5309,7 @@ export const resolvers = {
     },
 
     // Новые поступления
-    newArrivals: async (_: unknown, { limit = 8 }: { limit?: number }) => {
+    newArrivals: async (_: unknown, { limit = 6 }: { limit?: number }) => {
       try {
         const manualNewArrivals = await prisma.newArrivalProduct.findMany({
           where: { isActive: true },
