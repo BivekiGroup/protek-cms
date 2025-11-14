@@ -10617,12 +10617,10 @@ export const resolvers = {
           }
         }
         
-        // Генерируем короткий номер заказа (ORD-001-ABC12)
+        // Генерируем числовой номер заказа
         // Используем счетчик заказов для уникальности
         const ordersCount = await prisma.order.count()
-        const orderSequence = (ordersCount + 1).toString().padStart(3, '0')
-        const randomSuffix = Math.random().toString(36).substr(2, 5).toUpperCase()
-        const orderNumber = `ORD-${orderSequence}-${randomSuffix}`
+        const orderNumber = (ordersCount + 1).toString().padStart(6, '0')
         
         // Логируем входные данные для отладки
         console.log('createOrder: input.paymentMethod =', input.paymentMethod)

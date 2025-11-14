@@ -2144,6 +2144,7 @@ export const typeDefs = gql`
     productId: ID!
     price: Float!
     quantity: Int!
+    remainingStock: Int
     warehouse: String!
     deliveryDays: Int!
     available: Boolean!
@@ -2163,6 +2164,7 @@ export const typeDefs = gql`
     deliveryTime: Int!
     deliveryTimeMax: Int!
     quantity: Int!
+    remainingStock: Int
     isInCart: Boolean!
     warehouse: String!
     warehouseName: String
