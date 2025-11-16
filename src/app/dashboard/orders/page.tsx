@@ -57,6 +57,11 @@ interface Order {
       fullName: string
     }>
   }
+  legalEntity?: {
+    id: string
+    shortName: string
+    fullName: string
+  }
   clientEmail?: string
   clientPhone?: string
   clientName?: string
@@ -80,6 +85,8 @@ interface Order {
     amount: number
   }>
   deliveryAddress?: string
+  deliveryTime?: string
+  paymentMethod?: string
   comment?: string
   cancelReason?: string
   canceledAt?: string
@@ -196,10 +203,15 @@ export default function OrdersPage() {
   }
 
   const getLegalEntityName = (order: Order) => {
+    // Сначала проверяем прямую связь с юрлицом через order.legalEntity
+    if (order.legalEntity) {
+      return order.legalEntity.shortName
+    }
+    // Fallback на юрлица клиента (на случай если прямая связь не установлена)
     if (order.client?.legalEntities && order.client.legalEntities.length > 0) {
       return order.client.legalEntities[0].shortName
     }
-    return order.client?.name || order.clientName || 'Гость'
+    return '—'
   }
 
   const getShortOrderNumber = (orderNumber: string) => {
@@ -465,54 +477,67 @@ export default function OrdersPage() {
                     {isExpanded && (
                       <TableRow className="bg-gray-50">
                         <TableCell colSpan={8} className="py-3 px-6">
-                          <div className="space-y-3">
-                            <div className="grid grid-cols-2 gap-4 text-xs">
+                          <div className="space-y-4">
+                            {/* Таблица товаров */}
+                            <div>
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b bg-gray-100">
+                                    <th className="text-left py-2 px-2 font-semibold">Артикул</th>
+                                    <th className="text-left py-2 px-2 font-semibold">Бренд</th>
+                                    <th className="text-left py-2 px-2 font-semibold">Название</th>
+                                    <th className="text-right py-2 px-2 font-semibold">Цена</th>
+                                    <th className="text-center py-2 px-2 font-semibold">Кол-во</th>
+                                    <th className="text-right py-2 px-2 font-semibold">Итого</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {order.items.map((item) => (
+                                    <tr key={item.id} className="border-b bg-white">
+                                      <td className="py-2 px-2">{item.article || '—'}</td>
+                                      <td className="py-2 px-2">{item.brand || '—'}</td>
+                                      <td className="py-2 px-2">{item.name}</td>
+                                      <td className="text-right py-2 px-2">{formatPrice(item.price, order.currency)}</td>
+                                      <td className="text-center py-2 px-2">{item.quantity}</td>
+                                      <td className="text-right py-2 px-2 font-medium">{formatPrice(item.totalPrice, order.currency)}</td>
+                                    </tr>
+                                  ))}
+                                  <tr className="bg-white">
+                                    <td colSpan={5} className="text-right py-2 px-2 font-semibold">Сумма товаров:</td>
+                                    <td className="text-right py-2 px-2">{formatPrice(order.totalAmount, order.currency)}</td>
+                                  </tr>
+                                  {order.discountAmount > 0 && (
+                                    <tr className="bg-white text-red-600">
+                                      <td colSpan={5} className="text-right py-2 px-2 font-semibold">Скидка:</td>
+                                      <td className="text-right py-2 px-2">-{formatPrice(order.discountAmount, order.currency)}</td>
+                                    </tr>
+                                  )}
+                                  <tr className="bg-white border-t-2">
+                                    <td colSpan={5} className="text-right py-2 px-2 font-bold text-sm">Итого:</td>
+                                    <td className="text-right py-2 px-2 font-bold text-sm">{formatPrice(order.finalAmount, order.currency)}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {/* Информационные блоки */}
+                            <div className="grid grid-cols-4 gap-4 text-xs pt-3 border-t">
                               <div>
                                 <div className="font-semibold mb-1 text-gray-700">Контакты</div>
-                                <div>{order.client?.email || order.clientEmail}</div>
-                                <div>{order.client?.phone || order.clientPhone}</div>
+                                <div>{order.client?.email || order.clientEmail || '—'}</div>
+                                <div>{order.client?.phone || order.clientPhone || '—'}</div>
                               </div>
                               <div>
-                                <div className="font-semibold mb-1 text-gray-700">Доставка</div>
+                                <div className="font-semibold mb-1 text-gray-700">Адрес доставки</div>
                                 <div>{order.deliveryAddress || 'Не указан'}</div>
-                                {order.comment && <div className="mt-1 text-gray-600">Комментарий: {order.comment}</div>}
                               </div>
-                            </div>
-                            <div>
-                              <div className="font-semibold mb-2 text-xs text-gray-700">Товары</div>
-                              <div className="space-y-1">
-                                {order.items.map((item) => (
-                                  <div key={item.id} className="flex justify-between items-center text-xs py-1 px-2 bg-white rounded">
-                                    <div className="flex-1">
-                                      <span className="font-medium">{item.name}</span>
-                                      {item.brand && <span className="text-gray-500 ml-2">({item.brand})</span>}
-                                      {item.article && <span className="text-gray-500 ml-1">{item.article}</span>}
-                                    </div>
-                                    <div className="flex gap-4 items-center text-right">
-                                      <span>{formatPrice(item.price, order.currency)}</span>
-                                      <span className="w-12">× {item.quantity}</span>
-                                      <span className="w-20 font-medium">{formatPrice(item.totalPrice, order.currency)}</span>
-                                    </div>
-                                  </div>
-                                ))}
+                              <div>
+                                <div className="font-semibold mb-1 text-gray-700">Тип доставки</div>
+                                <div>{order.deliveryTime === 'pickup' ? 'Самовывоз' : order.deliveryTime === 'courier' ? 'Курьер' : order.deliveryTime || '—'}</div>
                               </div>
-                              <div className="flex justify-end mt-2 pt-2 border-t text-xs">
-                                <div className="space-y-1">
-                                  <div className="flex justify-between gap-8">
-                                    <span>Сумма товаров:</span>
-                                    <span>{formatPrice(order.totalAmount, order.currency)}</span>
-                                  </div>
-                                  {order.discountAmount > 0 && (
-                                    <div className="flex justify-between gap-8 text-red-600">
-                                      <span>Скидка:</span>
-                                      <span>-{formatPrice(order.discountAmount, order.currency)}</span>
-                                    </div>
-                                  )}
-                                  <div className="flex justify-between gap-8 font-bold text-sm border-t pt-1">
-                                    <span>Итого:</span>
-                                    <span>{formatPrice(order.finalAmount, order.currency)}</span>
-                                  </div>
-                                </div>
+                              <div>
+                                <div className="font-semibold mb-1 text-gray-700">Способ оплаты</div>
+                                <div>{order.paymentMethod === 'invoice' ? 'По счёту' : order.paymentMethod === 'online' ? 'Онлайн' : order.paymentMethod || '—'}</div>
                               </div>
                             </div>
                           </div>

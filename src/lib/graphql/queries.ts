@@ -834,10 +834,35 @@ export const GET_DASHBOARD_ORDERS = gql`
         orderNumber
         clientName
         clientPhone
+        clientEmail
         createdAt
         status
+        totalAmount
+        discountAmount
         finalAmount
         currency
+        deliveryAddress
+        deliveryTime
+        paymentMethod
+        legalEntity {
+          id
+          shortName
+          fullName
+        }
+        client {
+          id
+          email
+          phone
+        }
+        items {
+          id
+          name
+          article
+          brand
+          price
+          quantity
+          totalPrice
+        }
       }
       total
       hasMore
@@ -855,6 +880,11 @@ export const GET_DASHBOARD_CLIENTS = gql`
       type
       createdAt
       isConfirmed
+      legalEntities {
+        id
+        shortName
+        fullName
+      }
     }
     clientsCount(filter: $filter)
   }
@@ -1339,6 +1369,11 @@ export const GET_ORDERS = gql`
             fullName
           }
         }
+        legalEntity {
+          id
+          shortName
+          fullName
+        }
         clientEmail
         clientPhone
         clientName
@@ -1348,6 +1383,8 @@ export const GET_ORDERS = gql`
         finalAmount
         currency
         deliveryAddress
+        deliveryTime
+        paymentMethod
         comment
         cancelReason
         canceledAt

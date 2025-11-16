@@ -694,6 +694,7 @@ model ClientLegalEntity {
   updatedAt              DateTime            @updatedAt
   bankDetails            ClientBankDetails[]
   client                 Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  orders                 Order[]
 
   @@map("client_legal_entities")
 }
@@ -813,6 +814,7 @@ model Order {
   updatedAt       DateTime    @updatedAt
   items           OrderItem[]
   client          Client?     @relation(fields: [clientId], references: [id])
+  legalEntity     ClientLegalEntity? @relation(fields: [legalEntityId], references: [id], onDelete: SetNull)
   payments        Payment[]
 
   @@map("orders")

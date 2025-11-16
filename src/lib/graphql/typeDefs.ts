@@ -1447,6 +1447,7 @@ export const typeDefs = gql`
     registerClientWithPassword(input: RegisterClientInput!): VerificationResponse!
     loginWithPassword(phone: String!, password: String!): VerificationResponse!
     verifyClient(clientId: ID!): VerificationResponse!
+    rejectClient(clientId: ID!): Boolean!
     
     # Гараж клиентов
     createUserVehicle(input: UserVehicleInput!): ClientVehicle!
@@ -2230,6 +2231,7 @@ export const typeDefs = gql`
     clientPhone: String
     clientName: String
     legalEntityId: String
+    legalEntity: ClientLegalEntity
     status: OrderStatus!
     totalAmount: Float!
     discountAmount: Float!

@@ -2,17 +2,32 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { useQuery } from '@apollo/client'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
 import { ClientsList } from '@/components/clients/ClientsList'
 import { ProfilesList } from '@/components/clients/ProfilesList'
 import { DiscountsList } from '@/components/clients/DiscountsList'
 import { StatusesList } from '@/components/clients/StatusesList'
 import { UnverifiedClientsList } from '@/components/clients/UnverifiedClientsList'
+import { gql } from '@apollo/client'
+
+const GET_UNVERIFIED_COUNT = gql`
+  query GetUnverifiedCount {
+    unverifiedClientsCount
+  }
+`
 
 export default function ClientsPage() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
   const [activeTab, setActiveTab] = useState(tabParam || 'clients')
+
+  const { data: unverifiedData } = useQuery(GET_UNVERIFIED_COUNT, {
+    fetchPolicy: 'no-cache',
+  })
+
+  const unverifiedCount = unverifiedData?.unverifiedClientsCount || 0
 
   useEffect(() => {
     if (tabParam) {
@@ -29,7 +44,14 @@ export default function ClientsPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="clients">Клиенты</TabsTrigger>
-          <TabsTrigger value="unverified">Ожидают проверки</TabsTrigger>
+          <TabsTrigger value="unverified">
+            Ожидают проверки
+            {unverifiedCount > 0 && (
+              <Badge variant="destructive" className="ml-2 h-5 min-w-5 px-1.5 text-xs text-white">
+                {unverifiedCount}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="profiles">Профили</TabsTrigger>
           <TabsTrigger value="discounts">Скидки</TabsTrigger>
           <TabsTrigger value="statuses">Статус</TabsTrigger>

@@ -1574,6 +1574,13 @@ export const resolvers = {
           }
           if (filter.unconfirmed) {
             where.isConfirmed = false
+            // Исключаем анонимных пользователей
+            where.NOT = {
+              OR: [
+                { phone: 'anonymous' },
+                { id: { startsWith: 'anon_' } }
+              ]
+            }
           }
           if (filter.profileId) {
             where.profileId = filter.profileId
@@ -1692,6 +1699,13 @@ export const resolvers = {
           }
           if (filter.unconfirmed) {
             where.isConfirmed = false
+            // Исключаем анонимных пользователей
+            where.NOT = {
+              OR: [
+                { phone: 'anonymous' },
+                { id: { startsWith: 'anon_' } }
+              ]
+            }
           }
           if (filter.profileId) {
             where.profileId = filter.profileId
@@ -1735,7 +1749,13 @@ export const resolvers = {
 
         return await prisma.client.findMany({
           where: {
-            isVerified: false
+            isVerified: false,
+            NOT: {
+              OR: [
+                { phone: 'anonymous' },
+                { id: { startsWith: 'anon_' } }
+              ]
+            }
           },
           include: {
             profile: true,
@@ -1764,7 +1784,13 @@ export const resolvers = {
 
         return await prisma.client.count({
           where: {
-            isVerified: false
+            isVerified: false,
+            NOT: {
+              OR: [
+                { phone: 'anonymous' },
+                { id: { startsWith: 'anon_' } }
+              ]
+            }
           }
         })
       } catch (error) {
@@ -4398,7 +4424,12 @@ export const resolvers = {
           prisma.order.findMany({
             where,
             include: {
-              client: true,
+              client: {
+                include: {
+                  legalEntities: true
+                }
+              },
+              legalEntity: true,
               items: {
                 include: {
                   product: true
@@ -4429,7 +4460,12 @@ export const resolvers = {
         const order = await prisma.order.findUnique({
           where: { id },
           include: {
-            client: true,
+            client: {
+              include: {
+                legalEntities: true
+              }
+            },
+            legalEntity: true,
             items: {
               include: {
                 product: true
@@ -4885,30 +4921,45 @@ export const resolvers = {
                   }
 
                   if (triRes && triRes.length > 0) {
-                    const firstOffer = triRes[0]
-                    const [minStr, maxStr] = (firstOffer.deliverydays || '').split('/')
+                    // Находим минимальное предложение по цене среди предложений с наличием
+                    const offersWithStock = triRes.filter((offer: any) => parseQuantity(offer.rest) > 0)
+
+                    let cheapestOffer
+                    if (offersWithStock.length > 0) {
+                      cheapestOffer = offersWithStock[0]
+                      for (const offer of offersWithStock) {
+                        const offerPrice = parseFloat(String(offer.price))
+                        const minPrice = parseFloat(String(cheapestOffer.price))
+                        if (offerPrice < minPrice) {
+                          cheapestOffer = offer
+                        }
+                      }
+                    } else {
+                      cheapestOffer = triRes[0] // Если нет товаров с наличием, берем первый
+                    }
+
+                    const [minStr, maxStr] = (cheapestOffer.deliverydays || '').split('/')
                     const min = Number.parseInt(minStr || '0', 10)
                     const max = Number.parseInt(maxStr || String(min || 0), 10)
-                    const offerKey = `TRINITY:${firstOffer.code}:${firstOffer.producer}:${firstOffer.stock || ''}:${firstOffer.bid || ''}`
+                    const offerKey = `TRINITY:${cheapestOffer.code}:${cheapestOffer.producer}:${cheapestOffer.stock || ''}:${cheapestOffer.bid || ''}`
 
                     firstExternalOffer = {
                       offerKey,
-                      brand: firstOffer.producer,
-                      code: firstOffer.code,
-                      name: firstOffer.caption,
-                      price: parseFloat(String(firstOffer.price)),
-                      currency: firstOffer.currency || 'RUB',
+                      brand: cheapestOffer.producer,
+                      code: cheapestOffer.code,
+                      name: cheapestOffer.caption,
+                      price: parseFloat(String(cheapestOffer.price)),
+                      currency: cheapestOffer.currency || 'RUB',
                       deliveryTime: isNaN(min) ? 0 : min,
                       deliveryTimeMax: isNaN(max) ? (isNaN(min) ? 0 : min) : max,
-                      quantity: parseQuantity(firstOffer.rest),
-                      warehouse: firstOffer.stock || 'Trinity-Parts',
-                      warehouseName: firstOffer.stock || null,
+                      quantity: parseQuantity(cheapestOffer.rest),
+                      warehouse: cheapestOffer.stock || 'Trinity-Parts',
+                      warehouseName: cheapestOffer.stock || null,
                       rejects: 0,
                       supplier: 'Trinity',
                       canPurchase: true,
                       isInCart: false
                     }
-                    console.log(`✅ Найдено внешнее предложение для товара ${product.id}: ${firstExternalOffer.price} ${firstExternalOffer.currency}`)
                   }
                 } else {
                   const autoEuroResult = await autoEuroService.searchItems({
@@ -4919,7 +4970,6 @@ export const resolvers = {
                   })
 
                   if (autoEuroResult.success && autoEuroResult.data && autoEuroResult.data.length > 0) {
-                    const firstOffer = autoEuroResult.data[0]
                     const parseQuantityAE = (val: any): number => {
                       if (typeof val === 'number') return Number.isFinite(val) ? Math.max(0, Math.floor(val)) : 0
                       if (typeof val === 'string') {
@@ -4934,24 +4984,40 @@ export const resolvers = {
                       return match ? parseInt(match[0], 10) : 0
                     }
 
+                    // Находим минимальное предложение по цене среди предложений с наличием
+                    const offersWithStock = autoEuroResult.data.filter((offer: any) => parseQuantityAE(offer.amount) > 0)
+
+                    let cheapestOffer
+                    if (offersWithStock.length > 0) {
+                      cheapestOffer = offersWithStock[0]
+                      for (const offer of offersWithStock) {
+                        const offerPrice = parseFloat(String(offer.price))
+                        const minPrice = parseFloat(String(cheapestOffer.price))
+                        if (offerPrice < minPrice) {
+                          cheapestOffer = offer
+                        }
+                      }
+                    } else {
+                      cheapestOffer = autoEuroResult.data[0] // Если нет товаров с наличием, берем первый
+                    }
+
                     firstExternalOffer = {
-                      offerKey: firstOffer.offer_key,
-                      brand: firstOffer.brand,
-                      code: firstOffer.code,
-                      name: firstOffer.name,
-                      price: parseFloat(firstOffer.price.toString()),
-                      currency: firstOffer.currency || 'RUB',
-                      deliveryTime: calculateDeliveryDays(firstOffer.delivery_time || ''),
-                      deliveryTimeMax: calculateDeliveryDays(firstOffer.delivery_time_max || ''),
-                      quantity: parseQuantityAE(firstOffer.amount),
-                      warehouse: firstOffer.warehouse_name || 'Внешний склад',
-                      warehouseName: firstOffer.warehouse_name || null,
-                      rejects: firstOffer.rejects || 0,
+                      offerKey: cheapestOffer.offer_key,
+                      brand: cheapestOffer.brand,
+                      code: cheapestOffer.code,
+                      name: cheapestOffer.name,
+                      price: parseFloat(cheapestOffer.price.toString()),
+                      currency: cheapestOffer.currency || 'RUB',
+                      deliveryTime: calculateDeliveryDays(cheapestOffer.delivery_time || ''),
+                      deliveryTimeMax: calculateDeliveryDays(cheapestOffer.delivery_time_max || ''),
+                      quantity: parseQuantityAE(cheapestOffer.amount),
+                      warehouse: cheapestOffer.warehouse_name || 'Внешний склад',
+                      warehouseName: cheapestOffer.warehouse_name || null,
+                      rejects: cheapestOffer.rejects || 0,
                       supplier: 'AutoEuro',
                       canPurchase: true,
                       isInCart: false
                     }
-                    console.log(`✅ Найдено внешнее предложение для товара ${product.id}: ${firstExternalOffer.price} ${firstExternalOffer.currency}`)
                   }
                 }
               } catch (error) {
@@ -5077,24 +5143,40 @@ export const resolvers = {
                   }
 
                   if (triRes && triRes.length > 0) {
-                    const firstOffer = triRes[0]
-                    const [minStr, maxStr] = (firstOffer.deliverydays || '').split('/')
+                    // Находим минимальное предложение по цене среди предложений с наличием
+                    const offersWithStock = triRes.filter((offer: any) => parseQuantity(offer.rest) > 0)
+
+                    let cheapestOffer
+                    if (offersWithStock.length > 0) {
+                      cheapestOffer = offersWithStock[0]
+                      for (const offer of offersWithStock) {
+                        const offerPrice = parseFloat(String(offer.price))
+                        const minPrice = parseFloat(String(cheapestOffer.price))
+                        if (offerPrice < minPrice) {
+                          cheapestOffer = offer
+                        }
+                      }
+                    } else {
+                      cheapestOffer = triRes[0] // Если нет товаров с наличием, берем первый
+                    }
+
+                    const [minStr, maxStr] = (cheapestOffer.deliverydays || '').split('/')
                     const min = Number.parseInt(minStr || '0', 10)
                     const max = Number.parseInt(maxStr || String(min || 0), 10)
-                    const offerKey = `TRINITY:${firstOffer.code}:${firstOffer.producer}:${firstOffer.stock || ''}:${firstOffer.bid || ''}`
+                    const offerKey = `TRINITY:${cheapestOffer.code}:${cheapestOffer.producer}:${cheapestOffer.stock || ''}:${cheapestOffer.bid || ''}`
 
                     firstExternalOffer = {
                       offerKey,
-                      brand: firstOffer.producer,
-                      code: firstOffer.code,
-                      name: firstOffer.caption,
-                      price: parseFloat(String(firstOffer.price)),
-                      currency: firstOffer.currency || 'RUB',
+                      brand: cheapestOffer.producer,
+                      code: cheapestOffer.code,
+                      name: cheapestOffer.caption,
+                      price: parseFloat(String(cheapestOffer.price)),
+                      currency: cheapestOffer.currency || 'RUB',
                       deliveryTime: isNaN(min) ? 0 : min,
                       deliveryTimeMax: isNaN(max) ? (isNaN(min) ? 0 : min) : max,
-                      quantity: parseQuantity(firstOffer.rest),
-                      warehouse: firstOffer.stock || 'Trinity-Parts',
-                      warehouseName: firstOffer.stock || null,
+                      quantity: parseQuantity(cheapestOffer.rest),
+                      warehouse: cheapestOffer.stock || 'Trinity-Parts',
+                      warehouseName: cheapestOffer.stock || null,
                       rejects: 0,
                       supplier: 'Trinity',
                       canPurchase: true,
@@ -5111,7 +5193,6 @@ export const resolvers = {
                   })
 
                   if (autoEuroResult.success && autoEuroResult.data && autoEuroResult.data.length > 0) {
-                    const firstOffer = autoEuroResult.data[0]
                     const parseQuantityAE = (val: any): number => {
                       if (typeof val === 'number') return Number.isFinite(val) ? Math.max(0, Math.floor(val)) : 0
                       if (typeof val === 'string') {
@@ -5126,19 +5207,36 @@ export const resolvers = {
                       return match ? parseInt(match[0], 10) : 0
                     }
 
+                    // Находим минимальное предложение по цене среди предложений с наличием
+                    const offersWithStock = autoEuroResult.data.filter((offer: any) => parseQuantityAE(offer.amount) > 0)
+
+                    let cheapestOffer
+                    if (offersWithStock.length > 0) {
+                      cheapestOffer = offersWithStock[0]
+                      for (const offer of offersWithStock) {
+                        const offerPrice = parseFloat(String(offer.price))
+                        const minPrice = parseFloat(String(cheapestOffer.price))
+                        if (offerPrice < minPrice) {
+                          cheapestOffer = offer
+                        }
+                      }
+                    } else {
+                      cheapestOffer = autoEuroResult.data[0] // Если нет товаров с наличием, берем первый
+                    }
+
                     firstExternalOffer = {
-                      offerKey: firstOffer.offer_key,
-                      brand: firstOffer.brand,
-                      code: firstOffer.code,
-                      name: firstOffer.name,
-                      price: parseFloat(firstOffer.price.toString()),
-                      currency: firstOffer.currency || 'RUB',
-                      deliveryTime: calculateDeliveryDays(firstOffer.delivery_time || ''),
-                      deliveryTimeMax: calculateDeliveryDays(firstOffer.delivery_time_max || ''),
-                      quantity: parseQuantityAE(firstOffer.amount),
-                      warehouse: firstOffer.warehouse_name || 'Внешний склад',
-                      warehouseName: firstOffer.warehouse_name || null,
-                      rejects: firstOffer.rejects || 0,
+                      offerKey: cheapestOffer.offer_key,
+                      brand: cheapestOffer.brand,
+                      code: cheapestOffer.code,
+                      name: cheapestOffer.name,
+                      price: parseFloat(cheapestOffer.price.toString()),
+                      currency: cheapestOffer.currency || 'RUB',
+                      deliveryTime: calculateDeliveryDays(cheapestOffer.delivery_time || ''),
+                      deliveryTimeMax: calculateDeliveryDays(cheapestOffer.delivery_time_max || ''),
+                      quantity: parseQuantityAE(cheapestOffer.amount),
+                      warehouse: cheapestOffer.warehouse_name || 'Внешний склад',
+                      warehouseName: cheapestOffer.warehouse_name || null,
+                      rejects: cheapestOffer.rejects || 0,
                       supplier: 'AutoEuro',
                       canPurchase: true,
                       isInCart: false
@@ -8024,6 +8122,13 @@ export const resolvers = {
           }
           if (filter.unconfirmed) {
             where.isConfirmed = false
+            // Исключаем анонимных пользователей
+            where.NOT = {
+              OR: [
+                { phone: 'anonymous' },
+                { id: { startsWith: 'anon_' } }
+              ]
+            }
           }
           if (filter.profileId) {
             where.profileId = filter.profileId
@@ -9901,6 +10006,46 @@ export const resolvers = {
       }
     },
 
+    rejectClient: async (_: unknown, { clientId }: { clientId: string }, context: Context) => {
+      try {
+        console.log(`Отклонение клиента: ${clientId}`)
+
+        // Проверяем авторизацию администратора
+        const actualContext = context || getContext()
+        if (!actualContext.userId) {
+          throw new Error('Требуется авторизация администратора')
+        }
+
+        // Получаем клиента
+        const client = await prisma.client.findUnique({
+          where: { id: clientId }
+        })
+
+        if (!client) {
+          throw new Error('Клиент не найден')
+        }
+
+        if (client.isVerified) {
+          throw new Error('Клиент уже подтвержден, нельзя отклонить')
+        }
+
+        // Удаляем клиента
+        await prisma.client.delete({
+          where: { id: clientId }
+        })
+
+        console.log(`Клиент отклонен и удален: ${client.clientNumber}`)
+
+        return true
+      } catch (error) {
+        console.error('Ошибка отклонения клиента:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось отклонить клиента')
+      }
+    },
+
     // Мутации для гаража клиентов
     createUserVehicle: async (_: unknown, { input }: { input: ClientVehicleInput }, context: Context) => {
       try {
@@ -10677,7 +10822,7 @@ export const resolvers = {
             clientEmail: input.clientEmail,
             clientPhone: input.clientPhone,
             clientName: input.clientName,
-            legalEntityId: input.legalEntityId,
+            legalEntity: input.legalEntityId ? { connect: { id: input.legalEntityId } } : undefined,
             paymentMethod: input.paymentMethod,
             status: input.paymentMethod === 'invoice' ? PrismaOrderStatus.PENDING : PrismaOrderStatus.PROCESSING,
             totalAmount,
@@ -10808,6 +10953,47 @@ export const resolvers = {
               })
 
               console.log('createOrder: invoiceUrl сохранен в БД')
+
+              // Отправляем email с PDF счетом во вложении
+              try {
+                const { sendEmail } = await import('@/lib/email')
+                const { getInvoiceEmailTemplate } = await import('@/lib/emailTemplates')
+
+                const clientEmail = updatedOrder.clientEmail
+                const clientName = updatedOrder.client?.companyName ||
+                  (updatedOrder.client?.firstName && updatedOrder.client?.lastName
+                    ? `${updatedOrder.client.firstName} ${updatedOrder.client.lastName}`
+                    : updatedOrder.client?.name)
+
+                if (clientEmail) {
+                  const { html, text } = getInvoiceEmailTemplate(
+                    updatedOrder.orderNumber,
+                    updatedOrder.totalAmount,
+                    clientName
+                  )
+
+                  await sendEmail({
+                    to: clientEmail,
+                    subject: `Счёт на оплату заказа №${updatedOrder.orderNumber} - ПРОТЕК`,
+                    html,
+                    text,
+                    attachments: [
+                      {
+                        filename: `Invoice-${updatedOrder.orderNumber}.pdf`,
+                        content: pdfBuffer,
+                        contentType: 'application/pdf'
+                      }
+                    ]
+                  })
+
+                  console.log('createOrder: email с счетом отправлен на:', clientEmail)
+                } else {
+                  console.warn('createOrder: clientEmail не указан, email не отправлен')
+                }
+              } catch (emailError) {
+                console.error('createOrder: ошибка отправки email:', emailError)
+                // Не бросаем ошибку, чтобы заказ все равно был создан
+              }
 
               // Возвращаем обновленный заказ с invoiceUrl
               return updatedOrder

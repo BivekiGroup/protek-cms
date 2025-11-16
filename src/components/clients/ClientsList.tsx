@@ -23,16 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { GET_CLIENTS } from '@/lib/graphql/queries'
-import { CONFIRM_CLIENT } from '@/lib/graphql/mutations'
 import { CreateClientModal } from './CreateClientModal'
 import { ImportClientsModal } from './ImportClientsModal'
 import { ClientsFilters, FilterValues } from './ClientsFilters'
@@ -68,8 +59,6 @@ export const ClientsList = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false)
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [filters, setFilters] = useState<FilterValues>({
     type: 'ALL',
     isConfirmed: 'ALL',
@@ -79,18 +68,6 @@ export const ClientsList = () => {
 
   const router = useRouter()
   const { data, loading, error, refetch } = useQuery(GET_CLIENTS)
-
-  const [confirmClient, { loading: confirmLoading }] = useMutation(CONFIRM_CLIENT, {
-    onCompleted: () => {
-      toast.success('Клиент подтвержден, письмо отправлено на почту')
-      setConfirmDialogOpen(false)
-      setSelectedClient(null)
-      refetch()
-    },
-    onError: (error) => {
-      toast.error(`Ошибка подтверждения: ${error.message}`)
-    }
-  })
 
   const frontendOrigin = useMemo(() => {
     return (process.env.NEXT_PUBLIC_FRONTEND_ORIGIN || (process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://protekauto.ru'))
@@ -167,27 +144,17 @@ export const ClientsList = () => {
     router.push(`/dashboard/clients/${clientId}`)
   }
 
-  const handleStatusClick = (e: React.MouseEvent, client: Client) => {
-    e.stopPropagation()
-    if (!client.isConfirmed) {
-      setSelectedClient(client)
-      setConfirmDialogOpen(true)
-    }
-  }
-
-  const handleConfirmClient = async () => {
-    if (!selectedClient) return
-    await confirmClient({ variables: { id: selectedClient.id } })
-  }
-
   const handleApplyFilters = (newFilters: FilterValues) => {
     setFilters(newFilters)
   }
 
   const applyFilters = (clients: Client[]) => {
     return clients.filter((client: Client) => {
+      // Показываем только подтвержденных клиентов
+      if (!client.isConfirmed) return false
+
       // Поиск по тексту
-      const matchesSearch = !searchTerm || 
+      const matchesSearch = !searchTerm ||
         client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         client.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         client.phone.includes(searchTerm) ||
@@ -196,7 +163,7 @@ export const ClientsList = () => {
       // Фильтр по типу
       const matchesType = filters.type === 'ALL' || client.type === filters.type
 
-      // Фильтр по подтверждению
+      // Фильтр по подтверждению (теперь не используется, т.к. все уже подтверждены)
       const matchesConfirmed = filters.isConfirmed === 'ALL' || client.isConfirmed === filters.isConfirmed
 
       // Фильтр по наценке
@@ -388,7 +355,6 @@ export const ClientsList = () => {
                 <TableHead>Номер телефона</TableHead>
                 <TableHead>E-mail</TableHead>
                 <TableHead>Дата регистрации</TableHead>
-                <TableHead>Статус регистрации</TableHead>
                 <TableHead>Действия</TableHead>
               </TableRow>
             </TableHeader>
@@ -413,15 +379,6 @@ export const ClientsList = () => {
                   <TableCell>{client.phone}</TableCell>
                   <TableCell>{client.email || '—'}</TableCell>
                   <TableCell>{formatDate(client.createdAt)}</TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Badge
-                      variant={client.isConfirmed ? "default" : "destructive"}
-                      className={!client.isConfirmed ? "cursor-pointer hover:opacity-80" : ""}
-                      onClick={(e) => handleStatusClick(e, client)}
-                    >
-                      {client.isConfirmed ? 'Подтвержден' : 'Не подтвержден'}
-                    </Badge>
-                  </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Button
                       variant="outline"
@@ -462,34 +419,6 @@ export const ClientsList = () => {
         onApplyFilters={handleApplyFilters}
         currentFilters={filters}
       />
-
-      {/* Модалка подтверждения клиента */}
-      <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Подтверждение клиента</DialogTitle>
-            <DialogDescription>
-              Вы собираетесь подтвердить клиента <strong>{selectedClient?.name}</strong>.
-              После подтверждения на email <strong>{selectedClient?.email || 'не указан'}</strong> будет отправлено уведомление.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setConfirmDialogOpen(false)}
-              disabled={confirmLoading}
-            >
-              Отмена
-            </Button>
-            <Button
-              onClick={handleConfirmClient}
-              disabled={confirmLoading}
-            >
-              {confirmLoading ? 'Подтверждение...' : 'Подтвердить и отправить письмо'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 } 

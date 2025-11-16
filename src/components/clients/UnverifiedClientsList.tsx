@@ -6,7 +6,7 @@ import { gql } from '@apollo/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle, UserCheck } from 'lucide-react'
+import { CheckCircle, UserCheck, XCircle } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -66,6 +66,12 @@ const VERIFY_CLIENT = gql`
   }
 `
 
+const REJECT_CLIENT = gql`
+  mutation RejectClient($clientId: ID!) {
+    rejectClient(clientId: $clientId)
+  }
+`
+
 // Типы данных
 interface UnverifiedClient {
   id: string
@@ -87,6 +93,7 @@ interface UnverifiedClient {
 export const UnverifiedClientsList = () => {
   const [selectedClient, setSelectedClient] = useState<UnverifiedClient | null>(null)
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
+  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false)
 
   const { data, loading, error, refetch } = useQuery(GET_UNVERIFIED_CLIENTS, {
     variables: {
@@ -112,14 +119,41 @@ export const UnverifiedClientsList = () => {
     }
   })
 
+  const [rejectClient, { loading: rejecting }] = useMutation(REJECT_CLIENT, {
+    onCompleted: () => {
+      toast.success(`Клиент ${selectedClient?.name} отклонен и удален`)
+      refetch()
+      setIsRejectDialogOpen(false)
+      setSelectedClient(null)
+    },
+    onError: (error) => {
+      toast.error(`Ошибка: ${error.message}`)
+    }
+  })
+
   const handleVerifyClick = (client: UnverifiedClient) => {
     setSelectedClient(client)
     setIsConfirmDialogOpen(true)
   }
 
+  const handleRejectClick = (client: UnverifiedClient) => {
+    setSelectedClient(client)
+    setIsRejectDialogOpen(true)
+  }
+
   const handleConfirmVerify = () => {
     if (selectedClient) {
       verifyClient({
+        variables: {
+          clientId: selectedClient.id
+        }
+      })
+    }
+  }
+
+  const handleConfirmReject = () => {
+    if (selectedClient) {
+      rejectClient({
         variables: {
           clientId: selectedClient.id
         }
@@ -231,14 +265,25 @@ export const UnverifiedClientsList = () => {
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          onClick={() => handleVerifyClick(client)}
-                          disabled={verifying}
-                        >
-                          <CheckCircle className="mr-2 h-4 w-4" />
-                          Подтвердить
-                        </Button>
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRejectClick(client)}
+                            disabled={verifying || rejecting}
+                          >
+                            <XCircle className="mr-2 h-4 w-4" />
+                            Отклонить
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleVerifyClick(client)}
+                            disabled={verifying || rejecting}
+                          >
+                            <CheckCircle className="mr-2 h-4 w-4" />
+                            Подтвердить
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -293,6 +338,54 @@ export const UnverifiedClientsList = () => {
               disabled={verifying}
             >
               {verifying ? 'Подтверждение...' : 'Подтвердить клиента'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Отклонение клиента</DialogTitle>
+            <DialogDescription>
+              Вы уверены, что хотите отклонить клиента?
+            </DialogDescription>
+          </DialogHeader>
+          {selectedClient && (
+            <div className="space-y-2 py-4">
+              <p><strong>ФИО:</strong> {selectedClient.name}</p>
+              {(selectedClient.companyName || selectedClient.legalEntities?.[0]?.shortName) && (
+                <p><strong>Компания:</strong> {selectedClient.companyName || selectedClient.legalEntities?.[0]?.shortName}</p>
+              )}
+              {selectedClient.legalEntities?.[0]?.inn && (
+                <p><strong>ИНН:</strong> {selectedClient.legalEntities[0].inn}</p>
+              )}
+              <p><strong>Телефон:</strong> {selectedClient.phone}</p>
+              <p><strong>Email:</strong> {selectedClient.email || 'Не указан'}</p>
+              <div className="mt-4 p-4 bg-red-50 rounded-md">
+                <p className="text-sm text-red-900 font-semibold">
+                  Внимание! Это действие нельзя отменить.
+                </p>
+                <p className="text-sm text-red-900 mt-2">
+                  Клиент будет полностью удален из системы.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsRejectDialogOpen(false)}
+              disabled={rejecting}
+            >
+              Отмена
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmReject}
+              disabled={rejecting}
+            >
+              {rejecting ? 'Отклонение...' : 'Отклонить клиента'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -19,9 +19,14 @@ export type SendEmailInput = {
   subject: string
   html: string
   text?: string
+  attachments?: Array<{
+    filename: string
+    content: Buffer
+    contentType?: string
+  }>
 }
 
-export async function sendEmail({ to, subject, html, text }: SendEmailInput) {
+export async function sendEmail({ to, subject, html, text, attachments }: SendEmailInput) {
   const host = process.env.SMTP_HOST
   const port = Number(process.env.SMTP_PORT || '587')
   const user = process.env.SMTP_USER
@@ -69,7 +74,18 @@ export async function sendEmail({ to, subject, html, text }: SendEmailInput) {
         globalState.__smtp_verified = true
         console.log('[smtp] verified', { host, port: c.port, secure: c.secure })
       }
-      const info: SentMessageInfo = await transporter.sendMail({ from, to, subject, html, text })
+      const info: SentMessageInfo = await transporter.sendMail({
+        from,
+        to,
+        subject,
+        html,
+        text,
+        attachments: attachments?.map(att => ({
+          filename: att.filename,
+          content: att.content,
+          contentType: att.contentType
+        }))
+      })
       return info
     } catch (error) {
       lastErr = error
