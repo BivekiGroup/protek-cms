@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation } from '@apollo/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -37,6 +37,8 @@ import {
   Clock3,
   CheckCircle,
   Wallet,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 
 interface OrderItem {
@@ -58,6 +60,18 @@ interface Order {
     name: string
     email?: string
     phone?: string
+    legalEntities?: Array<{
+      id: string
+      shortName?: string
+      fullName?: string
+      inn?: string
+    }>
+  }
+  legalEntity?: {
+    id: string
+    shortName?: string
+    fullName?: string
+    inn?: string
   }
   clientEmail?: string
   clientPhone?: string
@@ -105,11 +119,32 @@ const formatPrice = (price: number, currency = 'RUB') =>
 const formatDateTime = (value?: string | null) =>
   value ? new Date(value).toLocaleString('ru-RU') : '—'
 
+const getLegalEntityName = (order: Order) => {
+  if (order.legalEntity) {
+    return order.legalEntity.shortName || order.legalEntity.fullName
+  }
+  if (order.client?.legalEntities?.[0]) {
+    return order.client.legalEntities[0].shortName || order.client.legalEntities[0].fullName
+  }
+  return null
+}
+
+const getLegalEntityINN = (order: Order) => {
+  if (order.legalEntity && 'inn' in order.legalEntity) {
+    return (order.legalEntity as any).inn
+  }
+  if (order.client?.legalEntities?.[0] && 'inn' in order.client.legalEntities[0]) {
+    return (order.client.legalEntities[0] as any).inn
+  }
+  return null
+}
+
 export default function ReturnsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'RETURN_REQUESTED' | 'REFUNDED'>('ALL')
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showOrderDetails, setShowOrderDetails] = useState(false)
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set())
 
   const queryVariables = useMemo(
     () => ({
@@ -183,6 +218,18 @@ export default function ReturnsPage() {
     }
   }
 
+  const toggleOrderExpand = (orderId: string) => {
+    setExpandedOrders(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(orderId)) {
+        newSet.delete(orderId)
+      } else {
+        newSet.add(orderId)
+      }
+      return newSet
+    })
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -244,40 +291,64 @@ export default function ReturnsPage() {
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+        <Card
+          className={`cursor-pointer transition-all hover:shadow-md ${
+            statusFilter === 'ALL' ? 'border-primary border-2' : ''
+          }`}
+          onClick={() => setStatusFilter('ALL')}
+        >
           <CardContent className="p-6">
             <div className="flex items-center">
               <RotateCcw className="h-8 w-8 text-blue-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Всего возвратов</p>
                 <p className="text-2xl font-bold">{filteredOrders.length}</p>
+                {statusFilter === 'ALL' && (
+                  <p className="text-xs text-primary mt-1 font-medium">Активный фильтр</p>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={`cursor-pointer transition-all hover:shadow-md ${
+            statusFilter === 'RETURN_REQUESTED' ? 'border-primary border-2' : ''
+          }`}
+          onClick={() => setStatusFilter(statusFilter === 'RETURN_REQUESTED' ? 'ALL' : 'RETURN_REQUESTED')}
+        >
           <CardContent className="p-6">
             <div className="flex items-center">
               <Clock3 className="h-8 w-8 text-orange-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">В обработке</p>
                 <p className="text-2xl font-bold">{pendingReturns.length}</p>
+                {statusFilter === 'RETURN_REQUESTED' && (
+                  <p className="text-xs text-primary mt-1 font-medium">Активный фильтр</p>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={`cursor-pointer transition-all hover:shadow-md ${
+            statusFilter === 'REFUNDED' ? 'border-primary border-2' : ''
+          }`}
+          onClick={() => setStatusFilter(statusFilter === 'REFUNDED' ? 'ALL' : 'REFUNDED')}
+        >
           <CardContent className="p-6">
             <div className="flex items-center">
               <CheckCircle className="h-8 w-8 text-green-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Завершено</p>
                 <p className="text-2xl font-bold">{completedReturns.length}</p>
+                {statusFilter === 'REFUNDED' && (
+                  <p className="text-xs text-primary mt-1 font-medium">Активный фильтр</p>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="cursor-default">
           <CardContent className="p-6">
             <div className="flex items-center">
               <Wallet className="h-8 w-8 text-purple-600" />
@@ -297,43 +368,58 @@ export default function ReturnsPage() {
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Номер заказа</TableHead>
-                <TableHead>Клиент</TableHead>
-                <TableHead>Статус</TableHead>
-                <TableHead>Сумма</TableHead>
-                <TableHead>Запрошен</TableHead>
-                <TableHead>Завершен</TableHead>
-                <TableHead>Действия</TableHead>
+              <TableRow className="text-xs">
+                <TableHead className="text-xs w-8"></TableHead>
+                <TableHead className="text-xs">ID заказа</TableHead>
+                <TableHead className="text-xs">Юрлицо</TableHead>
+                <TableHead className="text-xs">Статус</TableHead>
+                <TableHead className="text-xs">Сумма</TableHead>
+                <TableHead className="text-xs">Запрошен</TableHead>
+                <TableHead className="text-xs">Завершен</TableHead>
+                <TableHead className="text-xs">Действия</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredOrders.map((order) => (
-                <TableRow key={order.id}>
-                  <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{order.client?.name || order.clientName || 'Гость'}</div>
-                      <div className="text-sm text-gray-500">{order.client?.email || order.clientEmail}</div>
-                      <div className="text-sm text-gray-500">{order.client?.phone || order.clientPhone}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <Badge className={statusColors[order.status as 'RETURN_REQUESTED' | 'REFUNDED']}>
-                        {statusLabels[order.status as 'RETURN_REQUESTED' | 'REFUNDED']}
-                      </Badge>
-                      {order.returnReason && (
-                        <div className="text-xs text-gray-500 max-w-[220px]">{order.returnReason}</div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">{formatPrice(order.finalAmount, order.currency)}</div>
-                  </TableCell>
-                  <TableCell>{formatDateTime(order.returnRequestedAt)}</TableCell>
-                  <TableCell>{formatDateTime(order.returnedAt)}</TableCell>
-                  <TableCell>
+              {filteredOrders.map((order) => {
+                const isExpanded = expandedOrders.has(order.id)
+                const legalEntityName = getLegalEntityName(order)
+                const legalEntityINN = getLegalEntityINN(order)
+
+                return (
+                  <React.Fragment key={order.id}>
+                    <TableRow
+                      className="hover:bg-gray-50 text-sm cursor-pointer"
+                      onClick={() => toggleOrderExpand(order.id)}
+                    >
+                      <TableCell className="py-2">
+                        <div className="flex items-center justify-center">
+                          {isExpanded ? (
+                            <ChevronUp className="h-3 w-3" />
+                          ) : (
+                            <ChevronDown className="h-3 w-3" />
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-medium py-2 text-xs">{order.orderNumber}</TableCell>
+                      <TableCell className="py-2 text-xs">
+                        {legalEntityName && (
+                          <div>
+                            <div className="font-medium">{legalEntityName}</div>
+                            {legalEntityINN && <div className="text-xs text-gray-500">ИНН: {legalEntityINN}</div>}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-2 text-xs">
+                        <Badge className={statusColors[order.status as 'RETURN_REQUESTED' | 'REFUNDED']} variant="outline">
+                          {statusLabels[order.status as 'RETURN_REQUESTED' | 'REFUNDED']}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="py-2 text-xs font-medium">
+                        {formatPrice(order.finalAmount, order.currency)}
+                      </TableCell>
+                      <TableCell className="py-2 text-xs">{formatDateTime(order.returnRequestedAt)}</TableCell>
+                      <TableCell className="py-2 text-xs">{formatDateTime(order.returnedAt)}</TableCell>
+                      <TableCell className="py-2" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
@@ -384,7 +470,90 @@ export default function ReturnsPage() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+
+                {isExpanded && (
+                  <TableRow className="bg-gray-50">
+                    <TableCell colSpan={8} className="py-3 px-6">
+                      <div className="space-y-4">
+                        {/* Таблица товаров */}
+                        <div>
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b bg-gray-100">
+                                <th className="text-left py-2 px-2 font-semibold">Артикул</th>
+                                <th className="text-left py-2 px-2 font-semibold">Бренд</th>
+                                <th className="text-left py-2 px-2 font-semibold">Название</th>
+                                <th className="text-right py-2 px-2 font-semibold">Цена</th>
+                                <th className="text-center py-2 px-2 font-semibold">Кол-во</th>
+                                <th className="text-right py-2 px-2 font-semibold">Итого</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {order.items.map((item) => (
+                                <tr key={item.id} className="border-b bg-white">
+                                  <td className="py-2 px-2">{item.article || '—'}</td>
+                                  <td className="py-2 px-2">{item.brand || '—'}</td>
+                                  <td className="py-2 px-2">{item.name}</td>
+                                  <td className="text-right py-2 px-2">{formatPrice(item.price, order.currency)}</td>
+                                  <td className="text-center py-2 px-2">{item.quantity}</td>
+                                  <td className="text-right py-2 px-2 font-medium">{formatPrice(item.totalPrice, order.currency)}</td>
+                                </tr>
+                              ))}
+                              <tr className="bg-white">
+                                <td colSpan={5} className="text-right py-2 px-2 font-semibold">Сумма товаров:</td>
+                                <td className="text-right py-2 px-2">{formatPrice(order.totalAmount, order.currency)}</td>
+                              </tr>
+                              {order.discountAmount > 0 && (
+                                <tr className="bg-white">
+                                  <td colSpan={5} className="text-right py-2 px-2 font-semibold">Скидка:</td>
+                                  <td className="text-right py-2 px-2">-{formatPrice(order.discountAmount, order.currency)}</td>
+                                </tr>
+                              )}
+                              <tr className="bg-white">
+                                <td colSpan={5} className="text-right py-2 px-2 font-bold">Итого к возврату:</td>
+                                <td className="text-right py-2 px-2 font-bold">{formatPrice(order.finalAmount, order.currency)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Информационные блоки */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                          {/* Контакты */}
+                          <div className="bg-white p-3 rounded border">
+                            <h4 className="font-semibold mb-2">Контактные данные</h4>
+                            <div className="space-y-1">
+                              <div><strong>Имя:</strong> {order.client?.name || order.clientName || '—'}</div>
+                              <div><strong>Email:</strong> {order.client?.email || order.clientEmail || '—'}</div>
+                              <div><strong>Телефон:</strong> {order.client?.phone || order.clientPhone || '—'}</div>
+                            </div>
+                          </div>
+
+                          {/* Информация о возврате */}
+                          <div className="bg-white p-3 rounded border">
+                            <h4 className="font-semibold mb-2">Информация о возврате</h4>
+                            <div className="space-y-1">
+                              <div><strong>Причина:</strong> {order.returnReason || '—'}</div>
+                              <div><strong>Запрошен:</strong> {formatDateTime(order.returnRequestedAt)}</div>
+                              <div><strong>Завершен:</strong> {formatDateTime(order.returnedAt)}</div>
+                            </div>
+                          </div>
+
+                          {/* Комментарий */}
+                          {order.comment && (
+                            <div className="bg-white p-3 rounded border">
+                              <h4 className="font-semibold mb-2">Комментарий</h4>
+                              <div>{order.comment}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </React.Fragment>
+              )
+              })}
             </TableBody>
           </Table>
 

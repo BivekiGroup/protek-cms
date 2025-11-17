@@ -213,7 +213,7 @@ export const ProfilesList = () => {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-medium">Профили клиентов</h3>
+            <h3 className="text-lg font-medium">Профили контрагентов</h3>
             <p className="text-sm text-gray-500">
               Управление профилями и наценками для разных групп пользователей
             </p>
@@ -233,7 +233,7 @@ export const ProfilesList = () => {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-medium">Профили клиентов</h3>
+            <h3 className="text-lg font-medium">Профили контрагентов</h3>
             <p className="text-sm text-gray-500">
               Управление профилями и наценками для разных групп пользователей
             </p>
@@ -255,7 +255,7 @@ export const ProfilesList = () => {
       {/* Заголовок и действия */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">Профили клиентов</h3>
+          <h3 className="text-lg font-medium">Профили контрагентов</h3>
           <p className="text-sm text-gray-500">
             Управление профилями и наценками для разных групп пользователей
           </p>
@@ -299,7 +299,7 @@ export const ProfilesList = () => {
                       <div>
                         <div className="font-medium">{profile.name}</div>
                         <div className="text-sm text-gray-500">
-                          {profile._count?.clients || 0} клиентов
+                          {profile._count?.clients || 0} контрагентов
                         </div>
                       </div>
                     </TableCell>

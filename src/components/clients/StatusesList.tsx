@@ -29,28 +29,28 @@ const mockStatuses: ClientStatus[] = [
     id: '1',
     name: 'Новый',
     color: '#3B82F6',
-    description: 'Новый клиент, требует внимания',
+    description: 'Новый контрагент, требует внимания',
     createdAt: '2024-01-01T00:00:00Z'
   },
   {
     id: '2',
     name: 'Активный',
     color: '#10B981',
-    description: 'Активный клиент с регулярными покупками',
+    description: 'Активный контрагент с регулярными покупками',
     createdAt: '2024-01-01T00:00:00Z'
   },
   {
     id: '3',
     name: 'Неактивный',
     color: '#F59E0B',
-    description: 'Клиент давно не совершал покупки',
+    description: 'Контрагент давно не совершал покупки',
     createdAt: '2024-01-01T00:00:00Z'
   },
   {
     id: '4',
     name: 'Заблокирован',
     color: '#EF4444',
-    description: 'Заблокированный клиент',
+    description: 'Заблокированный контрагент',
     createdAt: '2024-01-01T00:00:00Z'
   }
 ]
@@ -86,9 +86,9 @@ export const StatusesList = () => {
       {/* Заголовок и действия */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">Статусы клиентов</h3>
+          <h3 className="text-lg font-medium">Статусы контрагентов</h3>
           <p className="text-sm text-gray-500">
-            Управление статусами для категоризации клиентов
+            Управление статусами для категоризации контрагентов
           </p>
         </div>
         <Button onClick={handleAddStatus}>

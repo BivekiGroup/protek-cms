@@ -485,12 +485,14 @@ const ChangePasswordDialog = ({ user, onPasswordChanged }: { user: User; onPassw
 }
 
 export default function ManagersPage() {
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'ADMIN' | 'MODERATOR' | 'USER'>('ALL')
+
   // Проверяем права доступа
   const { data: meData, loading: meLoading, error: meError } = useQuery(GET_ME)
   const { data, loading, error, refetch } = useQuery(GET_USERS, {
     skip: !meData?.me || meData.me.role !== 'ADMIN' // Загружаем данные только если пользователь админ
   })
-  
+
   const [deleteUser] = useMutation(DELETE_USER, {
     onCompleted: () => {
       toast.success('Пользователь успешно удален')
@@ -568,6 +570,11 @@ export default function ManagersPage() {
 
   const users: User[] = data?.users || []
 
+  // Фильтрация пользователей по роли
+  const filteredUsers = roleFilter === 'ALL'
+    ? users
+    : users.filter(user => user.role === roleFilter)
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -581,7 +588,12 @@ export default function ManagersPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card
+          className={`cursor-pointer transition-all hover:shadow-md ${
+            roleFilter === 'ALL' ? 'border-primary border-2' : ''
+          }`}
+          onClick={() => setRoleFilter('ALL')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Всего пользователей
@@ -590,9 +602,17 @@ export default function ManagersPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{users.length}</div>
+            {roleFilter === 'ALL' && (
+              <p className="text-xs text-primary mt-1 font-medium">Активный фильтр</p>
+            )}
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={`cursor-pointer transition-all hover:shadow-md ${
+            roleFilter === 'ADMIN' ? 'border-primary border-2' : ''
+          }`}
+          onClick={() => setRoleFilter(roleFilter === 'ADMIN' ? 'ALL' : 'ADMIN')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Администраторы
@@ -603,9 +623,17 @@ export default function ManagersPage() {
             <div className="text-2xl font-bold">
               {users.filter(user => user.role === 'ADMIN').length}
             </div>
+            {roleFilter === 'ADMIN' && (
+              <p className="text-xs text-primary mt-1 font-medium">Активный фильтр</p>
+            )}
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={`cursor-pointer transition-all hover:shadow-md ${
+            roleFilter === 'MODERATOR' ? 'border-primary border-2' : ''
+          }`}
+          onClick={() => setRoleFilter(roleFilter === 'MODERATOR' ? 'ALL' : 'MODERATOR')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Модераторы
@@ -616,9 +644,17 @@ export default function ManagersPage() {
             <div className="text-2xl font-bold">
               {users.filter(user => user.role === 'MODERATOR').length}
             </div>
+            {roleFilter === 'MODERATOR' && (
+              <p className="text-xs text-primary mt-1 font-medium">Активный фильтр</p>
+            )}
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={`cursor-pointer transition-all hover:shadow-md ${
+            roleFilter === 'USER' ? 'border-primary border-2' : ''
+          }`}
+          onClick={() => setRoleFilter(roleFilter === 'USER' ? 'ALL' : 'USER')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Пользователи
@@ -629,54 +665,59 @@ export default function ManagersPage() {
             <div className="text-2xl font-bold">
               {users.filter(user => user.role === 'USER').length}
             </div>
+            {roleFilter === 'USER' && (
+              <p className="text-xs text-primary mt-1 font-medium">Активный фильтр</p>
+            )}
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Список пользователей</CardTitle>
+          <CardTitle>Список пользователей ({filteredUsers.length})</CardTitle>
           <CardDescription>
-            Управляйте пользователями системы
+            {roleFilter === 'ALL'
+              ? 'Управляйте пользователями системы'
+              : `Показаны пользователи с ролью: ${getRoleLabel(roleFilter)}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Пользователь</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Роль</TableHead>
-                <TableHead>Дата создания</TableHead>
-                <TableHead className="text-right">Действия</TableHead>
+              <TableRow className="text-xs">
+                <TableHead className="text-xs">Пользователь</TableHead>
+                <TableHead className="text-xs">Email</TableHead>
+                <TableHead className="text-xs">Роль</TableHead>
+                <TableHead className="text-xs">Дата создания</TableHead>
+                <TableHead className="text-xs text-right">Действия</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
+              {filteredUsers.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell className="flex items-center space-x-3">
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={user.avatar} />
-                      <AvatarFallback>
-                        {user.firstName[0]}{user.lastName[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="font-medium">
+                  <TableCell className="py-2 text-xs">
+                    <div className="flex items-center space-x-3">
+                      <Avatar className="h-7 w-7">
+                        <AvatarImage src={user.avatar} />
+                        <AvatarFallback className="text-xs">
+                          {user.firstName[0]}{user.lastName[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="font-medium text-xs">
                         {user.firstName} {user.lastName}
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>
-                    <Badge variant={getRoleBadgeVariant(user.role)}>
+                  <TableCell className="py-2 text-xs">{user.email}</TableCell>
+                  <TableCell className="py-2 text-xs">
+                    <Badge variant={getRoleBadgeVariant(user.role)} className="text-xs py-0 px-2">
                       {getRoleLabel(user.role)}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="py-2 text-xs">
                     {new Date(user.createdAt).toLocaleDateString('ru-RU')}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="py-2 text-right">
                     <div className="flex items-center justify-end space-x-2">
                       <EditUserDialog user={user} onUserUpdated={() => refetch()} />
                       <ChangePasswordDialog user={user} onPasswordChanged={() => refetch()} />

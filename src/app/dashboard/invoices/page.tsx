@@ -51,7 +51,9 @@ const GET_BALANCE_INVOICES = gql`
           name
           phone
           legalEntities {
+            id
             shortName
+            fullName
           }
         }
       }
@@ -75,6 +77,16 @@ const GET_ORDER_INVOICES = gql`
           id
           name
           phone
+          legalEntities {
+            id
+            shortName
+            fullName
+          }
+        }
+        legalEntity {
+          id
+          shortName
+          fullName
         }
         clientName
         clientPhone
@@ -120,7 +132,9 @@ interface BalanceInvoice {
       name: string
       phone: string
       legalEntities: Array<{
+        id: string
         shortName: string
+        fullName: string
       }>
     }
   }
@@ -189,7 +203,7 @@ export default function InvoicesPage() {
 
       if (data?.getInvoicePDF?.success) {
         const { pdfBase64, filename } = data.getInvoicePDF
-        
+
         // Конвертируем base64 в blob и скачиваем
         const byteCharacters = atob(pdfBase64)
         const byteNumbers = new Array(byteCharacters.length)
@@ -198,7 +212,7 @@ export default function InvoicesPage() {
         }
         const byteArray = new Uint8Array(byteNumbers)
         const blob = new Blob([byteArray], { type: 'application/pdf' })
-        
+
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
@@ -234,6 +248,18 @@ export default function InvoicesPage() {
     return new Date(expiresAt) < new Date()
   }
 
+  const getClientLegalEntity = (order: any) => {
+    // Сначала смотрим прямое юрлицо заказа
+    if (order.legalEntity) {
+      return order.legalEntity.shortName || order.legalEntity.fullName
+    }
+    // Потом смотрим первое юрлицо клиента
+    if (order.client?.legalEntities?.[0]) {
+      return order.client.legalEntities[0].shortName || order.client.legalEntities[0].fullName
+    }
+    return '—'
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -255,7 +281,7 @@ export default function InvoicesPage() {
   }
 
   const invoices: BalanceInvoice[] = data?.balanceInvoices || []
-  
+
   // Фильтрация счетов
   const filteredInvoices = invoices.filter(invoice => {
     if (statusFilter === 'all') return true
@@ -266,7 +292,7 @@ export default function InvoicesPage() {
   })
 
   // Сортировка по дате создания (новые сверху)
-  const sortedInvoices = [...filteredInvoices].sort((a, b) => 
+  const sortedInvoices = [...filteredInvoices].sort((a, b) =>
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
 
@@ -321,33 +347,39 @@ export default function InvoicesPage() {
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Номер заказа</TableHead>
-                      <TableHead>Клиент</TableHead>
-                      <TableHead>Сумма</TableHead>
-                      <TableHead>Статус</TableHead>
-                      <TableHead>Создан</TableHead>
-                      <TableHead>Действия</TableHead>
+                    <TableRow className="text-xs">
+                      <TableHead className="text-xs">ID заказа</TableHead>
+                      <TableHead className="text-xs">Юрлицо</TableHead>
+                      <TableHead className="text-xs">Контактные данные</TableHead>
+                      <TableHead className="text-xs">Сумма</TableHead>
+                      <TableHead className="text-xs">Статус</TableHead>
+                      <TableHead className="text-xs">Создан</TableHead>
+                      <TableHead className="text-xs">Действия</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {orderInvoices.map((order: any) => (
-                      <TableRow key={order.id}>
-                        <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                        <TableCell>
+                      <TableRow key={order.id} className="text-xs">
+                        <TableCell className="font-medium py-2 text-xs">{order.orderNumber}</TableCell>
+                        <TableCell className="py-2 text-xs">
+                          <Badge variant="secondary" className="text-xs py-0 px-2">
+                            {getClientLegalEntity(order)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-2 text-xs">
                           <div>
                             <div className="font-medium">{order.client?.name || order.clientName}</div>
-                            <div className="text-sm text-gray-500">{order.client?.phone || order.clientPhone}</div>
+                            <div className="text-gray-500">{order.client?.phone || order.clientPhone}</div>
                           </div>
                         </TableCell>
-                        <TableCell>{formatCurrency(order.finalAmount, order.currency)}</TableCell>
-                        <TableCell>
+                        <TableCell className="py-2 text-xs">{formatCurrency(order.finalAmount, order.currency)}</TableCell>
+                        <TableCell className="py-2 text-xs">
                           <Badge className={order.status === 'PENDING' ? statusColors.PENDING : statusColors.PAID}>
                             {order.status === 'PENDING' ? 'Ожидает оплаты' : statusLabels[order.status as keyof typeof statusLabels] || order.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>{formatDate(order.createdAt)}</TableCell>
-                        <TableCell>
+                        <TableCell className="py-2 text-xs">{formatDate(order.createdAt)}</TableCell>
+                        <TableCell className="py-2 text-xs">
                           {order.invoiceUrl ? (
                             <a
                               href={order.invoiceUrl}
@@ -380,7 +412,7 @@ export default function InvoicesPage() {
       {activeTab === 'balance' && (
         <>
       <div className="flex justify-between items-center mb-6">
-        
+
         <div className="flex gap-4">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-48">
@@ -394,7 +426,7 @@ export default function InvoicesPage() {
               <SelectItem value="CANCELLED">Отмененные</SelectItem>
             </SelectContent>
           </Select>
-          
+
           <Button onClick={() => refetch()}>Обновить</Button>
         </div>
       </div>
@@ -402,88 +434,94 @@ export default function InvoicesPage() {
       <div className="rounded-md border">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Номер счета</TableHead>
-              <TableHead>Клиент</TableHead>
-              <TableHead>Договор</TableHead>
-              <TableHead>Сумма</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead>Создан</TableHead>
-              <TableHead>Действует до</TableHead>
-              <TableHead>Действия</TableHead>
+            <TableRow className="text-xs">
+              <TableHead className="text-xs">Номер счета</TableHead>
+              <TableHead className="text-xs">Юрлицо</TableHead>
+              <TableHead className="text-xs">Контактные данные</TableHead>
+              <TableHead className="text-xs">Договор</TableHead>
+              <TableHead className="text-xs">Сумма</TableHead>
+              <TableHead className="text-xs">Статус</TableHead>
+              <TableHead className="text-xs">Создан</TableHead>
+              <TableHead className="text-xs">Действует до</TableHead>
+              <TableHead className="text-xs">Действия</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sortedInvoices.map((invoice) => {
               const expired = isExpired(invoice.expiresAt)
               const actualStatus = invoice.status === 'PENDING' && expired ? 'EXPIRED' : invoice.status
-              
+              const legalEntityName = invoice.contract.client.legalEntities[0]?.shortName ||
+                                     invoice.contract.client.legalEntities[0]?.fullName || '—'
+
               return (
-                <TableRow key={invoice.id}>
-                  <TableCell className="font-medium">
+                <TableRow key={invoice.id} className="text-xs">
+                  <TableCell className="font-medium py-2 text-xs">
                     {invoice.invoiceNumber}
                   </TableCell>
-                  
-                  <TableCell>
+
+                  <TableCell className="py-2 text-xs">
+                    <Badge variant="secondary" className="text-xs py-0 px-2">
+                      {legalEntityName}
+                    </Badge>
+                  </TableCell>
+
+                  <TableCell className="py-2 text-xs">
                     <div>
-                      <div className="font-medium">
-                        {invoice.contract.client.legalEntities[0]?.shortName || invoice.contract.client.name}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {invoice.contract.client.phone}
-                      </div>
+                      <div className="font-medium">{invoice.contract.client.name}</div>
+                      <div className="text-gray-500">{invoice.contract.client.phone}</div>
                     </div>
                   </TableCell>
-                  
-                  <TableCell>
+
+                  <TableCell className="py-2 text-xs">
                     {invoice.contract.contractNumber}
                   </TableCell>
-                  
-                  <TableCell>
+
+                  <TableCell className="py-2 text-xs">
                     {formatCurrency(invoice.amount, invoice.currency)}
                   </TableCell>
-                  
-                  <TableCell>
+
+                  <TableCell className="py-2 text-xs">
                     <Badge className={statusColors[actualStatus]}>
                       {statusLabels[actualStatus]}
                     </Badge>
                   </TableCell>
-                  
-                  <TableCell>
+
+                  <TableCell className="py-2 text-xs">
                     {formatDate(invoice.createdAt)}
                   </TableCell>
-                  
-                  <TableCell>
+
+                  <TableCell className="py-2 text-xs">
                     <span className={expired ? 'text-red-600 font-medium' : ''}>
                       {formatDate(invoice.expiresAt)}
                     </span>
                   </TableCell>
-                  
-                  <TableCell>
+
+                  <TableCell className="py-2">
                     <div className="flex gap-2">
                       {/* Кнопка скачивания PDF */}
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => handleDownloadPDF(invoice.id)}
+                        className="text-xs h-7"
                       >
                         PDF
                       </Button>
-                      
+
                       {/* Кнопки управления статусом */}
                       {invoice.status === 'PENDING' && !expired && (
                         <>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button size="sm" variant="default">
-                                Подтвердить оплату
+                              <Button size="sm" variant="default" className="text-xs h-7">
+                                Подтвердить
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Подтвердить оплату</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Вы уверены, что хотите подтвердить оплату счета {invoice.invoiceNumber} 
+                                  Вы уверены, что хотите подтвердить оплату счета {invoice.invoiceNumber}
                                   на сумму {formatCurrency(invoice.amount, invoice.currency)}?
                                   Баланс клиента будет автоматически пополнен.
                                 </AlertDialogDescription>
@@ -498,10 +536,10 @@ export default function InvoicesPage() {
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
-                          
+
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button size="sm" variant="destructive">
+                              <Button size="sm" variant="destructive" className="text-xs h-7">
                                 Отменить
                               </Button>
                             </AlertDialogTrigger>
@@ -532,14 +570,14 @@ export default function InvoicesPage() {
             })}
           </TableBody>
         </Table>
-        
+
         {sortedInvoices.length === 0 && (
           <div className="text-center py-8 text-gray-500">
             {statusFilter === 'all' ? 'Счета не найдены' : 'Нет счетов с выбранным статусом'}
           </div>
         )}
       </div>
-      
+
       {/* Статистика балансовых счетов */}
       {activeTab === 'balance' && (
       <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -549,21 +587,21 @@ export default function InvoicesPage() {
           </div>
           <div className="text-sm text-yellow-600">Ожидают оплаты</div>
         </div>
-        
+
         <div className="bg-green-50 p-4 rounded-lg">
           <div className="text-2xl font-bold text-green-800">
             {invoices.filter(i => i.status === 'PAID').length}
           </div>
           <div className="text-sm text-green-600">Оплачено</div>
         </div>
-        
+
         <div className="bg-red-50 p-4 rounded-lg">
           <div className="text-2xl font-bold text-red-800">
             {invoices.filter(i => i.status === 'PENDING' && isExpired(i.expiresAt)).length}
           </div>
           <div className="text-sm text-red-600">Просрочено</div>
         </div>
-        
+
         <div className="bg-blue-50 p-4 rounded-lg">
           <div className="text-2xl font-bold text-blue-800">
             {formatCurrency(
@@ -580,4 +618,4 @@ export default function InvoicesPage() {
       )}
     </div>
   )
-} 
+}

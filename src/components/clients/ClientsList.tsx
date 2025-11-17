@@ -90,7 +90,7 @@ export const ClientsList = () => {
     
     const filteredClients = applyFilters(clients)
     exportClientsToCSV(filteredClients, `clients_${new Date().toISOString().split('T')[0]}.csv`)
-    toast.success(`Экспортировано ${filteredClients.length} клиентов`)
+    toast.success(`Экспортировано ${filteredClients.length} контрагентов`)
   }
 
   const handleEditClient = (clientId: string) => {
@@ -133,10 +133,10 @@ export const ClientsList = () => {
         return
       }
 
-      toast.success('Открывается личный кабинет клиента в новой вкладке')
+      toast.success('Открывается личный кабинет контрагента в новой вкладке')
     } catch (error) {
-      console.error('Ошибка входа от имени клиента:', error)
-      toast.error('Не удалось открыть сайт клиента')
+      console.error('Ошибка входа от имени контрагента:', error)
+      toast.error('Не удалось открыть сайт контрагента')
     }
   }
 
@@ -150,7 +150,7 @@ export const ClientsList = () => {
 
   const applyFilters = (clients: Client[]) => {
     return clients.filter((client: Client) => {
-      // Показываем только подтвержденных клиентов
+      // Показываем только подтвержденных контрагентов
       if (!client.isConfirmed) return false
 
       // Поиск по тексту
@@ -199,11 +199,11 @@ export const ClientsList = () => {
   }
 
   const getClientTypeLabel = (client: Client) => {
-    // Если у клиента есть хотя бы одно юридическое лицо, показываем "Юр. лицо"
+    // Если у контрагента есть хотя бы одно юридическое лицо, показываем "Юр. лицо"
     if (client.legalEntities && client.legalEntities.length > 0) {
       return 'Юр. лицо'
     }
-    // Иначе смотрим на тип клиента
+    // Иначе смотрим на тип контрагента
     return client.type === 'INDIVIDUAL' ? 'Физ. лицо' : 'Юр. лицо'
   }
 
@@ -253,7 +253,7 @@ export const ClientsList = () => {
   }
 
   const getClientINN = (client: Client) => {
-    // Берем ИНН из первого юр.лица или из основного клиента
+    // Берем ИНН из первого юр.лица или из основного контрагента
     if (client.legalEntities && client.legalEntities.length > 0 && client.legalEntities[0].inn) {
       return client.legalEntities[0].inn
     }
@@ -264,13 +264,13 @@ export const ClientsList = () => {
     return (
       <div className="space-y-4">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Клиенты</h1>
+          <h1 className="text-2xl font-bold">Контрагенты</h1>
         </div>
         <Card>
           <CardContent className="p-8">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-              <p className="text-gray-600">Загрузка клиентов...</p>
+              <p className="text-gray-600">Загрузка контрагентов...</p>
             </div>
           </CardContent>
         </Card>
@@ -282,12 +282,12 @@ export const ClientsList = () => {
     return (
       <div className="space-y-4">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Клиенты</h1>
+          <h1 className="text-2xl font-bold">Контрагенты</h1>
         </div>
         <Card>
           <CardContent className="p-8">
             <div className="text-center text-red-600">
-              <p>Ошибка загрузки клиентов: {error.message}</p>
+              <p>Ошибка загрузки контрагентов: {error.message}</p>
             </div>
           </CardContent>
         </Card>
@@ -306,7 +306,7 @@ export const ClientsList = () => {
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
-              placeholder="Поиск клиентов..."
+              placeholder="Поиск контрагентов..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -333,22 +333,22 @@ export const ClientsList = () => {
           </Button>
           <Button size="sm" onClick={handleAddClient}>
             <Plus className="h-4 w-4 mr-2" />
-            Добавить клиента
+            Добавить контрагента
           </Button>
         </div>
       </div>
 
-      {/* Таблица клиентов */}
+      {/* Таблица контрагентов */}
       <Card>
         <CardHeader>
-          <CardTitle>Список клиентов ({filteredClients.length})</CardTitle>
+          <CardTitle>Список контрагентов ({filteredClients.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Номер клиента</TableHead>
-                <TableHead>Тип профиля</TableHead>
+              <TableRow className="text-xs">
+                <TableHead>ID контрагента</TableHead>
+                <TableHead>Юрлицо</TableHead>
                 <TableHead>ИНН</TableHead>
                 <TableHead>Наценка</TableHead>
                 <TableHead>Контактное лицо</TableHead>
@@ -362,31 +362,32 @@ export const ClientsList = () => {
               {filteredClients.map((client: Client) => (
                 <TableRow
                   key={client.id}
-                  className="cursor-pointer hover:bg-gray-50"
+                  className="cursor-pointer hover:bg-gray-50 text-sm"
                   onClick={() => handleClientClick(client.id)}
                 >
-                  <TableCell className="font-medium">
+                  <TableCell className="font-medium py-2 text-xs">
                     {client.clientNumber}
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
+                  <TableCell className="py-2 text-xs">
+                    <Badge variant="secondary" className="text-xs py-0 px-2">
                       {getClientProfileType(client)}
                     </Badge>
                   </TableCell>
-                  <TableCell>{getClientINN(client)}</TableCell>
-                  <TableCell>{client.markup ? `${client.markup}%` : '—'}</TableCell>
-                  <TableCell>{client.name}</TableCell>
-                  <TableCell>{client.phone}</TableCell>
-                  <TableCell>{client.email || '—'}</TableCell>
-                  <TableCell>{formatDate(client.createdAt)}</TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
+                  <TableCell className="py-2 text-xs">{getClientINN(client)}</TableCell>
+                  <TableCell className="py-2 text-xs">{client.markup ? `${client.markup}%` : '—'}</TableCell>
+                  <TableCell className="py-2 text-xs">{client.name}</TableCell>
+                  <TableCell className="py-2 text-xs">{client.phone}</TableCell>
+                  <TableCell className="py-2 text-xs">{client.email || '—'}</TableCell>
+                  <TableCell className="py-2 text-xs">{formatDate(client.createdAt)}</TableCell>
+                  <TableCell className="py-2" onClick={(e) => e.stopPropagation()}>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleLoginAsClient(client)}
                       title="Войти от имени пользователя"
+                      className="h-7 w-7 p-0"
                     >
-                      <LogIn className="h-4 w-4" />
+                      <LogIn className="h-3 w-3" />
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -396,7 +397,7 @@ export const ClientsList = () => {
           
           {filteredClients.length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              {searchTerm ? 'Клиенты не найдены' : 'Нет клиентов'}
+              {searchTerm ? 'Контрагенты не найдены' : 'Нет контрагентов'}
             </div>
           )}
         </CardContent>

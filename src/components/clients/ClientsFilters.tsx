@@ -94,7 +94,7 @@ export const ClientsFilters = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Filter className="h-5 w-5" />
-            Фильтры клиентов
+            Фильтры контрагентов
             {getActiveFiltersCount() > 0 && (
               <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
                 {getActiveFiltersCount()}
@@ -102,14 +102,14 @@ export const ClientsFilters = ({
             )}
           </DialogTitle>
           <DialogDescription>
-            Настройте фильтры для поиска клиентов по различным критериям.
+            Настройте фильтры для поиска контрагентов по различным критериям.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Тип клиента */}
+          {/* Тип контрагента */}
           <div className="space-y-2">
-            <Label>Тип клиента</Label>
+            <Label>Тип контрагента</Label>
             <Select
               value={filters.type || 'ALL'}
               onValueChange={(value) => handleFilterChange('type', value)}

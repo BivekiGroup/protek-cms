@@ -55,8 +55,8 @@ export const ImportClientsModal = ({ isOpen, onClose }: ImportClientsModalProps)
     // Создаем CSV шаблон
     const csvContent = [
       'name,email,phone,type,markup,isConfirmed,notes',
-      'Иван Иванов,ivan@example.com,+7 (999) 123-45-67,INDIVIDUAL,5.5,true,Постоянный клиент',
-      'ООО "Рога и Копыта",company@example.com,+7 (999) 987-65-43,LEGAL_ENTITY,10.0,false,Новый корпоративный клиент'
+      'Иван Иванов,ivan@example.com,+7 (999) 123-45-67,INDIVIDUAL,5.5,true,Постоянный контрагент',
+      'ООО "Рога и Копыта",company@example.com,+7 (999) 987-65-43,LEGAL_ENTITY,10.0,false,Новый корпоративный контрагент'
     ].join('\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -117,7 +117,7 @@ export const ImportClientsModal = ({ isOpen, onClose }: ImportClientsModalProps)
       setImportResult(result)
 
       if (result.success > 0) {
-        toast.success(`Успешно импортировано ${result.success} клиентов`)
+        toast.success(`Успешно импортировано ${result.success} контрагентов`)
       }
       
       if (result.errors.length > 0) {
@@ -141,9 +141,9 @@ export const ImportClientsModal = ({ isOpen, onClose }: ImportClientsModalProps)
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>Импорт клиентов</DialogTitle>
+          <DialogTitle>Импорт контрагентов</DialogTitle>
           <DialogDescription>
-            Загрузите файл CSV или XLSX с данными клиентов для массового импорта.
+            Загрузите файл CSV или XLSX с данными контрагентов для массового импорта.
           </DialogDescription>
         </DialogHeader>
 
@@ -156,7 +156,7 @@ export const ImportClientsModal = ({ isOpen, onClose }: ImportClientsModalProps)
                 <p className="font-semibold">Формат файла</p>
                 <p>Файл должен содержать следующие колонки:</p>
                 <ul className="list-disc list-inside text-sm space-y-1 ml-4">
-                  <li><strong>name</strong> - Имя клиента (обязательно)</li>
+                  <li><strong>name</strong> - Имя контрагента (обязательно)</li>
                   <li><strong>email</strong> - Email адрес</li>
                   <li><strong>phone</strong> - Номер телефона (обязательно)</li>
                   <li><strong>type</strong> - Тип: INDIVIDUAL или LEGAL_ENTITY</li>

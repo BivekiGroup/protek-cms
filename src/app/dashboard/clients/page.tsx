@@ -38,12 +38,12 @@ export default function ClientsPage() {
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Клиенты</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Контрагенты</h2>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="clients">Клиенты</TabsTrigger>
+          <TabsTrigger value="clients">Контрагенты</TabsTrigger>
           <TabsTrigger value="unverified">
             Ожидают проверки
             {unverifiedCount > 0 && (

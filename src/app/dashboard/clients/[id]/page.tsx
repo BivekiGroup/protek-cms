@@ -59,7 +59,7 @@ export default function ClientCardPage() {
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Ошибка загрузки данных клиента: {error.message}
+            Ошибка загрузки данных контрагента: {error.message}
           </AlertDescription>
         </Alert>
       </div>
@@ -72,7 +72,7 @@ export default function ClientCardPage() {
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Клиент не найден
+            Контрагент не найден
           </AlertDescription>
         </Alert>
       </div>
@@ -81,7 +81,7 @@ export default function ClientCardPage() {
 
   const client = data.client
 
-  // Определяем реальный тип клиента на основе наличия юридических лиц
+  // Определяем реальный тип контрагента на основе наличия юридических лиц
   const actualClientType = (client.legalEntities && client.legalEntities.length > 0)
     ? 'Юридическое лицо'
     : 'Физическое лицо'
@@ -93,7 +93,7 @@ export default function ClientCardPage() {
         <Button variant="ghost" size="sm" asChild>
           <Link href="/dashboard/clients">
             <ArrowLeft className="h-4 w-4" />
-            Назад к списку клиентов
+            Назад к списку контрагентов
           </Link>
         </Button>
       </div>
@@ -104,7 +104,7 @@ export default function ClientCardPage() {
             {client.name}
           </h1>
           <p className="text-muted-foreground">
-            Клиент #{client.clientNumber} • {actualClientType}
+            Контрагент #{client.clientNumber} • {actualClientType}
           </p>
         </div>
       </div>

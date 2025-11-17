@@ -58,12 +58,12 @@ const navigationGroups: NavGroup[] = [
     ],
   },
   {
-    title: 'Продажи и клиенты',
+    title: 'Продажи',
     items: [
       { title: 'Заказы', href: '/dashboard/orders', icon: ShoppingCart },
       { title: 'Возвраты', href: '/dashboard/returns', icon: RotateCcw },
       { title: 'Счета', href: '/dashboard/invoices', icon: Receipt },
-      { title: 'Клиенты', href: '/dashboard/clients', icon: UserCheck },
+      { title: 'Контрагенты', href: '/dashboard/clients', icon: UserCheck },
       { title: 'Менеджеры', href: '/dashboard/managers', icon: Users },
     ],
   },

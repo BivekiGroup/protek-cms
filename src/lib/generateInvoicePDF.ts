@@ -1,5 +1,8 @@
 import { PDFDocument, rgb } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
+import * as QRCode from 'qrcode'
+import * as fs from 'fs'
+import * as path from 'path'
 
 interface OrderItem {
   id: string
@@ -65,21 +68,36 @@ function formatCurrency(amount: number): string {
   return amount.toFixed(2).replace('.', ',') + ' ₽'
 }
 
+// Генерация данных для QR-кода оплаты по стандарту ST00012
+function generatePaymentQRData(order: Order): string {
+  const paymentData = [
+    'ST00012',
+    `Name=${COMPANY_INFO.shortName}`,
+    `PersonalAcc=${COMPANY_INFO.account}`,
+    `BankName=${COMPANY_INFO.bank}`,
+    `BIC=${COMPANY_INFO.bik}`,
+    `CorrespAcc=${COMPANY_INFO.corrAccount}`,
+    `Purpose=Оплата по счёту ${order.orderNumber} от ${formatDate(order.createdAt)} за автозапчасти`,
+    `Sum=${(order.finalAmount * 100).toFixed(0)}`,
+    `PayeeINN=${COMPANY_INFO.inn}`,
+    `KPP=${COMPANY_INFO.kpp}`
+  ].join('|')
+
+  return paymentData
+}
+
 export async function generateInvoicePDF(order: Order): Promise<Buffer> {
   // Создаем новый PDF документ
   const pdfDoc = await PDFDocument.create()
 
   // Регистрируем fontkit для поддержки TrueType шрифтов
-  pdfDoc.registerFontkit(fontkit)
+  const fontkitModule = await import('@pdf-lib/fontkit').then(m => m.default || m)
+  pdfDoc.registerFontkit(fontkitModule)
 
-  // Загружаем шрифт с поддержкой кириллицы из CDN
-  const fontUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf'
-  const fontBoldUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf'
-
-  const [fontBytes, fontBoldBytes] = await Promise.all([
-    fetch(fontUrl).then(res => res.arrayBuffer()),
-    fetch(fontBoldUrl).then(res => res.arrayBuffer())
-  ])
+  // Загружаем шрифт с поддержкой кириллицы из локальных файлов
+  const publicDir = path.join(process.cwd(), 'public', 'fonts')
+  const fontBytes = fs.readFileSync(path.join(publicDir, 'Roboto-Regular.ttf'))
+  const fontBoldBytes = fs.readFileSync(path.join(publicDir, 'Roboto-Bold.ttf'))
 
   const customFont = await pdfDoc.embedFont(fontBytes)
   const customFontBold = await pdfDoc.embedFont(fontBoldBytes)
@@ -265,6 +283,31 @@ export async function generateInvoicePDF(order: Order): Promise<Buffer> {
   yPosition -= 12
   drawText(`Сумма ${formatCurrency(order.finalAmount)}, в том числе НДС (20%) ${formatCurrency(vatAmount)}.`, leftMargin, yPosition, { size: 8 })
   yPosition -= 30
+
+  // === QR-КОД ДЛЯ ОПЛАТЫ ===
+  try {
+    const qrData = generatePaymentQRData(order)
+    const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
+      width: 200,
+      margin: 1,
+      errorCorrectionLevel: 'M'
+    })
+
+    const qrImageBytes = Buffer.from(qrCodeDataUrl.split(',')[1], 'base64')
+    const qrImage = await pdfDoc.embedPng(qrImageBytes)
+
+    const qrSize = 80
+    page.drawImage(qrImage, {
+      x: rightMargin - qrSize,
+      y: yPosition - qrSize,
+      width: qrSize,
+      height: qrSize
+    })
+
+    drawText('Оплатить по QR', rightMargin - qrSize, yPosition - qrSize - 15, { size: 8, color: grayColor })
+  } catch (error) {
+    console.error('Ошибка генерации QR-кода:', error)
+  }
 
   // === ПОДПИСЬ ===
   drawText(`Генеральный директор`, leftMargin, yPosition, { size: 9 })

@@ -884,6 +884,7 @@ export const GET_DASHBOARD_CLIENTS = gql`
         id
         shortName
         fullName
+        inn
       }
     }
     clientsCount(filter: $filter)
@@ -1367,12 +1368,14 @@ export const GET_ORDERS = gql`
             id
             shortName
             fullName
+            inn
           }
         }
         legalEntity {
           id
           shortName
           fullName
+          inn
         }
         clientEmail
         clientPhone

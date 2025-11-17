@@ -105,10 +105,10 @@ export const UnverifiedClientsList = () => {
   const [verifyClient, { loading: verifying }] = useMutation(VERIFY_CLIENT, {
     onCompleted: (data) => {
       if (data.verifyClient.success) {
-        toast.success(`Клиент ${data.verifyClient.client.name} успешно подтвержден!`)
+        toast.success(`Контрагент ${data.verifyClient.client.name} успешно подтвержден!`)
         toast.info(`Логин: ${data.verifyClient.generatedLogin}`)
         toast.info(`Пароль: ${data.verifyClient.generatedPassword}`)
-        toast.success('Учетные данные отправлены на email клиента')
+        toast.success('Учетные данные отправлены на email контрагента')
         refetch()
         setIsConfirmDialogOpen(false)
         setSelectedClient(null)
@@ -121,7 +121,7 @@ export const UnverifiedClientsList = () => {
 
   const [rejectClient, { loading: rejecting }] = useMutation(REJECT_CLIENT, {
     onCompleted: () => {
-      toast.success(`Клиент ${selectedClient?.name} отклонен и удален`)
+      toast.success(`Контрагент ${selectedClient?.name} отклонен и удален`)
       refetch()
       setIsRejectDialogOpen(false)
       setSelectedClient(null)
@@ -168,7 +168,7 @@ export const UnverifiedClientsList = () => {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Клиенты, ожидающие проверки</CardTitle>
+          <CardTitle>Контрагенты, ожидающие проверки</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -183,7 +183,7 @@ export const UnverifiedClientsList = () => {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Клиенты, ожидающие проверки</CardTitle>
+          <CardTitle>Контрагенты, ожидающие проверки</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -199,7 +199,7 @@ export const UnverifiedClientsList = () => {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Клиенты, ожидающие проверки</CardTitle>
+            <CardTitle>Контрагенты, ожидающие проверки</CardTitle>
             <Badge variant="secondary">
               <UserCheck className="mr-1 h-4 w-4" />
               {totalCount}
@@ -210,9 +210,9 @@ export const UnverifiedClientsList = () => {
           {clients.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Нет непроверенных клиентов</h3>
+              <h3 className="text-lg font-semibold mb-2">Нет непроверенных контрагентов</h3>
               <p className="text-muted-foreground">
-                Все зарегистрированные клиенты прошли проверку
+                Все зарегистрированные контрагенты прошли проверку
               </p>
             </div>
           ) : (
@@ -297,9 +297,9 @@ export const UnverifiedClientsList = () => {
       <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Подтверждение клиента</DialogTitle>
+            <DialogTitle>Подтверждение контрагента</DialogTitle>
             <DialogDescription>
-              Вы уверены, что хотите подтвердить клиента?
+              Вы уверены, что хотите подтвердить контрагента?
             </DialogDescription>
           </DialogHeader>
           {selectedClient && (
@@ -319,7 +319,7 @@ export const UnverifiedClientsList = () => {
                 </p>
                 <ul className="list-disc list-inside text-sm text-blue-900 mt-2 space-y-1">
                   <li>Сгенерирует логин и пароль</li>
-                  <li>Отправит учетные данные на email клиента</li>
+                  <li>Отправит учетные данные на email контрагента</li>
                   <li>Активирует доступ к личному кабинету</li>
                 </ul>
               </div>
@@ -337,7 +337,7 @@ export const UnverifiedClientsList = () => {
               onClick={handleConfirmVerify}
               disabled={verifying}
             >
-              {verifying ? 'Подтверждение...' : 'Подтвердить клиента'}
+              {verifying ? 'Подтверждение...' : 'Подтвердить контрагента'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -346,9 +346,9 @@ export const UnverifiedClientsList = () => {
       <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Отклонение клиента</DialogTitle>
+            <DialogTitle>Отклонение контрагента</DialogTitle>
             <DialogDescription>
-              Вы уверены, что хотите отклонить клиента?
+              Вы уверены, что хотите отклонить контрагента?
             </DialogDescription>
           </DialogHeader>
           {selectedClient && (
@@ -367,7 +367,7 @@ export const UnverifiedClientsList = () => {
                   Внимание! Это действие нельзя отменить.
                 </p>
                 <p className="text-sm text-red-900 mt-2">
-                  Клиент будет полностью удален из системы.
+                  Контрагент будет полностью удален из системы.
                 </p>
               </div>
             </div>
@@ -385,7 +385,7 @@ export const UnverifiedClientsList = () => {
               onClick={handleConfirmReject}
               disabled={rejecting}
             >
-              {rejecting ? 'Отклонение...' : 'Отклонить клиента'}
+              {rejecting ? 'Отклонение...' : 'Отклонить контрагента'}
             </Button>
           </DialogFooter>
         </DialogContent>

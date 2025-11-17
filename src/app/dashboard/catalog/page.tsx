@@ -58,7 +58,7 @@ export default function CatalogPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(100)
   const itemsPerPageOptions = [20, 50, 100]
-  const [sortConfig, setSortConfig] = useState<ProductSortConfig | null>(null)
+  const [sortConfig, setSortConfig] = useState<ProductSortConfig | null>({ field: 'stock', direction: 'desc' })
 
   const { data: categoriesData, loading: categoriesLoading, refetch: refetchCategories } = useQuery(GET_CATEGORIES)
   

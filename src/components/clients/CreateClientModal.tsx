@@ -46,11 +46,11 @@ export const CreateClientModal = ({ isOpen, onClose }: CreateClientModalProps) =
   const [createClient] = useMutation(CREATE_CLIENT, {
     refetchQueries: [{ query: GET_CLIENTS }],
     onCompleted: () => {
-      toast.success("Клиент успешно создан")
+      toast.success("Контрагент успешно создан")
       handleClose()
     },
     onError: (error) => {
-      toast.error(`Ошибка создания клиента: ${error.message}`)
+      toast.error(`Ошибка создания контрагента: ${error.message}`)
     }
   })
 
@@ -93,7 +93,7 @@ export const CreateClientModal = ({ isOpen, onClose }: CreateClientModalProps) =
         }
       })
     } catch (error) {
-      console.error('Ошибка создания клиента:', error)
+      console.error('Ошибка создания контрагента:', error)
       setIsLoading(false)
     }
   }
@@ -109,9 +109,9 @@ export const CreateClientModal = ({ isOpen, onClose }: CreateClientModalProps) =
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Создать нового клиента</DialogTitle>
+          <DialogTitle>Создать нового контрагента</DialogTitle>
           <DialogDescription>
-            Заполните информацию о новом клиенте. Поля отмеченные * обязательны для заполнения.
+            Заполните информацию о новом контрагенте. Поля отмеченные * обязательны для заполнения.
           </DialogDescription>
         </DialogHeader>
 
@@ -123,12 +123,12 @@ export const CreateClientModal = ({ isOpen, onClose }: CreateClientModalProps) =
                 id="name"
                 value={formData.name}
                 onChange={(e) => handleInputChange('name', e.target.value)}
-                placeholder="Введите имя клиента"
+                placeholder="Введите имя контрагента"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="type">Тип клиента *</Label>
+              <Label htmlFor="type">Тип контрагента *</Label>
               <Select
                 value={formData.type}
                 onValueChange={(value) => handleInputChange('type', value)}
@@ -187,7 +187,7 @@ export const CreateClientModal = ({ isOpen, onClose }: CreateClientModalProps) =
               id="notes"
               value={formData.notes}
               onChange={(e) => handleInputChange('notes', e.target.value)}
-              placeholder="Дополнительная информация о клиенте"
+              placeholder="Дополнительная информация о контрагенте"
               rows={3}
             />
           </div>
@@ -198,7 +198,7 @@ export const CreateClientModal = ({ isOpen, onClose }: CreateClientModalProps) =
               checked={formData.isConfirmed}
               onCheckedChange={(checked) => handleInputChange('isConfirmed', checked)}
             />
-            <Label htmlFor="isConfirmed">Подтвержденный клиент</Label>
+            <Label htmlFor="isConfirmed">Подтвержденный контрагент</Label>
           </div>
 
           <DialogFooter>
@@ -211,7 +211,7 @@ export const CreateClientModal = ({ isOpen, onClose }: CreateClientModalProps) =
               Отмена
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Создание...' : 'Создать клиента'}
+              {isLoading ? 'Создание...' : 'Создать контрагента'}
             </Button>
           </DialogFooter>
         </form>

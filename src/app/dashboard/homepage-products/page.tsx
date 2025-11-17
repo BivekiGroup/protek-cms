@@ -10,6 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { 
   Dialog,
   DialogContent,
@@ -590,76 +598,84 @@ export default function HomepageProductsPage() {
                   Товары дня не добавлены на выбранную дату
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {dailyProducts.map((dailyProduct) => (
-                    <div key={dailyProduct.id} className="border rounded-lg p-4 flex items-start gap-4">
-                      <div className="flex flex-1 items-start gap-4 min-w-0">
-                        {/* Изображение товара */}
-                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
-                          {dailyProduct.product.images?.[0]?.url ? (
-                            <NextImage
-                              src={dailyProduct.product.images[0].url}
-                              alt={dailyProduct.product.name}
-                              fill
-                              className="object-cover rounded"
-                              sizes="64px"
-                              unoptimized
-                            />
-                          ) : (
-                            <Package className="w-6 h-6 text-gray-400" />
-                          )}
-                        </div>
-
-                        {/* Информация о товаре */}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-gray-900">{dailyProduct.product.name}</h3>
-                          <div className="text-sm text-gray-500 space-y-1">
-                            {dailyProduct.product.article && (
-                              <p>Артикул: {dailyProduct.product.article}</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16"></TableHead>
+                      <TableHead>Товар</TableHead>
+                      <TableHead className="w-32">Цена</TableHead>
+                      <TableHead className="w-32">Скидка</TableHead>
+                      <TableHead className="w-24 text-right">Действия</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {dailyProducts.map((dailyProduct) => (
+                      <TableRow key={dailyProduct.id}>
+                        <TableCell className="py-2">
+                          <div className="relative w-10 h-10 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
+                            {dailyProduct.product.images?.[0]?.url ? (
+                              <NextImage
+                                src={dailyProduct.product.images[0].url}
+                                alt={dailyProduct.product.name}
+                                fill
+                                className="object-cover"
+                                sizes="40px"
+                                unoptimized
+                              />
+                            ) : (
+                              <Package className="w-4 h-4 text-gray-400" />
                             )}
-                            {dailyProduct.product.brand && (
-                              <p>Бренд: {dailyProduct.product.brand}</p>
-                            )}
-                            <div className="flex items-center space-x-2">
-                              <span>Цена: {formatPrice(dailyProduct.product.retailPrice)}</span>
-                              {dailyProduct.discount && (
-                                <span className="text-green-600 font-medium">
-                                  Со скидкой {dailyProduct.discount}%: {formatPrice(calculateDiscountedPrice(dailyProduct.product.retailPrice, dailyProduct.discount))}
-                                </span>
-                              )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-2">
+                          <div className="text-xs">
+                            <div className="font-medium text-gray-900">{dailyProduct.product.name}</div>
+                            <div className="text-gray-500">
+                              {dailyProduct.product.article && <span>Арт: {dailyProduct.product.article}</span>}
+                              {dailyProduct.product.brand && <span className="ml-2">| {dailyProduct.product.brand}</span>}
                             </div>
                           </div>
-                        </div>
-
-                        {/* Скидка */}
-                        {dailyProduct.discount && (
-                          <Badge variant="secondary" className="bg-green-100 text-green-800 flex-shrink-0">
-                            -{dailyProduct.discount}%
-                          </Badge>
-                        )}
-                      </div>
-
-                      {/* Действия */}
-                      <div className="flex items-center gap-2 ml-auto flex-shrink-0">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditDailyProduct(dailyProduct)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteDailyProduct(dailyProduct.id)}
-                          disabled={deletingDaily}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                        </TableCell>
+                        <TableCell className="py-2 text-xs">
+                          {formatPrice(dailyProduct.product.retailPrice)}
+                        </TableCell>
+                        <TableCell className="py-2 text-xs">
+                          {dailyProduct.discount ? (
+                            <div>
+                              <Badge variant="secondary" className="bg-green-100 text-green-800 text-xs">
+                                -{dailyProduct.discount}%
+                              </Badge>
+                              <div className="text-green-600 font-medium mt-1">
+                                {formatPrice(calculateDiscountedPrice(dailyProduct.product.retailPrice, dailyProduct.discount))}
+                              </div>
+                            </div>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                        <TableCell className="py-2 text-right">
+                          <div className="flex items-center gap-1 justify-end">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditDailyProduct(dailyProduct)}
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteDailyProduct(dailyProduct.id)}
+                              disabled={deletingDaily}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
@@ -691,72 +707,80 @@ export default function HomepageProductsPage() {
                   Товары с лучшей ценой не добавлены
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {bestPriceProducts.map((bestPriceProduct) => (
-                    <div key={bestPriceProduct.id} className="border rounded-lg p-4 flex items-start gap-4">
-                      <div className="flex flex-1 items-start gap-4 min-w-0">
-                        {/* Изображение товара */}
-                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
-                          {bestPriceProduct.product.images?.[0]?.url ? (
-                            <NextImage
-                              src={bestPriceProduct.product.images[0].url}
-                              alt={bestPriceProduct.product.name}
-                              fill
-                              className="object-cover rounded"
-                              sizes="64px"
-                              unoptimized
-                            />
-                          ) : (
-                            <Package className="w-6 h-6 text-gray-400" />
-                          )}
-                        </div>
-
-                        {/* Информация о товаре */}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-gray-900">{bestPriceProduct.product.name}</h3>
-                          <div className="text-sm text-gray-500 space-y-1">
-                            {bestPriceProduct.product.article && (
-                              <p>Артикул: {bestPriceProduct.product.article}</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16"></TableHead>
+                      <TableHead>Товар</TableHead>
+                      <TableHead className="w-32">Цена</TableHead>
+                      <TableHead className="w-32">Скидка</TableHead>
+                      <TableHead className="w-24 text-right">Действия</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bestPriceProducts.map((bestPriceProduct) => (
+                      <TableRow key={bestPriceProduct.id}>
+                        <TableCell className="py-2">
+                          <div className="relative w-10 h-10 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
+                            {bestPriceProduct.product.images?.[0]?.url ? (
+                              <NextImage
+                                src={bestPriceProduct.product.images[0].url}
+                                alt={bestPriceProduct.product.name}
+                                fill
+                                className="object-cover"
+                                sizes="40px"
+                                unoptimized
+                              />
+                            ) : (
+                              <Package className="w-4 h-4 text-gray-400" />
                             )}
-                            {bestPriceProduct.product.brand && (
-                              <p>Бренд: {bestPriceProduct.product.brand}</p>
-                            )}
-                            <div className="flex items-center space-x-2">
-                              <span>Цена: {formatPrice(bestPriceProduct.product.retailPrice)}</span>
-                              <span className="text-green-600 font-medium">
-                                Со скидкой {bestPriceProduct.discount}%: {formatPrice(calculateDiscountedPrice(bestPriceProduct.product.retailPrice, bestPriceProduct.discount))}
-                              </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-2">
+                          <div className="text-xs">
+                            <div className="font-medium text-gray-900">{bestPriceProduct.product.name}</div>
+                            <div className="text-gray-500">
+                              {bestPriceProduct.product.article && <span>Арт: {bestPriceProduct.product.article}</span>}
+                              {bestPriceProduct.product.brand && <span className="ml-2">| {bestPriceProduct.product.brand}</span>}
                             </div>
                           </div>
-                        </div>
-
-                        {/* Скидка */}
-                        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 flex-shrink-0">
-                          -{bestPriceProduct.discount}%
-                        </Badge>
-                      </div>
-
-                      {/* Действия */}
-                      <div className="flex items-center gap-2 ml-auto flex-shrink-0">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditBestPriceProduct(bestPriceProduct)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteBestPriceProduct(bestPriceProduct.id)}
-                          disabled={deletingBestPrice}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                        </TableCell>
+                        <TableCell className="py-2 text-xs">
+                          {formatPrice(bestPriceProduct.product.retailPrice)}
+                        </TableCell>
+                        <TableCell className="py-2 text-xs">
+                          <div>
+                            <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 text-xs">
+                              -{bestPriceProduct.discount}%
+                            </Badge>
+                            <div className="text-green-600 font-medium mt-1">
+                              {formatPrice(calculateDiscountedPrice(bestPriceProduct.product.retailPrice, bestPriceProduct.discount))}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-2 text-right">
+                          <div className="flex items-center gap-1 justify-end">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditBestPriceProduct(bestPriceProduct)}
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteBestPriceProduct(bestPriceProduct.id)}
+                              disabled={deletingBestPrice}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
@@ -788,79 +812,87 @@ export default function HomepageProductsPage() {
                   Товары в топ продаж не добавлены
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {topSalesProducts.map((topSalesProduct) => (
-                    <div key={topSalesProduct.id} className="border rounded-lg p-4 flex items-start gap-4">
-                      <div className="flex flex-1 items-start gap-4 min-w-0">
-                        {/* Изображение товара */}
-                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
-                          {topSalesProduct.product.images?.[0]?.url ? (
-                            <NextImage
-                              src={topSalesProduct.product.images[0].url}
-                              alt={topSalesProduct.product.name}
-                              fill
-                              className="object-cover rounded"
-                              sizes="64px"
-                              unoptimized
-                            />
-                          ) : (
-                            <Package className="w-6 h-6 text-gray-400" />
-                          )}
-                        </div>
-
-                        {/* Информация о товаре */}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-gray-900">{topSalesProduct.product.name}</h3>
-                          <div className="text-sm text-gray-500 space-y-1">
-                            {topSalesProduct.product.article && (
-                              <p>Артикул: {topSalesProduct.product.article}</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16"></TableHead>
+                      <TableHead>Товар</TableHead>
+                      <TableHead className="w-32">Цена</TableHead>
+                      <TableHead className="w-32">Статус</TableHead>
+                      <TableHead className="w-32 text-right">Действия</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {topSalesProducts.map((topSalesProduct) => (
+                      <TableRow key={topSalesProduct.id}>
+                        <TableCell className="py-2">
+                          <div className="relative w-10 h-10 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
+                            {topSalesProduct.product.images?.[0]?.url ? (
+                              <NextImage
+                                src={topSalesProduct.product.images[0].url}
+                                alt={topSalesProduct.product.name}
+                                fill
+                                className="object-cover"
+                                sizes="40px"
+                                unoptimized
+                              />
+                            ) : (
+                              <Package className="w-4 h-4 text-gray-400" />
                             )}
-                            {topSalesProduct.product.brand && (
-                              <p>Бренд: {topSalesProduct.product.brand}</p>
-                            )}
-                            <p>Цена: {formatPrice(topSalesProduct.product.retailPrice)}</p>
                           </div>
-                        </div>
-
-                        {/* Статус */}
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Switch
-                            checked={topSalesProduct.isActive}
-                            onCheckedChange={() => handleToggleTopSalesActive(topSalesProduct)}
-                          />
-                          <span className="text-sm text-gray-500">
-                            {topSalesProduct.isActive ? 'Активен' : 'Неактивен'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Действия */}
-                      <div className="flex items-center gap-2 ml-auto flex-shrink-0">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleTopSalesSortOrderChange(topSalesProduct, 'up')}
-                        >
-                          <ChevronUp className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleTopSalesSortOrderChange(topSalesProduct, 'down')}
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteTopSalesProduct(topSalesProduct.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                        </TableCell>
+                        <TableCell className="py-2">
+                          <div className="text-xs">
+                            <div className="font-medium text-gray-900">{topSalesProduct.product.name}</div>
+                            <div className="text-gray-500">
+                              {topSalesProduct.product.article && <span>Арт: {topSalesProduct.product.article}</span>}
+                              {topSalesProduct.product.brand && <span className="ml-2">| {topSalesProduct.product.brand}</span>}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-2 text-xs">
+                          {formatPrice(topSalesProduct.product.retailPrice)}
+                        </TableCell>
+                        <TableCell className="py-2">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={topSalesProduct.isActive}
+                              onCheckedChange={() => handleToggleTopSalesActive(topSalesProduct)}
+                            />
+                            <span className="text-xs text-gray-500">
+                              {topSalesProduct.isActive ? 'Активен' : 'Неактивен'}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-2 text-right">
+                          <div className="flex items-center gap-1 justify-end">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleTopSalesSortOrderChange(topSalesProduct, 'up')}
+                            >
+                              <ChevronUp className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleTopSalesSortOrderChange(topSalesProduct, 'down')}
+                            >
+                              <ChevronDown className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteTopSalesProduct(topSalesProduct.id)}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
@@ -894,75 +926,87 @@ export default function HomepageProductsPage() {
                   Новые поступления пока не выбраны
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {newArrivalProducts.map((item) => (
-                    <div key={item.id} className="border rounded-lg p-4 flex items-start gap-4">
-                      <div className="flex flex-1 items-start gap-4 min-w-0">
-                        <div className="relative w-16 h-16 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
-                          {item.product.images?.[0]?.url ? (
-                            <NextImage
-                              src={item.product.images[0].url}
-                              alt={item.product.name}
-                              fill
-                              className="object-cover rounded"
-                              sizes="64px"
-                              unoptimized
-                            />
-                          ) : (
-                            <Package className="w-6 h-6 text-gray-400" />
-                          )}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-gray-900">{item.product.name}</h3>
-                          <div className="text-sm text-gray-500 space-y-1">
-                            {item.product.article && (
-                              <p>Артикул: {item.product.article}</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16"></TableHead>
+                      <TableHead>Товар</TableHead>
+                      <TableHead className="w-32">Цена</TableHead>
+                      <TableHead className="w-32">Статус</TableHead>
+                      <TableHead className="w-32 text-right">Действия</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {newArrivalProducts.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="py-2">
+                          <div className="relative w-10 h-10 bg-gray-100 rounded border overflow-hidden flex items-center justify-center">
+                            {item.product.images?.[0]?.url ? (
+                              <NextImage
+                                src={item.product.images[0].url}
+                                alt={item.product.name}
+                                fill
+                                className="object-cover"
+                                sizes="40px"
+                                unoptimized
+                              />
+                            ) : (
+                              <Package className="w-4 h-4 text-gray-400" />
                             )}
-                            {item.product.brand && (
-                              <p>Бренд: {item.product.brand}</p>
-                            )}
-                            <p>Цена: {formatPrice(item.product.retailPrice)}</p>
                           </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Switch
-                            checked={item.isActive}
-                            onCheckedChange={() => handleToggleNewArrivalActive(item)}
-                          />
-                          <span className="text-sm text-gray-500">
-                            {item.isActive ? 'Активен' : 'Неактивен'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 ml-auto flex-shrink-0">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleNewArrivalSortOrderChange(item, 'up')}
-                        >
-                          <ChevronUp className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleNewArrivalSortOrderChange(item, 'down')}
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteNewArrivalProduct(item.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                        </TableCell>
+                        <TableCell className="py-2">
+                          <div className="text-xs">
+                            <div className="font-medium text-gray-900">{item.product.name}</div>
+                            <div className="text-gray-500">
+                              {item.product.article && <span>Арт: {item.product.article}</span>}
+                              {item.product.brand && <span className="ml-2">| {item.product.brand}</span>}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-2 text-xs">
+                          {formatPrice(item.product.retailPrice)}
+                        </TableCell>
+                        <TableCell className="py-2">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={item.isActive}
+                              onCheckedChange={() => handleToggleNewArrivalActive(item)}
+                            />
+                            <span className="text-xs text-gray-500">
+                              {item.isActive ? 'Активен' : 'Неактивен'}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-2 text-right">
+                          <div className="flex items-center gap-1 justify-end">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleNewArrivalSortOrderChange(item, 'up')}
+                            >
+                              <ChevronUp className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleNewArrivalSortOrderChange(item, 'down')}
+                            >
+                              <ChevronDown className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteNewArrivalProduct(item.id)}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
@@ -971,26 +1015,26 @@ export default function HomepageProductsPage() {
 
       {/* Диалог добавления товара дня */}
       <Dialog open={showDailyProductSelector} onOpenChange={setShowDailyProductSelector}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[70vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Добавить товар дня</DialogTitle>
+            <DialogTitle className="text-base">Добавить товар дня</DialogTitle>
           </DialogHeader>
-          
-          <div className="space-y-4">
+
+          <div className="space-y-3">
             {/* Поиск товаров */}
             <div className="flex items-center space-x-2">
-              <Search className="w-4 h-4 text-gray-400" />
+              <Search className="w-3 h-3 text-gray-400" />
               <Input
                 placeholder="Поиск товаров..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1"
+                className="flex-1 h-8 text-xs"
               />
             </div>
 
             {/* Скидка */}
             <div>
-              <Label htmlFor="daily-discount">Скидка (%)</Label>
+              <Label htmlFor="daily-discount" className="text-xs">Скидка (%)</Label>
               <Input
                 id="daily-discount"
                 type="number"
@@ -999,39 +1043,40 @@ export default function HomepageProductsPage() {
                 value={dailyDiscount}
                 onChange={(e) => setDailyDiscount(Number(e.target.value))}
                 placeholder="Размер скидки"
+                className="h-8 text-xs"
               />
             </div>
 
             {/* Список товаров */}
-            <div className="max-h-96 overflow-y-auto space-y-2">
+            <div className="max-h-80 overflow-y-auto space-y-1">
               {productsLoading ? (
-                <div className="text-center py-4 text-gray-500">Загрузка товаров...</div>
+                <div className="text-center py-4 text-gray-500 text-xs">Загрузка товаров...</div>
               ) : products.length === 0 ? (
-                <div className="text-center py-4 text-gray-500">Товары не найдены</div>
+                <div className="text-center py-4 text-gray-500 text-xs">Товары не найдены</div>
               ) : (
                 products.map((product) => (
-                  <div key={product.id} className="border rounded p-3 flex items-start gap-3">
-                    <div className="flex flex-1 items-start gap-3 min-w-0">
-                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
+                  <div key={product.id} className="border rounded p-2 flex items-start gap-2">
+                    <div className="flex flex-1 items-start gap-2 min-w-0">
+                      <div className="relative w-8 h-8 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                         {product.images?.[0]?.url ? (
                           <NextImage
                               src={product.images[0].url}
                               alt={product.name}
                               fill
-                              className="object-cover rounded"
-                              sizes="64px"
+                              className="object-cover"
+                              sizes="32px"
                               unoptimized
                             />
                         ) : (
-                          <Package className="w-4 h-4 text-gray-400" />
+                          <Package className="w-3 h-3 text-gray-400" />
                         )}
                       </div>
                       <div className="min-w-0">
-                        <h4 className="font-medium">{product.name}</h4>
-                        <div className="text-sm text-gray-500">
-                          {product.article && <span>Артикул: {product.article} | </span>}
-                          {product.brand && <span>Бренд: {product.brand} | </span>}
-                          <span>Цена: {formatPrice(product.retailPrice)}</span>
+                        <h4 className="font-medium text-xs">{product.name}</h4>
+                        <div className="text-xs text-gray-500">
+                          {product.article && <span>Арт: {product.article}</span>}
+                          {product.brand && <span className="ml-1">| {product.brand}</span>}
+                          <span className="ml-1">| {formatPrice(product.retailPrice)}</span>
                         </div>
                       </div>
                     </div>
@@ -1039,7 +1084,7 @@ export default function HomepageProductsPage() {
                       onClick={() => handleAddDailyProduct(product.id)}
                       disabled={creatingDaily}
                       size="sm"
-                      className="ml-auto"
+                      className="ml-auto h-7 text-xs"
                     >
                       Добавить
                     </Button>
@@ -1053,26 +1098,26 @@ export default function HomepageProductsPage() {
 
       {/* Диалог добавления товара с лучшей ценой */}
       <Dialog open={showBestPriceProductSelector} onOpenChange={setShowBestPriceProductSelector}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[70vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Добавить товар с лучшей ценой</DialogTitle>
+            <DialogTitle className="text-base">Добавить товар с лучшей ценой</DialogTitle>
           </DialogHeader>
-          
-          <div className="space-y-4">
+
+          <div className="space-y-3">
             {/* Поиск товаров */}
             <div className="flex items-center space-x-2">
-              <Search className="w-4 h-4 text-gray-400" />
+              <Search className="w-3 h-3 text-gray-400" />
               <Input
                 placeholder="Поиск товаров..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1"
+                className="flex-1 h-8 text-xs"
               />
             </div>
 
             {/* Скидка */}
             <div>
-              <Label htmlFor="best-price-discount">Скидка (%)</Label>
+              <Label htmlFor="best-price-discount" className="text-xs">Скидка (%)</Label>
               <Input
                 id="best-price-discount"
                 type="number"
@@ -1080,43 +1125,44 @@ export default function HomepageProductsPage() {
                 max="100"
                 value={bestPriceDiscount}
                 onChange={(e) => setBestPriceDiscount(Number(e.target.value))}
-                placeholder="Размер скидки (необязательно)"
+                placeholder="Размер скидки"
+                className="h-8 text-xs"
               />
             </div>
 
             {/* Список товаров */}
-            <div className="max-h-96 overflow-y-auto space-y-2">
+            <div className="max-h-80 overflow-y-auto space-y-1">
               {productsLoading ? (
-                <div className="text-center py-4 text-gray-500">Загрузка товаров...</div>
+                <div className="text-center py-4 text-gray-500 text-xs">Загрузка товаров...</div>
               ) : products.length === 0 ? (
-                <div className="text-center py-4 text-gray-500">Товары не найдены</div>
+                <div className="text-center py-4 text-gray-500 text-xs">Товары не найдены</div>
               ) : (
                 products.map((product) => (
-                  <div key={product.id} className="border rounded p-3 flex items-start gap-3">
-                    <div className="flex flex-1 items-start gap-3 min-w-0">
-                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
+                  <div key={product.id} className="border rounded p-2 flex items-start gap-2">
+                    <div className="flex flex-1 items-start gap-2 min-w-0">
+                      <div className="relative w-8 h-8 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                         {product.images?.[0]?.url ? (
                           <NextImage
                               src={product.images[0].url}
                               alt={product.name}
                               fill
-                              className="object-cover rounded"
-                              sizes="64px"
+                              className="object-cover"
+                              sizes="32px"
                               unoptimized
                             />
                         ) : (
-                          <Package className="w-4 h-4 text-gray-400" />
+                          <Package className="w-3 h-3 text-gray-400" />
                         )}
                       </div>
                       <div className="min-w-0">
-                        <h4 className="font-medium">{product.name}</h4>
-                        <div className="text-sm text-gray-500">
-                          {product.article && <span>Артикул: {product.article} | </span>}
-                          {product.brand && <span>Бренд: {product.brand} | </span>}
-                          <span>Цена: {formatPrice(product.retailPrice)}</span>
+                        <h4 className="font-medium text-xs">{product.name}</h4>
+                        <div className="text-xs text-gray-500">
+                          {product.article && <span>Арт: {product.article}</span>}
+                          {product.brand && <span className="ml-1">| {product.brand}</span>}
+                          <span className="ml-1">| {formatPrice(product.retailPrice)}</span>
                           {bestPriceDiscount > 0 && (
-                            <span className="text-green-600 ml-2">
-                              Со скидкой: {formatPrice(calculateDiscountedPrice(product.retailPrice, bestPriceDiscount))}
+                            <span className="text-green-600 ml-1">
+                              → {formatPrice(calculateDiscountedPrice(product.retailPrice, bestPriceDiscount))}
                             </span>
                           )}
                         </div>
@@ -1126,7 +1172,7 @@ export default function HomepageProductsPage() {
                       onClick={() => handleAddBestPriceProduct(product.id)}
                       disabled={creatingBestPrice}
                       size="sm"
-                      className="ml-auto"
+                      className="ml-auto h-7 text-xs"
                     >
                       Добавить
                     </Button>
@@ -1148,62 +1194,62 @@ export default function HomepageProductsPage() {
           }
         }}
       >
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[70vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Добавить товар в новые поступления</DialogTitle>
+            <DialogTitle className="text-base">Добавить товар в новые поступления</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="flex items-center space-x-2">
-              <Search className="w-4 h-4 text-gray-400" />
+              <Search className="w-3 h-3 text-gray-400" />
               <Input
                 placeholder="Поиск товаров..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1"
+                className="flex-1 h-8 text-xs"
               />
             </div>
 
-            <div className="max-h-96 overflow-y-auto space-y-2">
+            <div className="max-h-80 overflow-y-auto space-y-1">
               {productsLoading ? (
-                <div className="text-center py-4 text-gray-500">Загрузка товаров...</div>
+                <div className="text-center py-4 text-gray-500 text-xs">Загрузка товаров...</div>
               ) : products.length === 0 ? (
-                <div className="text-center py-4 text-gray-500">Товары не найдены</div>
+                <div className="text-center py-4 text-gray-500 text-xs">Товары не найдены</div>
               ) : (
                 products.map((product) => (
                   <div
                     key={product.id}
-                    className={`border rounded p-3 flex items-start gap-3 cursor-pointer transition ${
+                    className={`border rounded p-2 flex items-start gap-2 cursor-pointer transition ${
                       selectedNewArrivalProduct?.id === product.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'
                     }`}
                     onClick={() => setSelectedNewArrivalProduct(product)}
                   >
-                    <div className="flex flex-1 items-start gap-3 min-w-0">
-                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
+                    <div className="flex flex-1 items-start gap-2 min-w-0">
+                      <div className="relative w-8 h-8 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                         {product.images?.[0]?.url ? (
                           <NextImage
                               src={product.images[0].url}
                               alt={product.name}
                               fill
-                              className="object-cover rounded"
-                              sizes="64px"
+                              className="object-cover"
+                              sizes="32px"
                               unoptimized
                             />
                         ) : (
-                          <Package className="w-4 h-4 text-gray-400" />
+                          <Package className="w-3 h-3 text-gray-400" />
                         )}
                       </div>
                       <div className="min-w-0">
-                        <h4 className="font-medium">{product.name}</h4>
-                        <div className="text-sm text-gray-500">
-                          {product.article && <span>Артикул: {product.article} | </span>}
-                          {product.brand && <span>Бренд: {product.brand} | </span>}
-                          <span>Цена: {formatPrice(product.retailPrice)}</span>
+                        <h4 className="font-medium text-xs">{product.name}</h4>
+                        <div className="text-xs text-gray-500">
+                          {product.article && <span>Арт: {product.article}</span>}
+                          {product.brand && <span className="ml-1">| {product.brand}</span>}
+                          <span className="ml-1">| {formatPrice(product.retailPrice)}</span>
                         </div>
                       </div>
                     </div>
                     {selectedNewArrivalProduct?.id === product.id && (
-                      <Badge variant="secondary" className="flex-shrink-0 ml-auto">
+                      <Badge variant="secondary" className="flex-shrink-0 ml-auto text-xs">
                         Выбран
                       </Badge>
                     )}
@@ -1213,9 +1259,9 @@ export default function HomepageProductsPage() {
             </div>
 
             {selectedNewArrivalProduct && (
-              <div className="pt-4 border-t">
-                <Button onClick={handleAddNewArrivalProduct} className="w-full">
-                  Добавить выбранный товар в новые поступления
+              <div className="pt-3 border-t">
+                <Button onClick={handleAddNewArrivalProduct} className="w-full h-8 text-xs">
+                  Добавить выбранный товар
                 </Button>
               </div>
             )}
@@ -1225,64 +1271,64 @@ export default function HomepageProductsPage() {
 
       {/* Диалог добавления товара в топ продаж */}
       <Dialog open={showTopSalesProductSelector} onOpenChange={setShowTopSalesProductSelector}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[70vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Добавить товар в топ продаж</DialogTitle>
+            <DialogTitle className="text-base">Добавить товар в топ продаж</DialogTitle>
           </DialogHeader>
-          
-          <div className="space-y-4">
+
+          <div className="space-y-3">
             {/* Поиск товаров */}
             <div className="flex items-center space-x-2">
-              <Search className="w-4 h-4 text-gray-400" />
+              <Search className="w-3 h-3 text-gray-400" />
               <Input
                 placeholder="Поиск товаров..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1"
+                className="flex-1 h-8 text-xs"
               />
             </div>
 
             {/* Список товаров */}
-            <div className="max-h-96 overflow-y-auto space-y-2">
+            <div className="max-h-80 overflow-y-auto space-y-1">
               {productsLoading ? (
-                <div className="text-center py-4 text-gray-500">Загрузка товаров...</div>
+                <div className="text-center py-4 text-gray-500 text-xs">Загрузка товаров...</div>
               ) : products.length === 0 ? (
-                <div className="text-center py-4 text-gray-500">Товары не найдены</div>
+                <div className="text-center py-4 text-gray-500 text-xs">Товары не найдены</div>
               ) : (
                 products.map((product) => (
-                  <div 
-                    key={product.id} 
-                    className={`border rounded p-3 flex items-start gap-3 cursor-pointer transition-colors ${
+                  <div
+                    key={product.id}
+                    className={`border rounded p-2 flex items-start gap-2 cursor-pointer transition-colors ${
                       selectedProduct?.id === product.id ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50'
                     }`}
                     onClick={() => setSelectedProduct(product)}
                   >
-                    <div className="flex flex-1 items-start gap-3 min-w-0">
-                      <div className="relative w-12 h-12 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
+                    <div className="flex flex-1 items-start gap-2 min-w-0">
+                      <div className="relative w-8 h-8 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                         {product.images?.[0]?.url ? (
                           <NextImage
                               src={product.images[0].url}
                               alt={product.name}
                               fill
-                              className="object-cover rounded"
-                              sizes="64px"
+                              className="object-cover"
+                              sizes="32px"
                               unoptimized
                             />
                         ) : (
-                          <Package className="w-4 h-4 text-gray-400" />
+                          <Package className="w-3 h-3 text-gray-400" />
                         )}
                       </div>
                       <div className="min-w-0">
-                        <h4 className="font-medium">{product.name}</h4>
-                        <div className="text-sm text-gray-500">
-                          {product.article && <span>Артикул: {product.article} | </span>}
-                          {product.brand && <span>Бренд: {product.brand} | </span>}
-                          <span>Цена: {formatPrice(product.retailPrice)}</span>
+                        <h4 className="font-medium text-xs">{product.name}</h4>
+                        <div className="text-xs text-gray-500">
+                          {product.article && <span>Арт: {product.article}</span>}
+                          {product.brand && <span className="ml-1">| {product.brand}</span>}
+                          <span className="ml-1">| {formatPrice(product.retailPrice)}</span>
                         </div>
                       </div>
                     </div>
                     {selectedProduct?.id === product.id && (
-                      <Badge variant="secondary" className="flex-shrink-0 ml-auto">
+                      <Badge variant="secondary" className="flex-shrink-0 ml-auto text-xs">
                         Выбран
                       </Badge>
                     )}
@@ -1292,9 +1338,9 @@ export default function HomepageProductsPage() {
             </div>
 
             {selectedProduct && (
-              <div className="pt-4 border-t">
-                <Button onClick={handleAddTopSalesProduct} className="w-full">
-                  Добавить выбранный товар в топ продаж
+              <div className="pt-3 border-t">
+                <Button onClick={handleAddTopSalesProduct} className="w-full h-8 text-xs">
+                  Добавить выбранный товар
                 </Button>
               </div>
             )}
@@ -1304,24 +1350,24 @@ export default function HomepageProductsPage() {
 
       {/* Диалог редактирования товара дня */}
       <Dialog open={!!editingDailyProduct} onOpenChange={() => setEditingDailyProduct(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Редактировать товар дня</DialogTitle>
+            <DialogTitle className="text-base">Редактировать товар дня</DialogTitle>
           </DialogHeader>
-          
+
           {editingDailyProduct && (
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
-                <h3 className="font-medium">{editingDailyProduct.product.name}</h3>
-                <p className="text-sm text-gray-500">
-                  {editingDailyProduct.product.article && `Артикул: ${editingDailyProduct.product.article} | `}
-                  {editingDailyProduct.product.brand && `Бренд: ${editingDailyProduct.product.brand} | `}
-                  Цена: {formatPrice(editingDailyProduct.product.retailPrice)}
+                <h3 className="font-medium text-sm">{editingDailyProduct.product.name}</h3>
+                <p className="text-xs text-gray-500">
+                  {editingDailyProduct.product.article && `Арт: ${editingDailyProduct.product.article} | `}
+                  {editingDailyProduct.product.brand && `${editingDailyProduct.product.brand} | `}
+                  {formatPrice(editingDailyProduct.product.retailPrice)}
                 </p>
               </div>
 
               <div>
-                <Label htmlFor="edit-daily-discount">Скидка (%)</Label>
+                <Label htmlFor="edit-daily-discount" className="text-xs">Скидка (%)</Label>
                 <Input
                   id="edit-daily-discount"
                   type="number"
@@ -1330,14 +1376,15 @@ export default function HomepageProductsPage() {
                   value={dailyDiscount}
                   onChange={(e) => setDailyDiscount(Number(e.target.value))}
                   placeholder="Размер скидки"
+                  className="h-8 text-xs"
                 />
               </div>
 
               <DialogFooter>
-                <Button variant="outline" onClick={() => setEditingDailyProduct(null)}>
+                <Button variant="outline" onClick={() => setEditingDailyProduct(null)} className="h-8 text-xs">
                   Отмена
                 </Button>
-                <Button onClick={handleUpdateDailyProduct} disabled={updatingDaily}>
+                <Button onClick={handleUpdateDailyProduct} disabled={updatingDaily} className="h-8 text-xs">
                   Сохранить
                 </Button>
               </DialogFooter>
@@ -1348,40 +1395,41 @@ export default function HomepageProductsPage() {
 
       {/* Диалог редактирования товара с лучшей ценой */}
       <Dialog open={!!editingBestPriceProduct} onOpenChange={() => setEditingBestPriceProduct(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Редактировать товар с лучшей ценой</DialogTitle>
+            <DialogTitle className="text-base">Редактировать товар с лучшей ценой</DialogTitle>
           </DialogHeader>
-          
+
           {editingBestPriceProduct && (
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
-                <h3 className="font-medium">{editingBestPriceProduct.product.name}</h3>
-                <p className="text-sm text-gray-500">
-                  {editingBestPriceProduct.product.article && `Артикул: ${editingBestPriceProduct.product.article} | `}
-                  {editingBestPriceProduct.product.brand && `Бренд: ${editingBestPriceProduct.product.brand} | `}
-                  Цена: {formatPrice(editingBestPriceProduct.product.retailPrice)}
+                <h3 className="font-medium text-sm">{editingBestPriceProduct.product.name}</h3>
+                <p className="text-xs text-gray-500">
+                  {editingBestPriceProduct.product.article && `Арт: ${editingBestPriceProduct.product.article} | `}
+                  {editingBestPriceProduct.product.brand && `${editingBestPriceProduct.product.brand} | `}
+                  {formatPrice(editingBestPriceProduct.product.retailPrice)}
                 </p>
               </div>
 
-                             <div>
-                 <Label htmlFor="edit-best-price-discount">Скидка (%)</Label>
-                 <Input
-                   id="edit-best-price-discount"
-                   type="number"
-                   min="0"
-                   max="100"
-                   value={bestPriceDiscount}
-                   onChange={(e) => setBestPriceDiscount(Number(e.target.value))}
-                   placeholder="Размер скидки (необязательно)"
-                 />
-               </div>
+              <div>
+                <Label htmlFor="edit-best-price-discount" className="text-xs">Скидка (%)</Label>
+                <Input
+                  id="edit-best-price-discount"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={bestPriceDiscount}
+                  onChange={(e) => setBestPriceDiscount(Number(e.target.value))}
+                  placeholder="Размер скидки"
+                  className="h-8 text-xs"
+                />
+              </div>
 
               <DialogFooter>
-                <Button variant="outline" onClick={() => setEditingBestPriceProduct(null)}>
+                <Button variant="outline" onClick={() => setEditingBestPriceProduct(null)} className="h-8 text-xs">
                   Отмена
                 </Button>
-                <Button onClick={handleUpdateBestPriceProduct} disabled={updatingBestPrice}>
+                <Button onClick={handleUpdateBestPriceProduct} disabled={updatingBestPrice} className="h-8 text-xs">
                   Сохранить
                 </Button>
               </DialogFooter>

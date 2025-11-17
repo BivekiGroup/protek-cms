@@ -92,7 +92,7 @@ export default function DashboardPage() {
     fetchPolicy: 'no-cache',
   })
 
-  // Запрос для неподтвержденных клиентов
+  // Запрос для неподтвержденных контрагентов
   const { data: unconfirmedData } = useQuery(GET_DASHBOARD_CLIENTS, {
     variables: {
       filter: { unconfirmed: true },
@@ -104,7 +104,7 @@ export default function DashboardPage() {
 
   const newOrders = ordersData?.orders?.orders || []
   const ordersTotal = ordersData?.orders?.total || 0
-  // Фильтруем клиентов: только подтвержденные и не анонимные
+  // Фильтруем контрагентов: только подтвержденные и не анонимные
   const recentClients = (clientsData?.clients || []).filter((client: any) =>
     client.isConfirmed &&
     client.phone !== 'anonymous' &&
@@ -153,7 +153,7 @@ export default function DashboardPage() {
     <div className="p-4 space-y-4">
       <div className="mb-4">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Главная панель</h1>
-        <p className="text-sm text-gray-600">Обзор новых заказов и новых клиентов</p>
+        <p className="text-sm text-gray-600">Обзор новых заказов и новых контрагентов</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3 mb-4">
@@ -173,7 +173,7 @@ export default function DashboardPage() {
         <Link href="/dashboard/clients">
           <Card className="cursor-pointer hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Новые клиенты (7 дней)</CardTitle>
+              <CardTitle className="text-sm font-medium">Новые контрагенты (7 дней)</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -191,7 +191,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-orange-600">{clientsLoading ? '…' : unconfirmedCount}</div>
-              <p className="text-xs text-muted-foreground">Неподтвержденных клиентов</p>
+              <p className="text-xs text-muted-foreground">Неподтвержденных контрагентов</p>
             </CardContent>
           </Card>
         </Link>
@@ -368,7 +368,7 @@ export default function DashboardPage() {
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Users className="h-4 w-4" />
-              Новые клиенты (7 дней)
+              Новые контрагенты (7 дней)
             </CardTitle>
             <CardDescription className="text-xs">Последние регистрации</CardDescription>
           </div>
@@ -381,7 +381,7 @@ export default function DashboardPage() {
             </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/dashboard/clients">
-                Все клиенты
+                Все контрагенты
                 <ExternalLink className="ml-2 h-3 w-3" />
               </Link>
             </Button>
@@ -391,15 +391,16 @@ export default function DashboardPage() {
           {clientsLoading ? (
             <div className="text-center py-6 text-sm text-gray-500">Загрузка…</div>
           ) : recentClients.length === 0 ? (
-            <div className="text-center py-6 text-sm text-gray-500">Нет новых клиентов за период</div>
+            <div className="text-center py-6 text-sm text-gray-500">Нет новых контрагентов за период</div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow className="text-xs">
-                  <TableHead>Имя</TableHead>
-                  <TableHead>Контакт</TableHead>
-                  <TableHead>Email</TableHead>
                   <TableHead>Юрлицо</TableHead>
+                  <TableHead>ИНН</TableHead>
+                  <TableHead>Контактное лицо</TableHead>
+                  <TableHead>Телефон</TableHead>
+                  <TableHead>Email</TableHead>
                   <TableHead>Статус</TableHead>
                   <TableHead>Дата регистрации</TableHead>
                 </TableRow>
@@ -411,6 +412,12 @@ export default function DashboardPage() {
                     className="hover:bg-gray-50 text-sm cursor-pointer"
                     onClick={() => handleClientClick(client)}
                   >
+                    <TableCell className="py-2 text-xs">
+                      {client.legalEntities && client.legalEntities.length > 0 ? client.legalEntities[0].shortName : '—'}
+                    </TableCell>
+                    <TableCell className="py-2 text-xs">
+                      {client.legalEntities && client.legalEntities.length > 0 ? client.legalEntities[0].inn || '—' : '—'}
+                    </TableCell>
                     <TableCell className="font-medium py-2 text-xs">
                       {client.name}
                     </TableCell>
@@ -419,9 +426,6 @@ export default function DashboardPage() {
                     </TableCell>
                     <TableCell className="py-2 text-xs">
                       {client.email || '—'}
-                    </TableCell>
-                    <TableCell className="py-2 text-xs">
-                      {client.legalEntities && client.legalEntities.length > 0 ? client.legalEntities[0].shortName : '—'}
                     </TableCell>
                     <TableCell className="py-2">
                       <Badge variant={client.isConfirmed ? 'secondary' : 'destructive'} className="text-xs py-0 px-2">
