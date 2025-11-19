@@ -10762,10 +10762,10 @@ export const resolvers = {
           }
         }
         
-        // Генерируем числовой номер заказа
+        // Генерируем номер заказа в формате ORD + 4 цифры
         // Используем счетчик заказов для уникальности
         const ordersCount = await prisma.order.count()
-        const orderNumber = (ordersCount + 1).toString().padStart(6, '0')
+        const orderNumber = 'ORD' + (ordersCount + 1).toString().padStart(4, '0')
         
         // Логируем входные данные для отладки
         console.log('createOrder: input.paymentMethod =', input.paymentMethod)
