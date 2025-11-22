@@ -22,6 +22,8 @@ export const typeDefs = gql`
     PRODUCT_CREATE
     PRODUCT_UPDATE
     PRODUCT_DELETE
+    ORDER_DELETE
+    ORDER_STATUS_UPDATE
   }
 
   scalar DateTime

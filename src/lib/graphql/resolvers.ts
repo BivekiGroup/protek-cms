@@ -11302,6 +11302,56 @@ export const resolvers = {
       }
     },
 
+    deleteOrder: async (_: unknown, { id }: { id: string }, context: Context) => {
+      try {
+        const actualContext = context || getContext()
+
+        if (!actualContext.userId) {
+          throw new Error('Пользователь не авторизован')
+        }
+
+        const order = await prisma.order.findUnique({
+          where: { id },
+          include: {
+            items: true
+          }
+        })
+
+        if (!order) {
+          throw new Error('Заказ не найден')
+        }
+
+        // Возвращаем товары на склад если заказ не был отменен
+        const cancelStatuses = new Set<string>([PrismaOrderStatus.CANCELED, PrismaOrderStatus.REFUNDED])
+        if (!cancelStatuses.has(String(order.status))) {
+          await restockOrderItems(order.items)
+        }
+
+        await prisma.order.delete({
+          where: { id }
+        })
+
+        if (actualContext.headers) {
+          const { ipAddress, userAgent } = getClientInfo(actualContext.headers)
+          await createAuditLog({
+            userId: actualContext.userId,
+            action: AuditAction.ORDER_DELETE,
+            details: `Удален заказ ${order.orderNumber}`,
+            ipAddress,
+            userAgent
+          })
+        }
+
+        return true
+      } catch (error) {
+        console.error('Ошибка удаления заказа:', error)
+        if (error instanceof Error) {
+          throw error
+        }
+        throw new Error('Не удалось удалить заказ')
+      }
+    },
+
     // Мутации для избранного
     addToFavorites: async (_: unknown, { input }: { input: FavoriteInput }, context: Context) => {
       try {

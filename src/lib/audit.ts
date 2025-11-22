@@ -19,6 +19,7 @@ export enum AuditAction {
   PRODUCT_UPDATE = 'PRODUCT_UPDATE',
   PRODUCT_DELETE = 'PRODUCT_DELETE',
   ORDER_CANCEL = 'ORDER_CANCEL',
+  ORDER_DELETE = 'ORDER_DELETE',
   ORDER_RETURN_REQUEST = 'ORDER_RETURN_REQUEST',
   ORDER_STATUS_UPDATE = 'ORDER_STATUS_UPDATE',
 }
@@ -89,6 +90,8 @@ export const getActionDescription = (action: AuditAction, details?: string): str
       return `Удаление товара${details ? `: ${details}` : ''}`
     case AuditAction.ORDER_CANCEL:
       return `Отмена заказа${details ? `: ${details}` : ''}`
+    case AuditAction.ORDER_DELETE:
+      return `Удаление заказа${details ? `: ${details}` : ''}`
     case AuditAction.ORDER_RETURN_REQUEST:
       return `Заявка на возврат заказа${details ? `: ${details}` : ''}`
     case AuditAction.ORDER_STATUS_UPDATE:
