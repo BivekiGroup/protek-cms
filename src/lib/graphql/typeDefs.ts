@@ -164,7 +164,7 @@ export const typeDefs = gql`
     sortOrder: Int!
     createdAt: DateTime!
     updatedAt: DateTime!
-    
+
     # Виртуальные поля - получаем данные из PartsIndex API
     name: String!
     catalogName: String!
@@ -1093,12 +1093,12 @@ export const typeDefs = gql`
 
     # SMS коды
     smsCodes(limit: Int, offset: Int, phone: String): SmsCodesResponse!
-    
+
     # Счета на пополнение баланса
     balanceInvoices: [BalanceInvoice!]!
     auditLogs(limit: Int, offset: Int): [AuditLog!]!
     auditLogsCount: Int!
-    
+
     # Каталог
     categories: [Category!]!
     category(id: ID!): Category
@@ -1111,7 +1111,7 @@ export const typeDefs = gql`
     productHistory(productId: ID!): [ProductHistory!]!
     options: [Option!]!
     characteristics: [Characteristic!]!
-    
+
     # Клиенты
     clients(filter: ClientFilterInput, search: String, limit: Int, offset: Int, sortBy: String, sortOrder: String): [Client!]!
     client(id: ID!): Client
@@ -1123,25 +1123,25 @@ export const typeDefs = gql`
     clientStatuses: [ClientStatus!]!
     clientStatus(id: ID!): ClientStatus
     verifyInn(inn: String!): InnVerificationResult
-    
+
     # Скидки и промокоды
     discounts: [Discount!]!
     discount(id: ID!): Discount
-    
+
     # Гараж клиентов
     userVehicles: [ClientVehicle!]!
     vehicleSearchHistory: [VehicleSearchHistory!]!
     searchVehicleByVin(vin: String!): VehicleSearchResult
-    
+
     # История поиска запчастей
     partsSearchHistory(limit: Int, offset: Int): PartsSearchHistoryResponse!
-    
+
     # Данные авторизованного клиента
     clientMe: Client
-    
+
     # Избранное
     favorites: [Favorite!]!
-    
+
     # Laximo интеграция
     laximoBrands: [LaximoBrand!]!
     laximoCatalogInfo(catalogCode: String!): LaximoCatalogInfo
@@ -1157,7 +1157,7 @@ export const typeDefs = gql`
     laximoQuickGroups(catalogCode: String!, vehicleId: String, ssd: String): [LaximoQuickGroup!]!
     laximoQuickGroupsWithXML(catalogCode: String!, vehicleId: String, ssd: String): LaximoQuickGroupsResponse!
     laximoCategories(catalogCode: String!, vehicleId: String, ssd: String): [LaximoQuickGroup!]!
-    
+
     # Навигационные категории
     navigationCategories: [NavigationCategory!]!
     navigationCategory(id: ID!): NavigationCategory
@@ -1166,21 +1166,21 @@ export const typeDefs = gql`
     laximoOEMSearch(catalogCode: String!, vehicleId: String!, oemNumber: String!, ssd: String!): LaximoOEMResult
     laximoFulltextSearch(catalogCode: String!, vehicleId: String!, searchQuery: String!, ssd: String!): LaximoFulltextSearchResult
     laximoDocFindOEM(oemNumber: String!, brand: String, replacementTypes: String): LaximoDocFindOEMResult
-    
+
     # Запросы для работы с деталями узлов
     laximoUnitInfo(catalogCode: String!, vehicleId: String!, unitId: String!, ssd: String!): LaximoUnitInfo
     laximoUnitDetails(catalogCode: String!, vehicleId: String!, unitId: String!, ssd: String!): [LaximoUnitDetail!]!
     laximoUnitImageMap(catalogCode: String!, vehicleId: String!, unitId: String!, ssd: String!): LaximoUnitImageMap
-    
+
     # Поиск товаров и предложений
     searchProductOffers(
-      articleNumber: String!, 
+      articleNumber: String!,
       brand: String!,
       cartItems: [CartItemInput!]
     ): ProductOffersResult!
     getAnalogOffers(analogs: [AnalogOfferInput!]!): [AnalogProduct!]
     getBrandsByCode(code: String!): BrandsByCodeResponse!
-    
+
     # Рекомендуемые товары из категории
     getCategoryProductsWithOffers(
       categoryName: String!
@@ -1188,19 +1188,19 @@ export const typeDefs = gql`
       excludeBrand: String!
       limit: Int
     ): [CategoryProduct!]!
-    
+
     # PartsAPI категории
     partsAPICategories(carId: Int!, carType: CarType): [PartsAPICategory!]!
     partsAPITopLevelCategories(carId: Int!, carType: CarType): [PartsAPICategory!]!
     partsAPIRootCategories(carId: Int!, carType: CarType): [PartsAPICategory!]!
-    
+
     # PartsAPI артикулы
     partsAPIArticles(strId: Int!, carId: Int!, carType: CarType): [PartsAPIArticle!]
-    
+
     # PartsAPI изображения
     partsAPIMedia(artId: String!, lang: Int): [PartsAPIMedia!]!
     partsAPIMainImage(artId: String!): String
-    
+
     # PartsIndex категории автотоваров
     partsIndexCatalogs(lang: String): [PartsIndexCatalog!]!
     partsIndexCatalogGroups(catalogId: String!, lang: String): [PartsIndexGroup!]!
@@ -1235,49 +1235,49 @@ export const typeDefs = gql`
       entityId: String!
       lang: String
     ): PartsIndexEntityDetail
-    
+
     # Заказы и платежи
     orders(clientId: String, status: OrderStatus, paymentMethod: String, search: String, limit: Int, offset: Int): OrdersResponse!
     order(id: ID!): Order
     orderByNumber(orderNumber: String!): Order
     payments(orderId: String, status: PaymentStatus): [Payment!]!
     payment(id: ID!): Payment
-    
+
     # Яндекс доставка
     yandexDetectLocation(location: String!): [YandexLocationVariant!]!
     yandexPickupPoints(filters: YandexPickupPointFilters): [YandexPickupPoint!]!
     yandexPickupPointsByCity(cityName: String!): [YandexPickupPoint!]!
     yandexPickupPointsByCoordinates(latitude: Float!, longitude: Float!, radiusKm: Float): [YandexPickupPoint!]!
-    
+
     # Автокомплит адресов
     addressSuggestions(query: String!): [String!]!
-    
+
     # Товары дня
     dailyProducts(displayDate: String!): [DailyProduct!]!
     dailyProduct(id: ID!): DailyProduct
-    
+
     # Товары с лучшей ценой
     bestPriceProducts: [BestPriceProduct!]!
     bestPriceProduct(id: ID!): BestPriceProduct
-    
+
     # Топ продаж
     topSalesProducts: [TopSalesProduct!]!
     topSalesProduct(id: ID!): TopSalesProduct
-    
+
     # Новые поступления (ручное управление)
     newArrivalProducts: [NewArrivalProduct!]!
     newArrivalProduct(id: ID!): NewArrivalProduct
-    
+
     # Баннеры героя
     heroBanners: [HeroBanner!]!
     heroBanner(id: String!): HeroBanner
-    
+
     # Новости (публичные/админские)
     newsList(search: String, category: String, limit: Int, offset: Int, publishedOnly: Boolean = true): [News!]!
     newsCount(search: String, category: String, publishedOnly: Boolean = true): Int!
     newsBySlug(slug: String!): News
     news(id: ID!): News
-    
+
     # Новые поступления
     newArrivals(limit: Int = 6): [Product!]!
 
@@ -1291,10 +1291,16 @@ export const typeDefs = gql`
     seoPageConfigs(search: String, skip: Int, take: Int): [SeoPageConfig!]!
     seoPageConfigsCount(search: String): Int!
     seoPageConfig(id: ID!): SeoPageConfig
-    
+
     # Интеграции/Поставщики
     integrationSettings: IntegrationSettings!
-    
+
+    # Поставщики прайслистов
+    suppliers(search: String, isActive: Boolean, limit: Int, offset: Int): [Supplier!]!
+    suppliersCount(search: String, isActive: Boolean): Int!
+    supplier(id: ID!): Supplier
+    priceListItems(priceListId: ID!, search: String, limit: Int, offset: Int): PriceListItemsResponse!
+
     # Support tickets
     mySupportTickets(limit: Int, offset: Int): [SupportTicket!]!
     supportTickets(filter: SupportTicketsFilter, limit: Int, offset: Int): [SupportTicket!]!
@@ -1350,40 +1356,40 @@ export const typeDefs = gql`
     updateProfile(input: UpdateProfileInput!): User!
     changePassword(input: ChangePasswordInput!): Boolean!
     uploadAvatar(file: String!): User!
-    
+
     # Админские мутации для управления пользователями
     updateUser(id: ID!, input: UpdateUserInput!): User!
     deleteUser(id: ID!): Boolean!
     adminChangePassword(input: AdminChangePasswordInput!): Boolean!
-    
+
     # Категории
     createCategory(input: CategoryInput!): Category!
     updateCategory(id: ID!, input: CategoryInput!): Category!
     deleteCategory(id: ID!): Boolean!
-    
+
     # Навигационные категории
     createNavigationCategory(input: NavigationCategoryInput!): NavigationCategory!
     updateNavigationCategory(id: ID!, input: NavigationCategoryInput!): NavigationCategory!
     deleteNavigationCategory(id: ID!): Boolean!
-    
+
     # Товары
     createProduct(input: ProductInput!, images: [ProductImageInput!], characteristics: [CharacteristicInput!], options: [ProductOptionInput!]): Product!
     updateProduct(id: ID!, input: ProductInput!, images: [ProductImageInput!], characteristics: [CharacteristicInput!], options: [ProductOptionInput!]): Product!
     deleteProduct(id: ID!): Boolean!
     updateProductVisibility(id: ID!, isVisible: Boolean!): Product!
-    
+
     # Массовые операции с товарами
     deleteProducts(ids: [ID!]!): BulkOperationResult!
     updateProductsVisibility(ids: [ID!]!, isVisible: Boolean!): BulkOperationResult!
     moveProductsToCategory(productIds: [ID!]!, categoryId: ID!): MoveProductsResult!
     exportProducts(categoryId: String, search: String, format: String): ExportResult!
     importProducts(input: ImportProductsInput!): ImportResult!
-    
+
     # Опции
     createOption(input: OptionInput!): Option!
     updateOption(id: ID!, input: OptionInput!): Option!
     deleteOption(id: ID!): Boolean!
-    
+
     # Клиенты
     createClient(input: ClientInput!, vehicles: [ClientVehicleInput!], discounts: [ClientDiscountInput!]): Client!
     updateClient(id: ID!, input: ClientInput!, vehicles: [ClientVehicleInput!], discounts: [ClientDiscountInput!]): Client!
@@ -1391,53 +1397,53 @@ export const typeDefs = gql`
     confirmClient(id: ID!): Client!
     exportClients(filter: ClientFilterInput, search: String, format: String): ExportResult!
     updateClientBalance(id: ID!, newBalance: Float!, comment: String): Client!
-    
+
     # Транспорт клиента
     createClientVehicle(clientId: ID!, input: ClientVehicleInput!): ClientVehicle!
     updateClientVehicle(id: ID!, input: ClientVehicleInput!): ClientVehicle!
     deleteClientVehicle(id: ID!): Boolean!
-    
+
     # Адреса доставки
     createClientDeliveryAddress(clientId: ID!, input: ClientDeliveryAddressInput!): ClientDeliveryAddress!
     updateClientDeliveryAddress(id: ID!, input: ClientDeliveryAddressInput!): ClientDeliveryAddress!
     deleteClientDeliveryAddress(id: ID!): Boolean!
-    
+
     # Контакты клиента
     createClientContact(clientId: ID!, input: ClientContactInput!): ClientContact!
     updateClientContact(id: ID!, input: ClientContactInput!): ClientContact!
     deleteClientContact(id: ID!): Boolean!
-    
+
     # Договоры
     createClientContract(clientId: ID!, input: ClientContractInput!): ClientContract!
     updateClientContract(id: ID!, input: ClientContractInput!): ClientContract!
     deleteClientContract(id: ID!): Boolean!
     updateContractBalance(contractId: ID!, amount: Float!, comment: String): ClientContract!
-    
+
     # Юридические лица
     createClientLegalEntity(clientId: ID!, input: ClientLegalEntityInput!): ClientLegalEntity!
     updateClientLegalEntity(id: ID!, input: ClientLegalEntityInput!): ClientLegalEntity!
     deleteClientLegalEntity(id: ID!): Boolean!
-    
+
     # Банковские реквизиты
     createClientBankDetails(legalEntityId: ID!, input: ClientBankDetailsInput!): ClientBankDetails!
     updateClientBankDetails(id: ID!, input: ClientBankDetailsInput!, legalEntityId: ID): ClientBankDetails!
     deleteClientBankDetails(id: ID!): Boolean!
-    
+
     # Профили клиентов
     createClientProfile(input: ClientProfileInput!): ClientProfile!
     updateClientProfile(id: ID!, input: ClientProfileInput!): ClientProfile!
     deleteClientProfile(id: ID!): Boolean!
-    
+
     # Статусы клиентов
     createClientStatus(input: ClientStatusInput!): ClientStatus!
     updateClientStatus(id: ID!, input: ClientStatusInput!): ClientStatus!
     deleteClientStatus(id: ID!): Boolean!
-    
+
     # Скидки и промокоды
     createDiscount(input: DiscountInput!): Discount!
     updateDiscount(id: ID!, input: DiscountInput!): Discount!
     deleteDiscount(id: ID!): Boolean!
-    
+
     # Авторизация клиентов
     checkClientByPhone(phone: String!): ClientAuthResponse!
     sendSMSCode(phone: String!, sessionId: String): SMSCodeResponse!
@@ -1450,7 +1456,7 @@ export const typeDefs = gql`
     loginWithPassword(phone: String!, password: String!): VerificationResponse!
     verifyClient(clientId: ID!): VerificationResponse!
     rejectClient(clientId: ID!): Boolean!
-    
+
     # Гараж клиентов
     createUserVehicle(input: UserVehicleInput!): ClientVehicle!
     updateUserVehicle(id: ID!, input: UserVehicleInput!): ClientVehicle!
@@ -1458,25 +1464,25 @@ export const typeDefs = gql`
     addVehicleFromSearch(vin: String!, comment: String): ClientVehicle!
     deleteSearchHistoryItem(id: ID!): Boolean!
     createVehicleFromVin(vin: String!, comment: String): ClientVehicle!
-    
+
     # История поиска запчастей
     deletePartsSearchHistoryItem(id: ID!): Boolean!
     clearPartsSearchHistory: Boolean!
-    
+
     # Создание записи истории поиска (для тестирования)
     createPartsSearchHistoryItem(input: PartsSearchHistoryInput!): PartsSearchHistoryItem!
-    
+
     # Обновление данных авторизованного клиента
     updateClientMe(input: ClientInput!): Client!
-    
+
     # Создание юр. лица для авторизованного клиента
     createClientLegalEntityMe(input: ClientLegalEntityInput!): ClientLegalEntity!
-    
+
     # Адреса доставки для авторизованного клиента
     createClientDeliveryAddressMe(input: ClientDeliveryAddressInput!): ClientDeliveryAddress!
     updateClientDeliveryAddressMe(id: ID!, input: ClientDeliveryAddressInput!): ClientDeliveryAddress!
     deleteClientDeliveryAddressMe(id: ID!): Boolean!
-    
+
     # Заказы и платежи
     createOrder(input: CreateOrderInput!): Order!
     updateOrderStatus(id: ID!, status: OrderStatus!): Order!
@@ -1487,35 +1493,35 @@ export const typeDefs = gql`
     deleteOrder(id: ID!): Boolean!
     createPayment(input: CreatePaymentInput!): CreatePaymentResult!
     cancelPayment(id: ID!): Payment!
-    
+
     # Избранное
     addToFavorites(input: FavoriteInput!): Favorite!
     removeFromFavorites(id: ID!): Boolean!
     clearFavorites: Boolean!
-    
+
     # Счета на оплату
     createBalanceInvoice(contractId: String!, amount: Float!): BalanceInvoice!
     updateInvoiceStatus(invoiceId: String!, status: InvoiceStatus!): BalanceInvoice!
     getInvoicePDF(invoiceId: String!): InvoicePDFResult
-    
+
     # Доставка Яндекс
     getDeliveryOffers(input: DeliveryOffersInput!): DeliveryOffersResponse!
-    
+
     # Товары дня
     createDailyProduct(input: DailyProductInput!): DailyProduct!
     updateDailyProduct(id: ID!, input: DailyProductUpdateInput!): DailyProduct!
     deleteDailyProduct(id: ID!): Boolean!
-    
+
     # Товары с лучшей ценой
     createBestPriceProduct(input: BestPriceProductInput!): BestPriceProduct!
     updateBestPriceProduct(id: ID!, input: BestPriceProductUpdateInput!): BestPriceProduct!
     deleteBestPriceProduct(id: ID!): Boolean!
-    
+
     # Топ продаж
     createTopSalesProduct(input: TopSalesProductInput!): TopSalesProduct!
     updateTopSalesProduct(id: ID!, input: TopSalesProductUpdateInput!): TopSalesProduct!
     deleteTopSalesProduct(id: ID!): Boolean!
-    
+
     # Цены товаров
     updateProductPrice(id: ID!, input: ProductPriceInput!): Product!
 
@@ -1523,23 +1529,23 @@ export const typeDefs = gql`
     createNewArrivalProduct(input: NewArrivalProductInput!): NewArrivalProduct!
     updateNewArrivalProduct(id: ID!, input: NewArrivalProductUpdateInput!): NewArrivalProduct!
     deleteNewArrivalProduct(id: ID!): Boolean!
-    
+
     # Баннеры героя
     createHeroBanner(input: HeroBannerInput!): HeroBanner!
     updateHeroBanner(id: String!, input: HeroBannerUpdateInput!): HeroBanner!
     deleteHeroBanner(id: String!): Boolean!
-    
+
     # Новости
     createNews(input: NewsInput!): News!
     updateNews(id: ID!, input: NewsUpdateInput!): News!
     deleteNews(id: ID!): Boolean!
-    
+
     # Кража - работа с базой данных запчастей
     fetchCategoryProducts(input: FetchCategoryProductsInput!): FetchCategoryProductsResult!
     getCategoryTables: [CategoryTable!]!
     deleteCategoryTable(categoryId: String!, categoryType: CategoryType!): Boolean!
     getCategoryProducts(categoryId: String!, categoryType: CategoryType!, search: String, limit: Int, offset: Int): CategoryProductsResult!
-    
+
     # Корзина
     addToCart(input: AddToCartInput!): AddToCartResult!
     removeFromCart(itemId: ID!): AddToCartResult!
@@ -1555,7 +1561,16 @@ export const typeDefs = gql`
 
     # Интеграции/Поставщики
     updateIntegrationSettings(input: IntegrationSettingsInput!): IntegrationSettings!
-    
+
+    # Поставщики прайслистов
+    createSupplier(input: SupplierInput!): Supplier!
+    updateSupplier(id: ID!, input: SupplierUpdateInput!): Supplier!
+    deleteSupplier(id: ID!): Boolean!
+
+    # Прайслисты
+    createPriceList(input: PriceListInput!): PriceList!
+    deletePriceList(id: ID!): Boolean!
+
     # Support tickets
     createSupportTicket(input: CreateSupportTicketInput!): SupportTicket!
     addSupportTicketMessage(input: AddSupportTicketMessageInput!): SupportTicketMessage!
@@ -1581,6 +1596,102 @@ export const typeDefs = gql`
     trinityOnlyStock: Boolean
     trinityOnline: String
     trinityCrosses: String
+  }
+
+  # Поставщики прайслистов
+  type Supplier {
+    id: ID!
+    supplierCode: String!
+    inn: String!
+    name: String!
+    bik: String!
+    bankName: String!
+    accountNumber: String!
+    email: String!
+    phone: String!
+    contactPerson: String!
+    address: String
+    correspondentAccount: String
+    ogrn: String
+    kpp: String
+    isActive: Boolean!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    priceLists: [PriceList!]!
+  }
+
+  # Прайслисты поставщиков
+  type PriceList {
+    id: ID!
+    supplierId: String!
+    supplier: Supplier!
+    fileName: String!
+    fileUrl: String!
+    fileSize: Int!
+    itemsCount: Int!
+    status: String!
+    errorMessage: String
+    processingLog: String
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  # Товары из прайслистов
+  type PriceListItem {
+    id: ID!
+    priceListId: String!
+    article: String!
+    brand: String
+    name: String!
+    availability: String
+    price: Float
+    multiplicity: Int
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  type PriceListItemsResponse {
+    items: [PriceListItem!]!
+    total: Int!
+    hasMore: Boolean!
+  }
+
+  input PriceListInput {
+    supplierId: String!
+    fileName: String!
+    fileUrl: String!
+    fileSize: Int!
+  }
+
+  input SupplierInput {
+    inn: String!
+    name: String!
+    bik: String!
+    bankName: String!
+    accountNumber: String!
+    email: String!
+    phone: String!
+    contactPerson: String!
+    address: String
+    correspondentAccount: String
+    ogrn: String
+    kpp: String
+  }
+
+  input SupplierUpdateInput {
+    inn: String
+    name: String
+    bik: String
+    bankName: String
+    accountNumber: String
+    email: String
+    phone: String
+    contactPerson: String
+    address: String
+    correspondentAccount: String
+    ogrn: String
+    kpp: String
+    isActive: Boolean
   }
 
   input LoginInput {
@@ -1786,7 +1897,7 @@ export const typeDefs = gql`
     largeimageurl: String
     ssd: String
   }
-  
+
   type LaximoQuickGroupsResponse {
     groups: [LaximoQuickGroup!]!
     rawXML: String
@@ -2144,7 +2255,7 @@ export const typeDefs = gql`
 
   type InternalOffer {
     id: ID!
-    productId: ID!
+    productId: String
     price: Float!
     quantity: Int!
     remainingStock: Int
@@ -2153,7 +2264,9 @@ export const typeDefs = gql`
     available: Boolean!
     rating: Float
     supplier: String!
+    supplierCode: String
     canPurchase: Boolean!
+    isSupplierOffer: Boolean
     isInCart: Boolean!
   }
 
@@ -2887,4 +3000,4 @@ export const typeDefs = gql`
     created_at: DateTime!
     updated_at: DateTime!
   }
-` 
+`

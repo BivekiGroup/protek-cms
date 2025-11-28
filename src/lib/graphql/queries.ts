@@ -257,6 +257,91 @@ export const UPDATE_INTEGRATION_SETTINGS = gql`
   }
 `
 
+// Поставщики прайслистов
+export const GET_SUPPLIERS = gql`
+  query GetSuppliers($search: String, $isActive: Boolean, $limit: Int, $offset: Int) {
+    suppliers(search: $search, isActive: $isActive, limit: $limit, offset: $offset) {
+      id
+      supplierCode
+      inn
+      name
+      bik
+      bankName
+      accountNumber
+      email
+      phone
+      contactPerson
+      address
+      correspondentAccount
+      ogrn
+      kpp
+      isActive
+      createdAt
+      updatedAt
+      priceLists {
+        id
+        fileName
+        fileUrl
+        fileSize
+        itemsCount
+        status
+        errorMessage
+        processingLog
+        createdAt
+        updatedAt
+      }
+    }
+  }
+`
+
+export const GET_SUPPLIERS_COUNT = gql`
+  query GetSuppliersCount($search: String, $isActive: Boolean) {
+    suppliersCount(search: $search, isActive: $isActive)
+  }
+`
+
+export const GET_PRICE_LIST_ITEMS = gql`
+  query GetPriceListItems($priceListId: ID!, $search: String, $limit: Int, $offset: Int) {
+    priceListItems(priceListId: $priceListId, search: $search, limit: $limit, offset: $offset) {
+      items {
+        id
+        article
+        brand
+        name
+        availability
+        price
+        multiplicity
+        createdAt
+      }
+      total
+      hasMore
+    }
+  }
+`
+
+export const GET_SUPPLIER = gql`
+  query GetSupplier($id: ID!) {
+    supplier(id: $id) {
+      id
+      inn
+      name
+      bik
+      bankName
+      accountNumber
+      email
+      phone
+      contactPerson
+      address
+      correspondentAccount
+      ogrn
+      kpp
+      isActive
+      createdAt
+      updatedAt
+    }
+  }
+`
+
 // Daily Products queries
 export const GET_DAILY_PRODUCTS = gql`
   query GetDailyProducts($displayDate: String!) {

@@ -1,10 +1,13 @@
 import { NextRequest } from 'next/server'
 
-function getCorsHeaders() {
+function getCorsHeaders(origin?: string | null) {
   const isDev = process.env.NODE_ENV === 'development'
-  const allowedOrigin = isDev
-    ? (process.env.FRONTEND_ORIGIN || 'http://localhost:3001')
-    : (process.env.FRONTEND_ORIGIN || 'https://protekauto.ru')
+  const allowedOrigins = isDev
+    ? ['http://localhost:3000', 'http://localhost:3001', process.env.FRONTEND_ORIGIN, process.env.NEXT_PUBLIC_FRONTEND_ORIGIN].filter(Boolean)
+    : [process.env.FRONTEND_ORIGIN || 'https://protekauto.ru', process.env.NEXT_PUBLIC_FRONTEND_ORIGIN].filter(Boolean)
+
+  const allowedOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0] || '*'
+
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'POST,OPTIONS',
@@ -17,7 +20,8 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  const headers = new Headers(getCorsHeaders())
+  const origin = req.headers.get('origin')
+  const headers = new Headers(getCorsHeaders(origin))
   const apiKey = process.env.DADATA_API_KEY
   if (!apiKey) {
     return new Response(JSON.stringify({ error: 'DADATA_API_KEY is not configured on CMS' }), { status: 500, headers: { ...Object.fromEntries(headers), 'Content-Type': 'application/json' } })

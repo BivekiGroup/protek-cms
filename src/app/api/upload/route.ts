@@ -14,11 +14,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Проверяем размер файла (максимум 10MB)
-    const maxSize = 10 * 1024 * 1024 // 10MB
+    // Проверяем размер файла (для прайслистов - 50MB, для остальных - 10MB)
+    const maxSize = prefix === 'pricelists' ? 50 * 1024 * 1024 : 10 * 1024 * 1024
     if (file.size > maxSize) {
+      const maxSizeMB = prefix === 'pricelists' ? '50MB' : '10MB'
       return NextResponse.json(
-        { error: 'Файл слишком большой. Максимальный размер: 10MB' },
+        { error: `Файл слишком большой. Максимальный размер: ${maxSizeMB}` },
         { status: 400 }
       )
     }

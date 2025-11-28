@@ -59,7 +59,7 @@ export default function ProvidersPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Поставщики</h1>
+        <h1 className="text-3xl font-bold">Поставщики API</h1>
         <p className="text-muted-foreground">Выберите внешний API-провайдер предложений и настройте Trinity</p>
       </div>
 

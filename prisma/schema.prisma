@@ -1312,3 +1312,71 @@ model SmsCode {
   @@index([expiresAt])
   @@map("sms_codes")
 }
+
+// Поставщики прайслистов
+model Supplier {
+  id                   String      @id @default(cuid())
+  supplierCode         String      @unique @default("PR999") // PR код (PR123, PR45, и т.д.)
+  inn                  String      @unique
+  name                 String
+  bik                  String
+  bankName             String
+  accountNumber        String
+  email                String
+  phone                String
+  contactPerson        String
+  address              String?
+  correspondentAccount String?
+  ogrn                 String?
+  kpp                  String?
+  isActive             Boolean     @default(true)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  priceLists           PriceList[]
+
+  @@map("suppliers")
+}
+
+// Прайслисты поставщиков
+model PriceList {
+  id             String              @id @default(cuid())
+  supplierId     String
+  supplier       Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  fileName       String
+  fileUrl        String
+  fileSize       Int
+  itemsCount     Int                 @default(0)
+  status         String              @default("pending") // pending, processing, completed, error
+  errorMessage   String?
+  processingLog  String?             // Логи обработки для отображения в UI
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  items          PriceListItem[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@map("price_lists")
+}
+
+// Товары из прайслистов
+model PriceListItem {
+  id           String    @id @default(cuid())
+  priceListId  String
+  priceList    PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+
+  // Основные поля из Excel
+  article      String    // Каталожный номер
+  brand        String?   // Бренд
+  name         String    // Описание/название
+  availability String?   // Наличие
+  price        Float?    // Цена
+  multiplicity Int?      // Кратность
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([priceListId])
+  @@index([article])
+  @@index([brand])
+  @@map("price_list_items")
+}

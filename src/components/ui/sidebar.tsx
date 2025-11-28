@@ -27,7 +27,8 @@ import {
   MessageSquare,
   LifeBuoy,
   RotateCcw,
-  Smartphone
+  Smartphone,
+  Truck
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -52,6 +53,7 @@ const navigationGroups: NavGroup[] = [
     title: 'Каталог и контент',
     items: [
       { title: 'Каталог', href: '/dashboard/catalog', icon: Package },
+      { title: 'Поставщики', href: '/dashboard/suppliers', icon: Truck },
       { title: 'Товары главной', href: '/dashboard/homepage-products', icon: Star },
       { title: 'Баннеры героя', href: '/dashboard/hero-banners', icon: Image },
       { title: 'Новости', href: '/dashboard/news', icon: Mail },
@@ -90,7 +92,7 @@ const navigationGroups: NavGroup[] = [
     title: 'Интеграции',
     items: [
       { title: '1С: Каталог', href: '/dashboard/integrations/1c-catalog', icon: Shield },
-      { title: 'Поставщики', href: '/dashboard/integrations/providers', icon: Store },
+      { title: 'Поставщики API', href: '/dashboard/integrations/providers', icon: Store },
     ],
   },
   {

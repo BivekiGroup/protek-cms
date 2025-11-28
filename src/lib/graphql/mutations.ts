@@ -1573,3 +1573,80 @@ export const DELETE_NEWS = gql`
     deleteNews(id: $id)
   }
 `
+
+// Поставщики прайслистов
+export const CREATE_SUPPLIER = gql`
+  mutation CreateSupplier($input: SupplierInput!) {
+    createSupplier(input: $input) {
+      id
+      inn
+      name
+      bik
+      bankName
+      accountNumber
+      email
+      phone
+      contactPerson
+      address
+      correspondentAccount
+      ogrn
+      kpp
+      isActive
+      createdAt
+      updatedAt
+    }
+  }
+`
+
+export const UPDATE_SUPPLIER = gql`
+  mutation UpdateSupplier($id: ID!, $input: SupplierUpdateInput!) {
+    updateSupplier(id: $id, input: $input) {
+      id
+      inn
+      name
+      bik
+      bankName
+      accountNumber
+      email
+      phone
+      contactPerson
+      address
+      correspondentAccount
+      ogrn
+      kpp
+      isActive
+      createdAt
+      updatedAt
+    }
+  }
+`
+
+export const DELETE_SUPPLIER = gql`
+  mutation DeleteSupplier($id: ID!) {
+    deleteSupplier(id: $id)
+  }
+`
+
+// Прайслисты
+export const CREATE_PRICE_LIST = gql`
+  mutation CreatePriceList($input: PriceListInput!) {
+    createPriceList(input: $input) {
+      id
+      supplierId
+      fileName
+      fileUrl
+      fileSize
+      itemsCount
+      status
+      errorMessage
+      createdAt
+      updatedAt
+    }
+  }
+`
+
+export const DELETE_PRICE_LIST = gql`
+  mutation DeletePriceList($id: ID!) {
+    deletePriceList(id: $id)
+  }
+`

@@ -1,16 +1,15 @@
-import { prisma } from '../prisma'
-import { Prisma, SearchType, OrderStatus as PrismaOrderStatus } from '../../generated/prisma'
-import { createToken, comparePasswords, hashPassword } from '../auth'
-import { createAuditLog, AuditAction, getClientInfo } from '../audit'
-import { uploadBuffer, generateFileKey } from '../s3'
-import { smsService } from '../sms-service'
-import { smsCodeStore } from '../sms-code-store'
-import { laximoService, laximoDocService, laximoUnitService } from '../laximo-service'
+import { Prisma, OrderStatus as PrismaOrderStatus, SearchType } from '../../generated/prisma'
+import { AuditAction, createAuditLog, getClientInfo } from '../audit'
+import { comparePasswords, createToken, hashPassword } from '../auth'
+import { generatePassword } from '../auth-utils'
 import { autoEuroService } from '../autoeuro-service'
-import { trinityService } from '../trinity-service'
-import { yooKassaService } from '../yookassa-service'
-import { generateLogin, generatePassword } from '../auth-utils'
+import { laximoDocService, laximoService, laximoUnitService } from '../laximo-service'
+import { prisma } from '../prisma'
+import { generateFileKey, uploadBuffer } from '../s3'
 import { sendCredentialsEmail } from '../send-credentials-email'
+import { smsCodeStore } from '../sms-code-store'
+import { smsService } from '../sms-service'
+import { trinityService } from '../trinity-service'
 // PartsAPI/PartsIndex integration removed: provide no-op stubs to keep schema stable
 const partsAPIService = {
   getSearchTree: async (_carId?: number, _carType?: string): Promise<any[]> => [],
@@ -54,11 +53,11 @@ const partsIndexService = {
   }),
 }
 // Removed static import - will use dynamic import for server-only package
-import { yandexDeliveryService, YandexPickupPoint, getAddressSuggestions } from '../yandex-delivery-service'
-import { InvoiceService } from '../invoice-service'
 import * as csvWriter from 'csv-writer'
-import * as XLSX from 'xlsx'
 import GraphQLJSON from 'graphql-type-json'
+import * as XLSX from 'xlsx'
+import { InvoiceService } from '../invoice-service'
+import { getAddressSuggestions, yandexDeliveryService, YandexPickupPoint } from '../yandex-delivery-service'
 
 interface CreateUserInput {
   firstName: string
@@ -293,10 +292,10 @@ const findInternalProductsByArticle = async (
 
 // Функция для сохранения истории поиска запчастей и автомобилей
 const saveSearchHistory = async (
-  context: Context, 
-  searchQuery: string, 
-  searchType: SearchType, 
-  brand?: string, 
+  context: Context,
+  searchQuery: string,
+  searchType: SearchType,
+  brand?: string,
   articleNumber?: string,
   vehicleInfo?: { brand?: string; model?: string; year?: number },
   resultCount: number = 0
@@ -950,7 +949,7 @@ const buildProductOrderBy = (sort?: ProductSortInput): Prisma.ProductOrderByWith
 // Функция для расчета дней доставки из строки даты
 const calculateDeliveryDays = (deliveryDateStr: string): number => {
   if (!deliveryDateStr) return 0;
-  
+
   try {
     const deliveryDate = new Date(deliveryDateStr);
     const today = new Date();
@@ -966,6 +965,25 @@ const calculateDeliveryDays = (deliveryDateStr: string): number => {
 function getContext(): Context {
   const context = (global as unknown as { __graphqlContext?: Context }).__graphqlContext || {}
   return context
+}
+
+/**
+ * Парсит строку наличия из прайс-листа в числовое значение
+ * Примеры: "10", "5+", ">10", "под заказ" -> 0
+ */
+function parseAvailability(availability: string | null | undefined): number {
+  if (!availability) return 0;
+
+  const trimmed = availability.trim().toLowerCase();
+
+  // Если "под заказ", "нет", "0" - возвращаем 0
+  if (trimmed === 'под заказ' || trimmed === 'нет' || trimmed === '0' || trimmed === '') {
+    return 0;
+  }
+
+  // Извлекаем первое число из строки
+  const match = trimmed.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
 }
 
 export const resolvers = {
@@ -1067,7 +1085,7 @@ export const resolvers = {
     relatedProducts: async (parent: { id: string }) => {
       const product = await prisma.product.findUnique({
         where: { id: parent.id },
-        include: { 
+        include: {
           products_RelatedProducts_A: { include: { images: { orderBy: { order: 'asc' } } } },
           products_RelatedProducts_B: { include: { images: { orderBy: { order: 'asc' } } } }
         }
@@ -1080,7 +1098,7 @@ export const resolvers = {
     accessoryProducts: async (parent: { id: string }) => {
       const product = await prisma.product.findUnique({
         where: { id: parent.id },
-        include: { 
+        include: {
           products_AccessoryProducts_A: { include: { images: { orderBy: { order: 'asc' } } } },
           products_AccessoryProducts_B: { include: { images: { orderBy: { order: 'asc' } } } }
         }
@@ -1426,16 +1444,16 @@ export const resolvers = {
       }
     },
 
-    productsCount: async (_: unknown, { categoryId, search }: { 
-      categoryId?: string; search?: string 
+    productsCount: async (_: unknown, { categoryId, search }: {
+      categoryId?: string; search?: string
     }) => {
       try {
         const where: Record<string, unknown> = {}
-        
+
         if (categoryId) {
           where.categories = { some: { id: categoryId } }
         }
-        
+
         if (search) {
           where.OR = [
             { name: { contains: search, mode: 'insensitive' } },
@@ -1550,15 +1568,15 @@ export const resolvers = {
     },
 
     // Клиенты
-    clients: async (_: unknown, { 
-      filter, search, limit = 50, offset = 0, sortBy = 'createdAt', sortOrder = 'desc' 
-    }: { 
-      filter?: ClientFilterInput; search?: string; limit?: number; offset?: number; 
-      sortBy?: string; sortOrder?: string 
+    clients: async (_: unknown, {
+      filter, search, limit = 50, offset = 0, sortBy = 'createdAt', sortOrder = 'desc'
+    }: {
+      filter?: ClientFilterInput; search?: string; limit?: number; offset?: number;
+      sortBy?: string; sortOrder?: string
     }) => {
       try {
         const where: Record<string, unknown> = {}
-        
+
         if (filter) {
           if (filter.type) {
             where.type = filter.type
@@ -1597,7 +1615,7 @@ export const resolvers = {
             }
           }
         }
-        
+
         if (search) {
           where.OR = [
             { name: { contains: search, mode: 'insensitive' } },
@@ -1683,7 +1701,7 @@ export const resolvers = {
     clientsCount: async (_: unknown, { filter, search }: { filter?: ClientFilterInput; search?: string }) => {
       try {
         const where: Record<string, unknown> = {}
-        
+
         if (filter) {
           if (filter.type) {
             where.type = filter.type
@@ -1722,7 +1740,7 @@ export const resolvers = {
             }
           }
         }
-        
+
         if (search) {
           where.OR = [
             { name: { contains: search, mode: 'insensitive' } },
@@ -1922,8 +1940,8 @@ export const resolvers = {
         }
 
         // Удаляем префикс client_ если он есть
-        const cleanClientId = actualContext.clientId.startsWith('client_') 
-          ? actualContext.clientId.substring(7) 
+        const cleanClientId = actualContext.clientId.startsWith('client_')
+          ? actualContext.clientId.substring(7)
           : actualContext.clientId
 
         const favorites = await prisma.favorite.findMany({
@@ -1980,7 +1998,7 @@ export const resolvers = {
 
         // Получаем записи истории только с типом VIN
         const vinHistoryItems = await prisma.partsSearchHistory.findMany({
-          where: { 
+          where: {
             clientId,
             searchType: 'VIN' // Фильтруем только VIN запросы
           },
@@ -2287,7 +2305,7 @@ export const resolvers = {
         if (!catalogCode || catalogCode.trim() === '') {
           console.log('🌍 Глобальный поиск автомобиля по VIN/Frame:', vin)
           const result = await laximoService.findVehicleGlobal(vin)
-          
+
           // Сохраняем в историю поиска с информацией о первом найденном автомобиле
           let vehicleInfo: { brand?: string; model?: string; year?: number } | undefined = undefined
           if (result && result.length > 0) {
@@ -2298,7 +2316,7 @@ export const resolvers = {
               year: firstVehicle.year ? parseInt(firstVehicle.year, 10) : undefined
             }
           }
-          
+
           await saveSearchHistory(
             context,
             vin,
@@ -2308,12 +2326,12 @@ export const resolvers = {
             vehicleInfo,
             result.length
           )
-          
+
           return result
         }
-        
+
         const result = await laximoService.findVehicle(catalogCode, vin)
-        
+
         // Сохраняем в историю поиска с информацией о первом найденном автомобиле
         let vehicleInfo: { brand?: string; model?: string; year?: number } | undefined = undefined
         if (result && result.length > 0) {
@@ -2324,7 +2342,7 @@ export const resolvers = {
             year: firstVehicle.year ? parseInt(firstVehicle.year, 10) : undefined
           }
         }
-        
+
         await saveSearchHistory(
           context,
           vin,
@@ -2334,7 +2352,7 @@ export const resolvers = {
           vehicleInfo,
           result.length
         )
-        
+
         return result
       } catch (error) {
         console.error('Ошибка поиска автомобиля по VIN:', error)
@@ -2345,7 +2363,7 @@ export const resolvers = {
     laximoFindVehicleByWizard: async (_: unknown, { catalogCode, ssd }: { catalogCode: string; ssd: string }, context: Context) => {
       try {
         const result = await laximoService.findVehicleByWizard(catalogCode, ssd)
-        
+
         // Сохраняем в историю поиска
         await saveSearchHistory(
           context,
@@ -2356,7 +2374,7 @@ export const resolvers = {
           undefined,
           result.length
         )
-        
+
         return result
       } catch (error) {
         console.error('Ошибка поиска автомобиля по wizard:', error)
@@ -2367,7 +2385,7 @@ export const resolvers = {
     laximoFindVehicleByPlate: async (_: unknown, { catalogCode, plateNumber }: { catalogCode: string; plateNumber: string }, context: Context) => {
       try {
         const result = await laximoService.findVehicleByPlateNumber(catalogCode, plateNumber)
-        
+
         // Сохраняем в историю поиска с информацией о первом найденном автомобиле
         let vehicleInfo: { brand?: string; model?: string; year?: number } | undefined = undefined
         if (result && result.length > 0) {
@@ -2378,7 +2396,7 @@ export const resolvers = {
             year: firstVehicle.year ? parseInt(firstVehicle.year, 10) : undefined
           }
         }
-        
+
         await saveSearchHistory(
           context,
           plateNumber,
@@ -2388,7 +2406,7 @@ export const resolvers = {
           vehicleInfo,
           result.length
         )
-        
+
         return result
       } catch (error) {
         console.error('Ошибка поиска автомобиля по госномеру:', error)
@@ -2401,7 +2419,7 @@ export const resolvers = {
         console.log('🔍 GraphQL Resolver - Глобальный поиск автомобиля по госномеру:', plateNumber)
         const result = await laximoService.findVehicleByPlateNumberGlobal(plateNumber)
         console.log('📋 Результат глобального поиска по госномеру:', result ? `найдено ${result.length} автомобилей` : 'результат пустой')
-        
+
         // Сохраняем в историю поиска с информацией о первом найденном автомобиле
         let vehicleInfo: { brand?: string; model?: string; year?: number } | undefined = undefined
         if (result && result.length > 0) {
@@ -2412,7 +2430,7 @@ export const resolvers = {
             year: firstVehicle.year ? parseInt(firstVehicle.year, 10) : undefined
           }
         }
-        
+
         await saveSearchHistory(
           context,
           plateNumber,
@@ -2422,7 +2440,7 @@ export const resolvers = {
           vehicleInfo,
           result.length
         )
-        
+
         return result
       } catch (error) {
         console.error('❌ Ошибка глобального поиска автомобиля по госномеру:', error)
@@ -2442,7 +2460,7 @@ export const resolvers = {
     laximoFindApplicableVehicles: async (_: unknown, { catalogCode, partNumber }: { catalogCode: string; partNumber: string }, context: Context) => {
       try {
         const result = await laximoService.findApplicableVehicles(catalogCode, partNumber)
-        
+
         // Сохраняем в историю поиска
         await saveSearchHistory(
           context,
@@ -2453,7 +2471,7 @@ export const resolvers = {
           undefined,
           result.length
         )
-        
+
         return result
       } catch (error) {
         console.error('Ошибка поиска автомобилей по артикулу:', error)
@@ -2486,9 +2504,9 @@ export const resolvers = {
           localized,
           ssdLength: ssd?.length
         })
-        
+
         const result = await laximoService.getVehicleInfo(catalogCode, vehicleId, ssd, localized)
-        
+
         console.log('📋 GraphQL laximoVehicleInfo resolver - результат:', {
           inputVehicleId: vehicleId,
           returnedVehicleId: result?.vehicleid,
@@ -2498,14 +2516,14 @@ export const resolvers = {
           hasResult: !!result,
           vehicleIdChanged: result?.vehicleid !== vehicleId
         })
-        
+
         if (result && result.vehicleid !== vehicleId) {
           console.log('🚨 BACKEND: Vehicle ID изменился!')
           console.log(`📍 Запрошенный: ${vehicleId}`)
           console.log(`📍 Полученный: ${result.vehicleid}`)
           console.log(`📍 SSD: ${ssd?.substring(0, 50)}...`)
         }
-        
+
         return result
       } catch (error) {
         console.error('❌ Ошибка получения информации об автомобиле:', error)
@@ -2516,16 +2534,16 @@ export const resolvers = {
     laximoQuickGroups: async (_: unknown, { catalogCode, vehicleId, ssd }: { catalogCode: string; vehicleId: string; ssd?: string }) => {
       try {
         console.log('🔧 GraphQL Resolver - получение групп быстрого поиска:', { catalogCode, vehicleId, ssd: ssd?.substring(0, 30) })
-        
+
         let groups: any[] = []
-        
+
         // Сначала пробуем стандартный метод getListQuickGroup
         try {
           groups = await laximoService.getListQuickGroup(catalogCode, vehicleId, ssd)
           console.log('✅ Получено групп через getListQuickGroup:', groups.length)
         } catch (quickGroupError) {
           console.warn('⚠️ Ошибка getListQuickGroup:', quickGroupError)
-          
+
           // Альтернативный метод - используем ListCategories
           try {
             console.log('🔄 Пробуем альтернативный метод - ListCategories')
@@ -2535,17 +2553,17 @@ export const resolvers = {
             console.warn('⚠️ Ошибка getListCategories:', categoriesError)
           }
         }
-        
+
         console.log('🎯 GraphQL Resolver - итоговый результат:')
         console.log('📊 Общее количество групп:', groups.length)
-        
+
         if (groups.length > 0) {
           console.log('📋 Первые 5 групп:')
           groups.slice(0, 5).forEach((group, index) => {
             console.log(`  ${index + 1}. ${group.name} (ID: ${group.quickgroupid}, link: ${group.link})`)
           })
         }
-        
+
         // Подсчитываем детали в подгруппах
         groups.forEach((group, index) => {
           const countChildren = (g: any): number => {
@@ -2557,10 +2575,10 @@ export const resolvers = {
             }
             return count
           }
-          
+
           const totalChildren = countChildren(group) - 1 // Исключаем саму группу
           console.log(`📂 Группа ${index + 1}: ${group.name} - всего подэлементов: ${totalChildren}`)
-          
+
           if (group.children && group.children.length > 0) {
             group.children.forEach((child, childIndex) => {
               console.log(`  └─ Дочерняя группа ${childIndex + 1}:`, {
@@ -2573,7 +2591,7 @@ export const resolvers = {
             })
           }
         })
-        
+
         return groups
       } catch (error) {
         console.error('❌ Ошибка получения групп быстрого поиска:', error)
@@ -2585,13 +2603,13 @@ export const resolvers = {
     laximoQuickGroupsWithXML: async (_: unknown, { catalogCode, vehicleId, ssd }: { catalogCode: string; vehicleId: string; ssd?: string }) => {
       try {
         console.log('🔧 GraphQL Resolver - получение групп быстрого поиска с RAW XML:', { catalogCode, vehicleId, ssd: ssd?.substring(0, 30) })
-        
+
         const result = await laximoService.getListQuickGroupWithXML(catalogCode, vehicleId, ssd)
-        
+
         console.log('🎯 GraphQL Resolver - результат от LaximoService:')
         console.log('📊 Общее количество групп:', result.groups.length)
         console.log('📄 RAW XML длина:', result.rawXML.length)
-        
+
         return {
           groups: result.groups,
           rawXML: result.rawXML
@@ -2630,16 +2648,16 @@ export const resolvers = {
               // Получаем каталоги PartsIndex
               const catalogs = await partsIndexService.getCatalogs('ru')
               const catalog = catalogs.find(c => c.id === category.partsIndexCatalogId)
-              
+
               let groupName: string | null = null
-              
+
               // Если есть groupId, получаем группы
               if (category.partsIndexGroupId && catalog) {
                 const groups = await partsIndexService.getCatalogGroups(category.partsIndexCatalogId, 'ru')
                 const group = groups.find(g => g.id === category.partsIndexGroupId)
                 groupName = group?.name || null
               }
-              
+
               return {
                 ...category,
                 name: groupName || catalog?.name || 'Неизвестная категория',
@@ -2678,9 +2696,9 @@ export const resolvers = {
         // Получаем данные из PartsIndex
         const catalogs = await partsIndexService.getCatalogs('ru')
         const catalog = catalogs.find(c => c.id === category.partsIndexCatalogId)
-        
+
         let groupName: string | null = null
-        
+
         if (category.partsIndexGroupId && catalog) {
           const groups = await partsIndexService.getCatalogGroups(category.partsIndexCatalogId, 'ru')
           const group = groups.find(g => g.id === category.partsIndexGroupId)
@@ -2708,13 +2726,13 @@ export const resolvers = {
           hasSSD: !!ssd,
           ssdLength: ssd?.length
         })
-        
+
         let result: any[] = []
-        
+
         // Если есть categoryId, то мы ищем узлы в конкретной категории
         if (categoryId) {
           console.log('🔧 Поиск узлов в категории:', categoryId)
-          
+
           // ИСПРАВЛЕНИЕ: Разные каталоги поддерживают разные параметры для ListUnits
           try {
             console.log('🔧 Пробуем ListUnits с SSD для категории...')
@@ -2722,7 +2740,7 @@ export const resolvers = {
             console.log('✅ Получено узлов в категории:', result.length)
           } catch (error: any) {
             console.log('⚠️ Ошибка ListUnits с SSD:', error.message)
-            
+
             // Если ошибка E_INVALIDPARAMETER:ssd - значит данная категория/каталог не поддерживает SSD
             if (error.message.includes('E_INVALIDPARAMETER:ssd')) {
               console.log('🔧 Каталог/категория не поддерживает SSD, пробуем без SSD...')
@@ -2731,7 +2749,7 @@ export const resolvers = {
                 console.log('✅ Получено узлов в категории (без SSD):', result.length)
               } catch (noSsdError: any) {
                 console.log('⚠️ Ошибка ListUnits без SSD:', noSsdError.message)
-                
+
                 // Если и без SSD не работает, значит данная категория не содержит узлов
                 // Возвращаем пустой массив вместо ошибки
                 console.log('🔧 Категория не содержит узлов, возвращаем пустой результат')
@@ -2754,13 +2772,13 @@ export const resolvers = {
           console.log('🔧 Получаем список всех категорий...')
           try {
             result = await laximoService.getListCategories(catalogCode, vehicleId, ssd)
-            
+
             // Если получили категории, используем SSD из первой категории для получения узлов
             if (result.length > 0 && result[0].ssd) {
               console.log('🔧 Найден SSD в категориях, пробуем получить узлы...')
               const categorySsd = result[0].ssd
               console.log('🔑 SSD из категории:', categorySsd.substring(0, 30) + '...')
-              
+
               // Пробуем получить узлы для первой категории с найденным SSD
               try {
                 const unitsResult = await laximoService.getListUnits(catalogCode, vehicleId, categorySsd, result[0].quickgroupid)
@@ -2781,9 +2799,9 @@ export const resolvers = {
             }
           }
         }
-        
+
         console.log('✅ GraphQL Resolver - получено узлов каталога:', result?.length || 0)
-        
+
         if (result && result.length > 0) {
           console.log('📦 Первый узел:', {
             quickgroupid: result[0].quickgroupid,
@@ -2793,7 +2811,7 @@ export const resolvers = {
             imageUrl: result[0].imageurl ? result[0].imageurl.substring(0, 80) + '...' : 'отсутствует'
           })
         }
-        
+
         return result || []
       } catch (error) {
         console.error('❌ GraphQL Resolver - ошибка получения узлов каталога:', error)
@@ -2803,11 +2821,11 @@ export const resolvers = {
 
     laximoQuickDetail: async (_: unknown, { catalogCode, vehicleId, quickGroupId, ssd }: { catalogCode: string; vehicleId: string; quickGroupId: string; ssd: string }) => {
       try {
-        console.log('🔍 Запрос деталей группы быстрого поиска - RAW PARAMS:', { 
+        console.log('🔍 Запрос деталей группы быстрого поиска - RAW PARAMS:', {
           catalogCode: catalogCode,
           catalogCodeType: typeof catalogCode,
           catalogCodeLength: catalogCode?.length,
-          vehicleId: vehicleId, 
+          vehicleId: vehicleId,
           vehicleIdType: typeof vehicleId,
           vehicleIdLength: vehicleId?.length,
           quickGroupId: quickGroupId,
@@ -2817,32 +2835,32 @@ export const resolvers = {
           ssdType: typeof ssd,
           ssdLength: ssd?.length
         })
-        
+
         // Валидация параметров с детальными логами
         console.log('🔍 Проверка catalogCode:', { catalogCode, isEmpty: !catalogCode, isTrimEmpty: catalogCode?.trim() === '' })
         if (!catalogCode || catalogCode.trim() === '') {
           console.error('❌ Пустой catalogCode:', catalogCode)
           throw new Error(`Пустой код каталога: "${catalogCode}"`)
         }
-        
+
         console.log('🔍 Проверка vehicleId:', { vehicleId, isUndefined: vehicleId === undefined, isNull: vehicleId === null, isEmpty: vehicleId === '' })
         if (vehicleId === undefined || vehicleId === null) {
           console.error('❌ Пустой vehicleId:', vehicleId)
           throw new Error(`Пустой ID автомобиля: "${vehicleId}"`)
         }
-        
+
         console.log('🔍 Проверка quickGroupId:', { quickGroupId, isEmpty: !quickGroupId, isTrimEmpty: quickGroupId?.trim() === '' })
         if (!quickGroupId || quickGroupId.trim() === '') {
           console.error('❌ Пустой quickGroupId:', quickGroupId)
           throw new Error(`Пустой ID группы: "${quickGroupId}"`)
         }
-        
+
         console.log('🔍 Проверка ssd:', { ssd: ssd ? `${ssd.substring(0, 30)}...` : ssd, isEmpty: !ssd, isTrimEmpty: ssd?.trim() === '' })
         if (!ssd || ssd.trim() === '') {
           console.error('❌ Пустой ssd:', ssd)
           throw new Error(`Пустой SSD: "${ssd}"`)
         }
-        
+
         console.log('✅ Все параметры валидны, вызываем laximoService.getListQuickDetail')
         const result = await laximoService.getListQuickDetail(catalogCode, vehicleId, quickGroupId, ssd)
         console.log('✅ Результат от laximoService:', result ? 'получен' : 'null')
@@ -2866,16 +2884,16 @@ export const resolvers = {
     laximoFulltextSearch: async (_: unknown, { catalogCode, vehicleId, searchQuery, ssd }: { catalogCode: string; vehicleId: string; searchQuery: string; ssd: string }, context: Context) => {
       try {
         console.log('🔍 GraphQL Resolver - Поиск деталей по названию:', { catalogCode, vehicleId, searchQuery, ssd: ssd ? `${ssd.substring(0, 30)}...` : 'отсутствует' })
-        
+
         // Сначала проверим поддержку полнотекстового поиска каталогом
         const catalogInfo = await laximoService.getCatalogInfo(catalogCode)
         if (catalogInfo) {
           const hasFulltextSearch = catalogInfo.features.some(f => f.name === 'fulltextsearch')
           console.log(`📋 Каталог ${catalogCode} поддерживает полнотекстовый поиск:`, hasFulltextSearch)
-          
+
           if (!hasFulltextSearch) {
             console.log('⚠️ Каталог не поддерживает полнотекстовый поиск')
-            
+
             // Сохраняем в историю поиска даже при отсутствии результатов
             await saveSearchHistory(
               context,
@@ -2886,7 +2904,7 @@ export const resolvers = {
               undefined,
               0
             )
-            
+
             return {
               searchQuery: searchQuery,
               details: []
@@ -2895,10 +2913,10 @@ export const resolvers = {
         } else {
           console.log('⚠️ Не удалось получить информацию о каталоге')
         }
-        
+
         const result = await laximoService.searchVehicleDetails(catalogCode, vehicleId, searchQuery, ssd)
         console.log('📋 Результат от LaximoService:', result ? `найдено ${result.details.length} деталей` : 'результат null')
-        
+
         // Сохраняем в историю поиска
         if (result) {
           await saveSearchHistory(
@@ -2934,7 +2952,7 @@ export const resolvers = {
             }))
           }
         }
-        
+
         return result
       } catch (err) {
         console.error('❌ Ошибка в GraphQL resolver поиска деталей по названию:', err)
@@ -2945,10 +2963,10 @@ export const resolvers = {
     laximoDocFindOEM: async (_: unknown, { oemNumber, brand, replacementTypes }: { oemNumber: string; brand?: string; replacementTypes?: string }, context: Context) => {
       try {
         console.log('🔍 GraphQL Resolver - Doc FindOEM поиск по артикулу:', { oemNumber, brand, replacementTypes })
-        
+
         const result = await laximoDocService.findOEM(oemNumber, brand, replacementTypes)
         console.log('📋 Результат от LaximoDocService:', result ? `найдено ${result.details.length} деталей` : 'результат null')
-        
+
         // Сохраняем в историю поиска
         if (result) {
           await saveSearchHistory(
@@ -2961,7 +2979,7 @@ export const resolvers = {
             result.details.length
           )
         }
-        
+
         return result
       } catch (err) {
         console.error('❌ Ошибка в GraphQL resolver Doc FindOEM:', err)
@@ -2973,10 +2991,10 @@ export const resolvers = {
     laximoUnitInfo: async (_: unknown, { catalogCode, vehicleId, unitId, ssd }: { catalogCode: string; vehicleId: string; unitId: string; ssd: string }) => {
       try {
         console.log('🔍 GraphQL Resolver - получение информации об узле:', { catalogCode, vehicleId, unitId })
-        
+
         const result = await laximoUnitService.getUnitInfo(catalogCode, vehicleId, unitId, ssd)
         console.log('📋 Результат от LaximoUnitService:', result ? `найден узел ${result.name}` : 'узел не найден')
-        
+
         return result
       } catch (err) {
         console.error('❌ Ошибка в GraphQL resolver UnitInfo:', err)
@@ -2987,10 +3005,10 @@ export const resolvers = {
     laximoUnitDetails: async (_: unknown, { catalogCode, vehicleId, unitId, ssd }: { catalogCode: string; vehicleId: string; unitId: string; ssd: string }) => {
       try {
         console.log('🔍 GraphQL Resolver - получение деталей узла:', { catalogCode, vehicleId, unitId })
-        
+
         const result = await laximoUnitService.getUnitDetails(catalogCode, vehicleId, unitId, ssd)
         console.log('📋 Результат от LaximoUnitService:', result ? `найдено ${result.length} деталей` : 'детали не найдены')
-        
+
         return result || []
       } catch (err) {
         console.error('❌ Ошибка в GraphQL resolver UnitDetails:', err)
@@ -3001,10 +3019,10 @@ export const resolvers = {
     laximoUnitImageMap: async (_: unknown, { catalogCode, vehicleId, unitId, ssd }: { catalogCode: string; vehicleId: string; unitId: string; ssd: string }) => {
       try {
         console.log('🔍 GraphQL Resolver - получение карты изображений узла:', { catalogCode, vehicleId, unitId })
-        
+
         const result = await laximoUnitService.getUnitImageMap(catalogCode, vehicleId, unitId, ssd)
         console.log('📋 Результат от LaximoUnitService:', result ? `найдена карта с ${result.coordinates.length} координатами` : 'карта не найдена')
-        
+
         return result
       } catch (err) {
         console.error('❌ Ошибка в GraphQL resolver UnitImageMap:', err)
@@ -3013,12 +3031,12 @@ export const resolvers = {
     },
 
     // Поиск товаров и предложений
-    searchProductOffers: async (_: unknown, { 
-      articleNumber, 
+    searchProductOffers: async (_: unknown, {
+      articleNumber,
       brand,
       cartItems = []
-    }: { 
-      articleNumber: string; 
+    }: {
+      articleNumber: string;
       brand: string;
       cartItems?: Array<{
         productId?: string;
@@ -3066,8 +3084,10 @@ export const resolvers = {
         // Очищаем параметры
         const cleanArticleNumber = articleNumber.trim()
         const cleanBrand = brand.trim()
+        // Нормализованный артикул без пробелов и спецсимволов для поиска в прайс-листах
+        const normalizedArticle = cleanArticleNumber.replace(/[\s\-\.\/\\]/g, '').toUpperCase()
 
-        console.log('🔍 GraphQL Resolver - поиск предложений для товара:', { articleNumber: cleanArticleNumber, brand: cleanBrand })
+        console.log('🔍 GraphQL Resolver - поиск предложений для товара:', { articleNumber: cleanArticleNumber, brand: cleanBrand, normalizedArticle })
         console.log('🛒 Получено товаров в корзине:', cartItems.length)
 
         // Функция для проверки, находится ли товар в корзине
@@ -3100,7 +3120,103 @@ export const resolvers = {
 
         console.log(`📦 Найдено ${internalProducts.length} товаров в нашей базе`)
 
+        // 1.5. Поиск предложений из прайс-листов поставщиков
+        let supplierOffers: any[] = []
+        try {
+          console.log('🔍 GraphQL Resolver - поиск в прайс-листах поставщиков:', { articleNumber: cleanArticleNumber, brand: cleanBrand, normalizedArticle })
+
+          // Сначала ищем с точным совпадением артикула
+          let priceListItems = await prisma.priceListItem.findMany({
+            where: {
+              article: {
+                equals: cleanArticleNumber,
+                mode: 'insensitive'
+              },
+              ...(cleanBrand ? { brand: { equals: cleanBrand, mode: 'insensitive' } } : {}),
+              price: { gt: 0 }
+            },
+            include: {
+              priceList: {
+                include: {
+                  supplier: true
+                }
+              }
+            },
+            take: 50
+          })
+
+          // Если ничего не нашли, пробуем поиск по нормализованному артикулу (без пробелов)
+          if (priceListItems.length === 0 && normalizedArticle !== cleanArticleNumber.toUpperCase()) {
+            console.log('🔄 Пробуем поиск по нормализованному артикулу:', normalizedArticle)
+
+            // Используем raw SQL для поиска с нормализацией
+            const rawItems = await prisma.$queryRaw<any[]>`
+              SELECT pli.*, pl.id as "priceListId", pl."fileName", pl.status,
+                     s.id as "supplierId", s.name as "supplierName", s."supplierCode"
+              FROM price_list_items pli
+              JOIN price_lists pl ON pli."priceListId" = pl.id
+              JOIN suppliers s ON pl."supplierId" = s.id
+              WHERE UPPER(REPLACE(REPLACE(REPLACE(REPLACE(pli.article, ' ', ''), '-', ''), '.', ''), '/', '')) = ${normalizedArticle}
+              ${cleanBrand ? Prisma.sql`AND UPPER(pli.brand) = UPPER(${cleanBrand})` : Prisma.empty}
+              AND pli.price > 0
+              LIMIT 50
+            `
+
+            // Преобразуем результаты в формат для дальнейшей обработки
+            priceListItems = rawItems.map(item => ({
+              id: item.id,
+              article: item.article,
+              brand: item.brand,
+              name: item.name,
+              availability: item.availability,
+              price: item.price,
+              multiplicity: item.multiplicity,
+              priceList: {
+                id: item.priceListId,
+                fileName: item.fileName,
+                status: item.status,
+                supplier: {
+                  id: item.supplierId,
+                  name: item.supplierName,
+                  supplierCode: item.supplierCode
+                }
+              }
+            })) as any
+          }
+
+          console.log(`📦 Найдено ${priceListItems.length} предложений от поставщиков`)
+
+          // Преобразуем предложения поставщиков в формат internalOffers
+          supplierOffers = priceListItems.map(item => {
+            const quantity = parseAvailability(item.availability)
+            const offerKey = `SUPPLIER:${item.id}`
+
+            return {
+              id: item.id,
+              productId: null, // У предложений поставщиков нет productId
+              price: item.price || 0,
+              quantity: quantity,
+              remainingStock: quantity,
+              warehouse: item.priceList.supplier.name,
+              deliveryDays: 2, // Стандартный срок доставки от поставщика
+              available: (item.price || 0) > 0 && quantity > 0,
+              rating: 4.5,
+              supplier: item.priceList.supplier.name,
+              supplierCode: item.priceList.supplier.supplierCode,
+              canPurchase: true,
+              isSupplierOffer: true, // Новый флаг для отличия
+              isInCart: isItemInCart(undefined, offerKey, cleanArticleNumber, cleanBrand)
+            }
+          })
+
+          console.log(`✅ Создано ${supplierOffers.length} предложений от поставщиков`)
+        } catch (error) {
+          console.error('❌ Ошибка поиска предложений поставщиков:', error)
+          // Продолжаем работу без предложений поставщиков
+        }
+
         // 2. Поиск во внешнем поставщике (AutoEuro/Trinity)
+
         let externalOffers: any[] = []
         try {
           const providerSettings = await getIntegrationSettings()
@@ -3198,13 +3314,13 @@ export const resolvers = {
 
         // 3. Поиск в PartsIndex для получения дополнительных характеристик и изображений (может быть отключён)
         let partsIndexData: any = null
-        
+
         try {
-          console.log('🔍 GraphQL Resolver - прямой поиск в PartsIndex:', { 
-            articleNumber: cleanArticleNumber, 
-            brand: cleanBrand 
+          console.log('🔍 GraphQL Resolver - прямой поиск в PartsIndex:', {
+            articleNumber: cleanArticleNumber,
+            brand: cleanBrand
           })
-          
+
           // Используем прямой поиск по артикулу и бренду, только если сервис включён
           const partsIndexEnabled = (process.env.PARTSINDEX_ENABLED === 'true') || false
           if (partsIndexEnabled) {
@@ -3213,7 +3329,7 @@ export const resolvers = {
               cleanBrand
             )
           }
-          
+
           if (partsIndexData) {
             console.log('✅ GraphQL Resolver - найден товар в PartsIndex:', {
               code: partsIndexData.code,
@@ -3300,7 +3416,7 @@ export const resolvers = {
                       brand: item.brand,
                       articleNumber: item.code,
                       name: item.name,
-                      type: crossType === 0 ? 'Кросс' : 
+                      type: crossType === 0 ? 'Кросс' :
                             crossType === 1 ? 'Замена номера' :
                             crossType === 2 ? 'Синоним бренда' :
                             crossType === 3 ? 'Проверенный кросс' :
@@ -3324,20 +3440,31 @@ export const resolvers = {
 
         console.log(`🔄 Найдено ${analogs.length} аналогов`)
 
-        // 5. Формируем внутренние предложения
-        const internalOffers = internalProducts.map(product => ({
+        // 5. Формируем внутренние предложения из товаров БД
+        const internalProductOffers = internalProducts.map(product => ({
           id: product.id,
           productId: product.id,
           price: product.retailPrice || 0,
           quantity: product.stock || 0,
+          remainingStock: product.stock || 0,
           warehouse: 'Основной склад',
           deliveryDays: 1,
           available: (product.stock || 0) > 0,
           rating: 4.8,
           supplier: 'Protek',
+          supplierCode: null,
           canPurchase: true,
+          isSupplierOffer: false,
           isInCart: isItemInCart(product.id, undefined, cleanArticleNumber, cleanBrand)
         }))
+
+        // 5.5. Объединяем внутренние предложения с предложениями поставщиков
+        const internalOffers = [
+          ...internalProductOffers,
+          ...supplierOffers
+        ]
+
+        console.log(`📦 Всего внутренних предложений: ${internalOffers.length} (товары: ${internalProductOffers.length}, поставщики: ${supplierOffers.length})`)
 
         // 6. Определяем название товара и собираем данные
         let productName = ''
@@ -3365,17 +3492,17 @@ export const resolvers = {
             productDimensions = firstProduct.dimensions
           }
         }
-        
+
         // Добавляем данные из PartsIndex
         if (partsIndexData) {
           if (!productName) {
             productName = partsIndexData.name?.name || partsIndexData.originalName || `${cleanBrand} ${cleanArticleNumber}`
           }
-          
+
           if (!productDescription && partsIndexData.description) {
             productDescription = partsIndexData.description
           }
-          
+
           // Добавляем изображения из PartsIndex
           if (partsIndexData.images && Array.isArray(partsIndexData.images)) {
             partsIndexImages = partsIndexData.images.map((imageUrl: string, index: number) => ({
@@ -3385,10 +3512,10 @@ export const resolvers = {
               source: 'PartsIndex'
             }))
           }
-          
+
           // Добавляем характеристики из PartsIndex
           if (partsIndexData.parameters && Array.isArray(partsIndexData.parameters)) {
-            partsIndexCharacteristics = partsIndexData.parameters.flatMap((paramGroup: any) => 
+            partsIndexCharacteristics = partsIndexData.parameters.flatMap((paramGroup: any) =>
               paramGroup.params ? paramGroup.params.map((param: any) => ({
                 name: param.title || param.name || 'Характеристика',
                 value: param.values && param.values.length > 0 ? param.values.map((v: any) => v.value).join(', ') : 'Не указано',
@@ -3397,12 +3524,12 @@ export const resolvers = {
             )
           }
         }
-        
+
         // Если нет названия, используем данные из AutoEuro
         if (!productName && externalOffers.length > 0) {
           productName = externalOffers[0].name
         }
-        
+
         // Если все еще нет названия, формируем из бренда и артикула
         if (!productName) {
           productName = `${cleanBrand} ${cleanArticleNumber}`
@@ -3419,7 +3546,7 @@ export const resolvers = {
           totalStock: 0,
           hasAnyStock: false
         }
-        
+
         stockCalculation.totalStock = stockCalculation.totalInternalStock + stockCalculation.totalExternalStock
         stockCalculation.hasAnyStock = stockCalculation.hasInternalStock || stockCalculation.hasExternalStock
 
@@ -3525,6 +3652,7 @@ export const resolvers = {
             productId: product.id,
             price: product.retailPrice || 0,
             quantity: product.stock || 0,
+            remainingStock: product.stock || 0,
             warehouse: 'Основной склад',
             deliveryDays: 1,
             available: (product.stock || 0) > 0,
@@ -3609,7 +3737,7 @@ export const resolvers = {
               console.error(`❌ Ошибка поиска аналога ${articleNumber} у внешнего поставщика:`, error)
             }
           }
-          
+
           // Определяем название товара
           let name = analog.name || `${brand} ${articleNumber}` // Используем имя из аналога, если есть
           if (analogInternalProducts.length > 0) {
@@ -3693,21 +3821,21 @@ export const resolvers = {
       }
     },
 
-    getCategoryProductsWithOffers: async (_: unknown, { 
-      categoryName, 
-      excludeArticle, 
-      excludeBrand, 
-      limit = 5 
-    }: { 
-      categoryName: string; 
-      excludeArticle: string; 
-      excludeBrand: string; 
-      limit?: number 
+    getCategoryProductsWithOffers: async (_: unknown, {
+      categoryName,
+      excludeArticle,
+      excludeBrand,
+      limit = 5
+    }: {
+      categoryName: string;
+      excludeArticle: string;
+      excludeBrand: string;
+      limit?: number
     }) => {
       // Функция для определения ключевых слов категории
       const getCategoryKeywords = (categoryName: string): string[] => {
         const name = categoryName.toLowerCase()
-        
+
         // Словарь категорий и их ключевых слов
         const categoryMappings: { [key: string]: string[] } = {
           'шины': ['шина', 'покрышка', 'резина', 'tire'],
@@ -3720,14 +3848,14 @@ export const resolvers = {
           'генераторы': ['генератор', 'alternator'],
           'амортизаторы': ['амортизатор', 'shock', 'стойка']
         }
-        
+
         // Ищем совпадения
         for (const [category, keywords] of Object.entries(categoryMappings)) {
           if (name.includes(category)) {
             return keywords
           }
         }
-        
+
         // Если категория не найдена, используем само название
         return [name]
       }
@@ -3736,20 +3864,20 @@ export const resolvers = {
       const extractBrandFromName = (productName: string): string => {
         const name = productName.trim()
         const words = name.split(' ')
-        
+
         // Обычно бренд - это первое слово
         if (words.length > 0) {
           return words[0]
         }
-        
+
         return name
       }
       try {
-        console.log('🔍 GraphQL Resolver - поиск товаров категории с предложениями:', { 
-          categoryName, 
-          excludeArticle, 
-          excludeBrand, 
-          limit 
+        console.log('🔍 GraphQL Resolver - поиск товаров категории с предложениями:', {
+          categoryName,
+          excludeArticle,
+          excludeBrand,
+          limit
         })
 
         // 1. Определяем ключевые слова для поиска товаров из категории
@@ -3791,13 +3919,13 @@ export const resolvers = {
 
         // 3. Проверяем наличие предложений выбранного поставщика для каждого товара
         const productsWithOffers: any[] = []
-        
+
         for (const product of internalProducts) {
           if (productsWithOffers.length >= limit) break
 
           // Извлекаем бренд из названия товара (обычно первое слово)
           const productBrand = extractBrandFromName(product.name)
-          
+
           if (!product.article || !productBrand) {
             console.log('⚠️ Пропускаем товар без артикула или бренда:', product.name)
             continue
@@ -3838,7 +3966,7 @@ export const resolvers = {
         }
 
         console.log(`🎯 Итого найдено товаров с предложениями: ${productsWithOffers.length}`)
-        
+
         return productsWithOffers.slice(0, limit)
       } catch (error) {
         console.error('❌ GraphQL Resolver - ошибка поиска товаров категории:', error)
@@ -3850,11 +3978,11 @@ export const resolvers = {
     partsAPICategories: async (_: unknown, { carId, carType = 'PC' }: { carId: number; carType?: 'PC' | 'CV' | 'Motorcycle' }) => {
       try {
         console.log('🔍 GraphQL Resolver - PartsAPI категории:', { carId, carType });
-        
+
         const categories = await partsAPIService.getSearchTree(carId, carType);
-        
+
         console.log('✅ GraphQL Resolver - получено категорий PartsAPI:', categories.length);
-        
+
         return categories;
       } catch (error) {
         console.error('❌ Ошибка в GraphQL resolver partsAPICategories:', error)
@@ -3865,12 +3993,12 @@ export const resolvers = {
     partsAPITopLevelCategories: async (_: unknown, { carId, carType = 'PC' }: { carId: number; carType?: 'PC' | 'CV' | 'Motorcycle' }) => {
       try {
         console.log('🔍 GraphQL Resolver - PartsAPI категории верхнего уровня:', { carId, carType });
-        
+
         const tree = await partsAPIService.getSearchTree(carId, carType);
         const categories = partsAPIService.getTopLevelCategories(tree);
-        
+
         console.log('✅ GraphQL Resolver - получено категорий верхнего уровня PartsAPI:', categories.length);
-        
+
         return categories;
       } catch (error) {
         console.error('❌ Ошибка в GraphQL resolver partsAPITopLevelCategories:', error)
@@ -3881,12 +4009,12 @@ export const resolvers = {
     partsAPIRootCategories: async (_: unknown, { carId, carType = 'PC' }: { carId: number; carType?: 'PC' | 'CV' | 'Motorcycle' }) => {
       try {
         console.log('🔍 GraphQL Resolver - PartsAPI корневые категории:', { carId, carType });
-        
+
         const tree = await partsAPIService.getSearchTree(carId, carType);
         const categories = partsAPIService.getRootCategories(tree);
-        
+
         console.log('✅ GraphQL Resolver - получено корневых категорий PartsAPI:', categories.length);
-        
+
         return categories;
       } catch (error) {
         console.error('❌ Ошибка в GraphQL resolver partsAPIRootCategories:', error)
@@ -3898,11 +4026,11 @@ export const resolvers = {
     partsIndexCatalogs: async (_: unknown, { lang = 'ru' }: { lang?: 'ru' | 'en' }) => {
       try {
         console.log('🔍 GraphQL Resolver - PartsIndex каталоги:', { lang });
-        
+
         const catalogs = await partsIndexService.getCatalogs(lang);
-        
+
         console.log('✅ GraphQL Resolver - получено каталогов PartsIndex:', catalogs.length);
-        
+
         return catalogs.map(catalog => ({
           ...catalog,
           groups: [] // Пустой массив групп, если нужны группы - используйте другой запрос
@@ -3916,11 +4044,11 @@ export const resolvers = {
     partsIndexCatalogGroups: async (_: unknown, { catalogId, lang = 'ru' }: { catalogId: string; lang?: 'ru' | 'en' }) => {
       try {
         console.log('🔍 GraphQL Resolver - PartsIndex группы каталога:', { catalogId, lang });
-        
+
         const groups = await partsIndexService.getCatalogGroups(catalogId, lang);
-        
+
         console.log('✅ GraphQL Resolver - получено групп PartsIndex:', groups.length);
-        
+
         return groups;
       } catch (error) {
         console.error('❌ Ошибка в GraphQL resolver partsIndexCatalogGroups:', error)
@@ -3931,11 +4059,11 @@ export const resolvers = {
     partsIndexCategoriesWithGroups: async (_: unknown, { lang = 'ru' }: { lang?: 'ru' | 'en' }) => {
       try {
         console.log('🔍 GraphQL Resolver - PartsIndex категории с группами:', { lang });
-        
+
         const categoriesWithGroups = await partsIndexService.getCategoriesWithGroups(lang);
-        
+
         console.log('✅ GraphQL Resolver - получено категорий с группами PartsIndex:', categoriesWithGroups.length);
-        
+
         return categoriesWithGroups;
       } catch (error) {
         console.error('❌ Ошибка в GraphQL resolver partsIndexCategoriesWithGroups:', error)
@@ -3943,17 +4071,17 @@ export const resolvers = {
       }
     },
 
-    partsIndexCatalogEntities: async (_: unknown, { 
-      catalogId, 
-      groupId, 
-      lang = 'ru', 
-      limit = 25, 
-      page = 1, 
-      q, 
-      engineId, 
-      generationId, 
-      params 
-    }: { 
+    partsIndexCatalogEntities: async (_: unknown, {
+      catalogId,
+      groupId,
+      lang = 'ru',
+      limit = 25,
+      page = 1,
+      q,
+      engineId,
+      generationId,
+      params
+    }: {
       catalogId: string;
       groupId: string;
       lang?: 'ru' | 'en';
@@ -3965,12 +4093,12 @@ export const resolvers = {
       params?: string;
     }) => {
       try {
-        console.log('🔍 GraphQL resolver partsIndexCatalogEntities вызван с параметрами:', { 
-          catalogId, 
-          groupId, 
-          lang, 
-          limit, 
-          page, 
+        console.log('🔍 GraphQL resolver partsIndexCatalogEntities вызван с параметрами:', {
+          catalogId,
+          groupId,
+          lang,
+          limit,
+          page,
           q,
           params,
           hasParams: !!params
@@ -3988,7 +4116,7 @@ export const resolvers = {
         } else {
           console.log('📝 Параметры фильтрации отсутствуют');
         }
-        
+
         const entities = await partsIndexService.getCatalogEntities(catalogId, groupId, {
           lang,
           limit,
@@ -3998,7 +4126,7 @@ export const resolvers = {
           generationId,
           params: parsedParams
         })
-        
+
         if (!entities) {
           console.warn('⚠️ Не удалось получить товары каталога')
           return {
@@ -4020,17 +4148,17 @@ export const resolvers = {
             subgroup: null
           }
         }
-        
+
         console.log('✅ Получены товары каталога:', entities.list.length)
         console.log('🔍 Начинаем серверную фильтрацию по ценам...')
-        
+
         // Глобальный кэш для результатов проверки цен (персистентный между запросами)
         if (!global.priceCache) {
           global.priceCache = new Map<string, { hasPrice: boolean, timestamp: number }>()
         }
         const priceCache = global.priceCache as Map<string, { hasPrice: boolean, timestamp: number }>
         const CACHE_TTL = 5 * 60 * 1000 // 5 минут
-        
+
         const getCachedPriceResult = (code: string, brand: string): boolean | null => {
           const key = `${code}_${brand}`
           const cached = priceCache.get(key)
@@ -4039,19 +4167,19 @@ export const resolvers = {
           }
           return null
         }
-        
+
         const cachePriceResult = (code: string, brand: string, hasPrice: boolean): void => {
           const key = `${code}_${brand}`
           priceCache.set(key, { hasPrice, timestamp: Date.now() })
         }
-        
+
         // Фильтруем товары на сервере - проверяем наличие цен в AutoEuro
         const filteredEntities: any[] = []
         const batchSize = 20 // Увеличенный размер батча для скорости
-        
+
         for (let i = 0; i < entities.list.length; i += batchSize) {
           const batch = entities.list.slice(i, i + batchSize)
-          
+
           // Проверяем цены для каждого товара в батче параллельно
           const priceCheckPromises = batch.map(async (entity) => {
             try {
@@ -4066,26 +4194,26 @@ export const resolvers = {
                   return null;
                 }
               }
-              
+
               const searchResult = await autoEuroService.searchItems({
                 code: entity.code,
                 brand: entity.brand.name,
                 with_crosses: false,
                 with_offers: true
               })
-              
+
               // Проверяем есть ли предложения с валидной ценой
-              const hasValidPrice: boolean = Boolean(searchResult.success && 
-                                   searchResult.data && 
-                                   searchResult.data.length > 0 && 
-                                   searchResult.data.some(offer => 
-                                     offer.price && 
+              const hasValidPrice: boolean = Boolean(searchResult.success &&
+                                   searchResult.data &&
+                                   searchResult.data.length > 0 &&
+                                   searchResult.data.some(offer =>
+                                     offer.price &&
                                      parseFloat(offer.price.toString()) > 0
                                    ))
-              
+
               // Кэшируем результат
               cachePriceResult(entity.code, entity.brand.name, hasValidPrice);
-              
+
               if (hasValidPrice) {
                 console.log(`✅ Товар ${entity.code} (${entity.brand.name}) имеет цену`);
                 return entity;
@@ -4098,21 +4226,21 @@ export const resolvers = {
               return null // Исключаем товары с ошибками
             }
           })
-          
+
           // Ждем результаты для текущего батча
           const batchResults = await Promise.all(priceCheckPromises)
-          
+
           // Добавляем только товары с ценами
           filteredEntities.push(...batchResults.filter(entity => entity !== null))
-          
+
           // Убираем задержку между батчами для максимальной скорости
           // if (i + batchSize < entities.list.length) {
           //   await new Promise(resolve => setTimeout(resolve, 50))
           // }
         }
-        
+
         console.log(`✅ Серверная фильтрация завершена. Товаров с ценами: ${filteredEntities.length} из ${entities.list.length}`)
-        
+
         // Возвращаем отфильтрованный результат
         return {
           ...entities,
@@ -4124,45 +4252,45 @@ export const resolvers = {
       }
     },
 
-    partsIndexSearchByArticle: async (_: unknown, { 
-      articleNumber, 
-      brandName, 
-      lang = 'ru' 
-    }: { 
-      articleNumber: string; 
-      brandName: string; 
-      lang?: 'ru' | 'en' 
+    partsIndexSearchByArticle: async (_: unknown, {
+      articleNumber,
+      brandName,
+      lang = 'ru'
+    }: {
+      articleNumber: string;
+      brandName: string;
+      lang?: 'ru' | 'en'
     }) => {
       try {
-        console.log('🔍 GraphQL resolver partsIndexSearchByArticle вызван с параметрами:', { 
-          articleNumber, 
-          brandName, 
-          lang 
+        console.log('🔍 GraphQL resolver partsIndexSearchByArticle вызван с параметрами:', {
+          articleNumber,
+          brandName,
+          lang
         })
-        
+
         // ВРЕМЕННО ОТКЛЮЧАЕМ ПОИСК В PARTSINDEX ДЛЯ КАРТОЧКИ ТОВАРА
         // чтобы избежать множественных запросов
         console.log('⚠️ Поиск в PartsIndex временно отключен для оптимизации')
         return null
-        
+
         /* ЗАКОММЕНТИРОВАННЫЙ КОД ДЛЯ БУДУЩЕГО ИСПОЛЬЗОВАНИЯ
         const entity = await partsIndexService.searchEntityByArticle(articleNumber, brandName, lang)
-        
+
         if (!entity) {
           console.log('❌ Товар не найден в Parts Index:', { articleNumber, brandName })
           return null
         }
-        
+
         console.log('✅ Товар найден в Parts Index:', entity.code, entity.brand.name)
-        
+
         // Получаем детальную информацию о товаре
         // Поскольку у нас нет catalogId, попробуем найти товар через основные каталоги
         const catalogs = await partsIndexService.getCatalogs(lang)
-        
+
         for (const catalog of catalogs) {
           try {
             const entityDetail = await partsIndexService.getEntityById(catalog.id, entity.id, lang)
-            
+
             if (entityDetail) {
               console.log('✅ Получена детальная информация о товаре из каталога:', catalog.id)
               return entityDetail
@@ -4172,7 +4300,7 @@ export const resolvers = {
             continue
           }
         }
-        
+
         // Если детальная информация не найдена, возвращаем базовую информацию
         console.log('⚠️ Детальная информация не найдена, возвращаем базовую')
         return {
@@ -4212,29 +4340,29 @@ export const resolvers = {
     },
 
     // Получить детальную информацию о товаре PartsIndex по ID
-    partsIndexGetEntityById: async (_: unknown, { 
-      catalogId, 
-      entityId, 
-      lang = 'ru' 
-    }: { 
-      catalogId: string; 
-      entityId: string; 
-      lang?: 'ru' | 'en' 
+    partsIndexGetEntityById: async (_: unknown, {
+      catalogId,
+      entityId,
+      lang = 'ru'
+    }: {
+      catalogId: string;
+      entityId: string;
+      lang?: 'ru' | 'en'
     }) => {
       try {
-        console.log('🔍 GraphQL resolver partsIndexGetEntityById вызван с параметрами:', { 
-          catalogId, 
-          entityId, 
-          lang 
+        console.log('🔍 GraphQL resolver partsIndexGetEntityById вызван с параметрами:', {
+          catalogId,
+          entityId,
+          lang
         })
-        
+
         const entityDetail = await partsIndexService.getEntityById(catalogId, entityId, lang)
-        
+
         if (!entityDetail) {
           console.log('❌ Деталь товара не найдена в Parts Index:', { catalogId, entityId })
           return null
         }
-        
+
         console.log('✅ Детальная информация товара получена из Parts Index:', entityDetail.code, entityDetail.brand.name)
         return entityDetail
       } catch (error) {
@@ -4244,15 +4372,15 @@ export const resolvers = {
     },
 
     // Получить параметры каталога PartsIndex для фильтрации
-    partsIndexCatalogParams: async (_: unknown, { 
-      catalogId, 
-      groupId, 
-      lang = 'ru', 
-      engineId, 
-      generationId, 
-      params, 
-      q 
-    }: { 
+    partsIndexCatalogParams: async (_: unknown, {
+      catalogId,
+      groupId,
+      lang = 'ru',
+      engineId,
+      generationId,
+      params,
+      q
+    }: {
       catalogId: string;
       groupId: string;
       lang?: 'ru' | 'en';
@@ -4262,11 +4390,11 @@ export const resolvers = {
       q?: string;
     }) => {
       try {
-        console.log('🔍 GraphQL resolver partsIndexCatalogParams вызван с параметрами:', { 
-          catalogId, 
-          groupId, 
-          lang, 
-          q 
+        console.log('🔍 GraphQL resolver partsIndexCatalogParams вызван с параметрами:', {
+          catalogId,
+          groupId,
+          lang,
+          q
         })
 
         // Преобразуем строку params в объект если передан
@@ -4278,7 +4406,7 @@ export const resolvers = {
             console.warn('⚠️ Не удалось разобрать параметры фильтрации:', params);
           }
         }
-        
+
         const paramsData = await partsIndexService.getCatalogParams(catalogId, groupId, {
           lang,
           engineId,
@@ -4286,7 +4414,7 @@ export const resolvers = {
           params: parsedParams,
           q
         })
-        
+
         if (!paramsData) {
           console.warn('⚠️ Не удалось получить параметры каталога')
           return {
@@ -4294,9 +4422,9 @@ export const resolvers = {
             paramsQuery: {}
           }
         }
-        
+
         console.log('✅ Получены параметры каталога:', paramsData.list.length)
-        
+
         return paramsData
       } catch (error) {
         console.error('❌ Ошибка в GraphQL resolver partsIndexCatalogParams:', error)
@@ -4308,16 +4436,16 @@ export const resolvers = {
     partsAPIArticles: async (_: unknown, { strId, carId, carType = 'PC' }: { strId: number; carId: number; carType?: 'PC' | 'CV' | 'Motorcycle' }) => {
       try {
         console.log('🔍 GraphQL Resolver - PartsAPI артикулы:', { strId, carId, carType });
-        
+
         const articles = await partsAPIService.getArticles(strId, carId, carType);
-        
+
         console.log('✅ GraphQL Resolver - получено артикулов PartsAPI:', articles.length);
-        
+
         if (!articles || articles.length === 0) {
           console.log('⚠️ Артикулы для данной категории не найдены');
           return [];
         }
-        
+
         // Преобразуем названия полей для соответствия GraphQL схеме с проверкой на null/undefined
         const transformedArticles = articles.map(article => ({
           supBrand: article.SUP_BRAND || '',
@@ -4328,7 +4456,7 @@ export const resolvers = {
           artArticleNr: article.ART_ARTICLE_NR || '',
           artId: article.ART_ID || ''
         }));
-        
+
         return transformedArticles;
       } catch (error) {
         console.error('❌ Ошибка в GraphQL resolver partsAPIArticles:', error)
@@ -4341,16 +4469,16 @@ export const resolvers = {
     partsAPIMedia: async (_: unknown, { artId, lang = 16 }: { artId: string; lang?: number }) => {
       try {
         console.log('🖼️ GraphQL Resolver - PartsAPI изображения:', { artId, lang });
-        
+
         const media = await partsAPIService.getArticleMedia(artId, lang);
-        
+
         console.log('✅ GraphQL Resolver - получено изображений PartsAPI:', media.length);
-        
+
         if (!media || media.length === 0) {
           console.log('⚠️ Изображения для артикула не найдены');
           return [];
         }
-        
+
         // Преобразуем данные для GraphQL схемы
         const transformedMedia = media.map(item => ({
           artMediaType: String(item.ART_MEDIA_TYPE),
@@ -4359,7 +4487,7 @@ export const resolvers = {
           artMediaKind: item.ART_MEDIA_KIND || null,
           imageUrl: partsAPIService.getImageUrl(item.ART_MEDIA_SOURCE)
         }));
-        
+
         return transformedMedia;
       } catch (error) {
         console.error('❌ GraphQL Resolver ошибка PartsAPI изображения:', error);
@@ -4371,15 +4499,15 @@ export const resolvers = {
     partsAPIMainImage: async (_: unknown, { artId }: { artId: string }) => {
       try {
         console.log('🖼️ GraphQL Resolver - PartsAPI главное изображение:', { artId });
-        
+
         const imageUrl = await partsAPIService.getArticleMainImage(artId);
-        
+
         if (imageUrl) {
           console.log('✅ GraphQL Resolver - получено главное изображение PartsAPI');
         } else {
           console.log('⚠️ Главное изображение для артикула не найдено');
         }
-        
+
         return imageUrl;
       } catch (error) {
         console.error('❌ GraphQL Resolver ошибка PartsAPI главное изображение:', error);
@@ -4507,11 +4635,11 @@ export const resolvers = {
     payments: async (_: unknown, { orderId, status }: { orderId?: string; status?: string }) => {
       try {
         const where: any = {}
-        
+
         if (orderId) {
           where.orderId = orderId
         }
-        
+
         if (status) {
           where.status = status
         }
@@ -4574,13 +4702,13 @@ export const resolvers = {
     yandexPickupPoints: async (_: unknown, { filters }: { filters?: any }) => {
       try {
         const request: any = {}
-        
+
         if (filters) {
           if (filters.geoId) request.geo_id = filters.geoId
           if (filters.latitude && filters.longitude) {
             const radiusKm = filters.radiusKm || 10
             const radiusDegrees = radiusKm / 111
-            
+
             request.latitude = {
               from: filters.latitude - radiusDegrees,
               to: filters.latitude + radiusDegrees
@@ -4596,7 +4724,7 @@ export const resolvers = {
         }
 
         const response = await yandexDeliveryService.getPickupPoints(request)
-        
+
         return response.points.map((point: YandexPickupPoint) => ({
           id: point.id,
           name: point.name,
@@ -4658,13 +4786,13 @@ export const resolvers = {
         if (points.length > 0) {
           console.log('Первый ПВЗ:', JSON.stringify(points[0], null, 2))
         }
-        
+
         // Если ПВЗ не найдены, возвращаем пустой массив
         if (points.length === 0) {
           console.log(`ПВЗ в городе "${cityName}" не найдены`)
           return [];
         }
-        
+
         return points.map(point => ({
           id: point.id,
           name: point.name,
@@ -4723,13 +4851,13 @@ export const resolvers = {
         console.log('Запрос ПВЗ по координатам:', latitude, longitude, radiusKm)
         const points = await yandexDeliveryService.getPickupPointsByCoordinates(latitude, longitude, radiusKm)
         console.log('Получено ПВЗ по координатам:', points.length)
-        
+
         // Если ПВЗ не найдены, возвращаем пустой массив
         if (points.length === 0) {
           console.log(`ПВЗ по координатам ${latitude}, ${longitude} не найдены`)
           return [];
         }
-        
+
         return points.map(point => ({
           id: point.id,
           name: point.name,
@@ -4796,7 +4924,7 @@ export const resolvers = {
       }
     },
 
-    
+
 
     // SEO configs
     seoPageConfigs: async (_: unknown, { search, skip = 0, take = 50 }: { search?: string; skip?: number; take?: number }, context: Context) => {
@@ -5738,6 +5866,88 @@ export const resolvers = {
       } as any
     },
 
+    // Поставщики прайслистов
+    suppliers: async (_: unknown, { search, isActive, limit = 50, offset = 0 }: { search?: string; isActive?: boolean; limit?: number; offset?: number }) => {
+      const where: any = {}
+      if (search) {
+        where.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { inn: { contains: search } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { contactPerson: { contains: search, mode: 'insensitive' } },
+        ]
+      }
+      if (typeof isActive === 'boolean') {
+        where.isActive = isActive
+      }
+      return await prisma.supplier.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: Math.min(limit, 100),
+        include: {
+          priceLists: {
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      })
+    },
+
+    suppliersCount: async (_: unknown, { search, isActive }: { search?: string; isActive?: boolean }) => {
+      const where: any = {}
+      if (search) {
+        where.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { inn: { contains: search } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { contactPerson: { contains: search, mode: 'insensitive' } },
+        ]
+      }
+      if (typeof isActive === 'boolean') {
+        where.isActive = isActive
+      }
+      return await prisma.supplier.count({ where })
+    },
+
+    supplier: async (_: unknown, { id }: { id: string }) => {
+      return await prisma.supplier.findUnique({
+        where: { id },
+        include: {
+          priceLists: {
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      })
+    },
+
+    priceListItems: async (_: unknown, { priceListId, search, limit = 100, offset = 0 }: { priceListId: string; search?: string; limit?: number; offset?: number }) => {
+      const where: any = { priceListId }
+
+      if (search) {
+        where.OR = [
+          { article: { contains: search, mode: 'insensitive' } },
+          { name: { contains: search, mode: 'insensitive' } },
+          { brand: { contains: search, mode: 'insensitive' } },
+        ]
+      }
+
+      const [items, total] = await Promise.all([
+        prisma.priceListItem.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          skip: offset,
+          take: Math.min(limit, 100),
+        }),
+        prisma.priceListItem.count({ where })
+      ])
+
+      return {
+        items,
+        total,
+        hasMore: offset + items.length < total
+      }
+    },
+
     // Support tickets
     mySupportTickets: async (_: unknown, { limit = 50, offset = 0 }: { limit?: number; offset?: number }, context: Context) => {
       const ctx = context || getContext()
@@ -6033,7 +6243,7 @@ export const resolvers = {
           userAgent
         })
       }
-      
+
       return true
     },
 
@@ -6346,12 +6556,12 @@ export const resolvers = {
         }
 
         const slug = input.slug || createSlug(input.name)
-        
+
         // Проверяем уникальность slug
         const existingCategory = await prisma.category.findUnique({
           where: { slug }
         })
-        
+
         if (existingCategory) {
           throw new Error('Категория с таким адресом уже существует')
         }
@@ -6396,7 +6606,7 @@ export const resolvers = {
         }
 
         const updateData: Record<string, unknown> = { ...input }
-        
+
         if (input.name && !input.slug) {
           updateData.slug = createSlug(input.name)
         }
@@ -6506,7 +6716,7 @@ export const resolvers = {
           try {
             const iconData = input.icon.replace(/^data:image\/[a-z]+;base64,/, '')
             const buffer = Buffer.from(iconData, 'base64')
-            
+
             const fileKey = generateFileKey('navigation-icons', 'png')
             const uploadResult = await uploadBuffer(buffer, fileKey, 'image/png')
             iconUrl = uploadResult.url
@@ -6529,7 +6739,7 @@ export const resolvers = {
         // Получаем данные из PartsIndex для ответа
         const catalogs = await partsIndexService.getCatalogs('ru')
         const catalog = catalogs.find(c => c.id === category.partsIndexCatalogId)
-        
+
         let groupName: string | null = null
         if (category.partsIndexGroupId && catalog) {
           const groups = await partsIndexService.getCatalogGroups(category.partsIndexCatalogId, 'ru')
@@ -6581,7 +6791,7 @@ export const resolvers = {
         if (input.partsIndexCatalogId || input.partsIndexGroupId !== undefined) {
           const catalogId = input.partsIndexCatalogId || existingCategory.partsIndexCatalogId
           const groupId = input.partsIndexGroupId !== undefined ? input.partsIndexGroupId : existingCategory.partsIndexGroupId
-          
+
           const conflicting = await prisma.navigationCategory.findFirst({
             where: {
               partsIndexCatalogId: catalogId,
@@ -6600,7 +6810,7 @@ export const resolvers = {
           try {
             const iconData = input.icon.replace(/^data:image\/[a-z]+;base64,/, '')
             const buffer = Buffer.from(iconData, 'base64')
-            
+
             const fileKey = generateFileKey('navigation-icons', 'png')
             const uploadResult = await uploadBuffer(buffer, fileKey, 'image/png')
             iconUrl = uploadResult.url
@@ -6624,7 +6834,7 @@ export const resolvers = {
         // Получаем данные из PartsIndex для ответа
         const catalogs = await partsIndexService.getCatalogs('ru')
         const catalog = catalogs.find(c => c.id === category.partsIndexCatalogId)
-        
+
         let groupName: string | null = null
         if (category.partsIndexGroupId && catalog) {
           const groups = await partsIndexService.getCatalogGroups(category.partsIndexCatalogId, 'ru')
@@ -6699,14 +6909,14 @@ export const resolvers = {
     },
 
     // Товары
-    createProduct: async (_: unknown, { 
-      input, 
-      images = [], 
+    createProduct: async (_: unknown, {
+      input,
+      images = [],
       characteristics = [],
       options = []
-    }: { 
-      input: ProductInput; 
-      images?: ProductImageInput[]; 
+    }: {
+      input: ProductInput;
+      images?: ProductImageInput[];
       characteristics?: CharacteristicInput[];
       options?: ProductOptionInput[]
     }, context: Context) => {
@@ -6716,12 +6926,12 @@ export const resolvers = {
         }
 
         const slug = input.slug || createSlug(input.name)
-        
+
         // Проверяем уникальность slug
         const existingProduct = await prisma.product.findUnique({
           where: { slug }
         })
-        
+
         if (existingProduct) {
           throw new Error('Товар с таким адресом уже существует')
         }
@@ -6895,16 +7105,16 @@ export const resolvers = {
       }
     },
 
-    updateProduct: async (_: unknown, { 
+    updateProduct: async (_: unknown, {
       id,
       input,
       images = [],
       characteristics = [],
       options = []
-    }: { 
+    }: {
       id: string;
-      input: ProductInput; 
-      images?: ProductImageInput[]; 
+      input: ProductInput;
+      images?: ProductImageInput[];
       characteristics?: CharacteristicInput[];
       options?: ProductOptionInput[]
     }, context: Context) => {
@@ -6933,7 +7143,7 @@ export const resolvers = {
           const existingBySlug = await prisma.product.findUnique({
             where: { slug: input.slug }
           })
-          
+
           if (existingBySlug) {
             throw new Error('Товар с таким адресом уже существует')
           }
@@ -7417,8 +7627,8 @@ export const resolvers = {
         // Получаем информацию о товарах для логирования
         const products = await prisma.product.findMany({
           where: { id: { in: productIds } },
-          select: { 
-            id: true, 
+          select: {
+            id: true,
             name: true,
             categories: { select: { id: true, name: true } }
           }
@@ -7439,7 +7649,7 @@ export const resolvers = {
               }
             }
           })
-          
+
           // Затем подключаем к новой категории
           return prisma.product.update({
             where: { id: productId },
@@ -7475,7 +7685,7 @@ export const resolvers = {
           })
         }
 
-        return { 
+        return {
           count: products.length,
           movedProducts: updatedProducts
         }
@@ -7488,8 +7698,8 @@ export const resolvers = {
       }
     },
 
-    exportProducts: async (_: unknown, { categoryId, search }: { 
-      categoryId?: string; search?: string; format?: string 
+    exportProducts: async (_: unknown, { categoryId, search }: {
+      categoryId?: string; search?: string; format?: string
     }, context: Context) => {
       try {
         if (!context.userId) {
@@ -7498,11 +7708,11 @@ export const resolvers = {
 
         // Получаем товары с теми же фильтрами, что и в списке
         const where: Record<string, unknown> = {}
-        
+
         if (categoryId) {
           where.categories = { some: { id: categoryId } }
         }
-        
+
         if (search) {
           where.OR = [
             { name: { contains: search, mode: 'insensitive' } },
@@ -7542,10 +7752,10 @@ export const resolvers = {
           unit: product.unit,
           categories: product.categories.map(cat => cat.name).join(', '),
           images: product.images.map(img => img.url).join(', '),
-          characteristics: product.characteristics.map(char => 
+          characteristics: product.characteristics.map(char =>
             `${char.characteristic.name}: ${char.value}`
           ).join('; '),
-          options: product.options.map(opt => 
+          options: product.options.map(opt =>
             `${opt.option.name}: ${opt.optionValue.value} (+${opt.optionValue.price}₽)`
           ).join('; '),
           videoUrl: product.videoUrl || '',
@@ -7614,8 +7824,8 @@ export const resolvers = {
       }
     },
 
-    importProducts: async (_: unknown, { input }: { 
-      input: { file: string; categoryId?: string; replaceExisting?: boolean } 
+    importProducts: async (_: unknown, { input }: {
+      input: { file: string; categoryId?: string; replaceExisting?: boolean }
     }, context: Context) => {
       try {
         if (!context.userId) {
@@ -7626,40 +7836,40 @@ export const resolvers = {
         console.log('Начало импорта товаров, пользователь:', context.userId)
         const fileData = Buffer.from(input.file, 'base64')
         console.log('Размер файла:', fileData.length, 'байт')
-        
+
         let headers: string[] = []
         let dataRows: string[][] = []
-        
+
         // Определяем тип файла по содержимому и размеру
         const hasExcelSignature = (fileData[0] === 0x50 && fileData[1] === 0x4B) || // PK (Excel/ZIP signature)
                                  (fileData[0] === 0xD0 && fileData[1] === 0xCF) // OLE signature (старые Excel файлы)
-        
+
         // Дополнительно проверяем размер файла (Excel файлы обычно больше 1KB)
         const isExcel = hasExcelSignature && fileData.length > 1024
-        
+
         if (isExcel) {
           try {
             // Парсим Excel файл
             console.log('Парсим Excel файл, размер:', fileData.length, 'байт')
             const workbook = XLSX.read(fileData, { type: 'buffer' })
-            
+
             if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
               throw new Error('Excel файл не содержит листов с данными')
             }
-            
+
             const sheetName = workbook.SheetNames[0]
             const worksheet = workbook.Sheets[sheetName]
             const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][]
-            
+
             console.log('Обработано строк из Excel:', jsonData.length)
-            
+
             if (jsonData.length < 2) {
               throw new Error('Файл должен содержать заголовки и хотя бы одну строку данных')
             }
-            
+
             headers = jsonData[0].map(h => String(h || '').trim())
             dataRows = jsonData.slice(1).filter(row => row.some(cell => String(cell || '').trim()))
-            
+
             console.log('Заголовки:', headers)
             console.log('Строк данных:', dataRows.length)
           } catch (excelError) {
@@ -7672,18 +7882,18 @@ export const resolvers = {
             console.log('Парсим как CSV файл, размер:', fileData.length, 'байт')
             const fileContent = fileData.toString('utf-8')
             const lines = fileContent.split('\n').filter(line => line.trim())
-            
+
             console.log('Строк в CSV:', lines.length)
-            
+
             if (lines.length < 2) {
               throw new Error('Файл должен содержать заголовки и хотя бы одну строку данных')
             }
 
             headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim())
-            dataRows = lines.slice(1).map(line => 
+            dataRows = lines.slice(1).map(line =>
               line.split(',').map(v => v.replace(/"/g, '').trim())
             )
-            
+
             console.log('Заголовки CSV:', headers)
             console.log('Строк данных CSV:', dataRows.length)
           } catch (csvError) {
@@ -7702,10 +7912,10 @@ export const resolvers = {
         // Обрабатываем каждую строку
         for (let i = 0; i < dataRows.length; i++) {
           const lineNumber = i + 2
-          
+
           try {
             const values = dataRows[i].map(v => String(v || '').trim())
-            
+
             // Если строка содержит меньше колонок, дополняем пустыми значениями
             // Если больше - обрезаем до нужного количества
             while (values.length < headers.length) {
@@ -7731,7 +7941,7 @@ export const resolvers = {
             // Проверяем существование товара по артикулу
             const article = rowData['Артикул'] || rowData['article'] || ''
             let existingProduct: any = null
-            
+
             if (article) {
               existingProduct = await prisma.product.findFirst({
                 where: { article }
@@ -7746,9 +7956,9 @@ export const resolvers = {
 
             // Подготовка данных для создания/обновления товара
             const manufacturer = rowData['Производитель'] || rowData['manufacturer'] || ''
-            const description = rowData['Описание'] || rowData['description'] || 
+            const description = rowData['Описание'] || rowData['description'] ||
               (manufacturer ? `Производитель: ${manufacturer}` : undefined)
-            
+
             const productData = {
               name: name,
               article: article || undefined,
@@ -7808,7 +8018,7 @@ export const resolvers = {
           errors: result.errors.length,
           warnings: result.warnings.length
         })
-        
+
         if (context.headers) {
           const { ipAddress, userAgent } = getClientInfo(context.headers)
           await createAuditLog({
@@ -7898,8 +8108,8 @@ export const resolvers = {
     },
 
     // Клиенты
-    createClient: async (_: unknown, { input, vehicles = [], discounts = [] }: { 
-      input: ClientInput; vehicles?: ClientVehicleInput[]; discounts?: ClientDiscountInput[] 
+    createClient: async (_: unknown, { input, vehicles = [], discounts = [] }: {
+      input: ClientInput; vehicles?: ClientVehicleInput[]; discounts?: ClientDiscountInput[]
     }, context: Context) => {
       try {
         if (!context.userId) {
@@ -7974,8 +8184,8 @@ export const resolvers = {
       }
     },
 
-    updateClient: async (_: unknown, { id, input, vehicles = [], discounts = [] }: { 
-      id: string; input: ClientInput; vehicles?: ClientVehicleInput[]; discounts?: ClientDiscountInput[] 
+    updateClient: async (_: unknown, { id, input, vehicles = [], discounts = [] }: {
+      id: string; input: ClientInput; vehicles?: ClientVehicleInput[]; discounts?: ClientDiscountInput[]
     }, context: Context) => {
       try {
         if (!context.userId) {
@@ -8097,8 +8307,8 @@ export const resolvers = {
       }
     },
 
-    exportClients: async (_: unknown, { filter, search }: { 
-      filter?: ClientFilterInput; search?: string 
+    exportClients: async (_: unknown, { filter, search }: {
+      filter?: ClientFilterInput; search?: string
     }, context: Context) => {
       try {
         if (!context.userId) {
@@ -8106,7 +8316,7 @@ export const resolvers = {
         }
 
         const where: Record<string, unknown> = {}
-        
+
         if (filter) {
           if (filter.type) {
             where.type = filter.type
@@ -8134,7 +8344,7 @@ export const resolvers = {
             where.profileId = filter.profileId
           }
         }
-        
+
         if (search) {
           where.OR = [
             { name: { contains: search, mode: 'insensitive' } },
@@ -8177,7 +8387,7 @@ export const resolvers = {
           bankName: client.bankName || '',
           bankBik: client.bankBik || '',
           correspondentAccount: client.correspondentAccount || '',
-          vehicles: client.vehicles.map(v => 
+          vehicles: client.vehicles.map(v =>
             `${v.brand || ''} ${v.model || ''} (${v.licensePlate || v.vin || v.frame || ''})`
           ).join('; '),
           createdAt: client.createdAt instanceof Date ? client.createdAt.toISOString() : client.createdAt
@@ -9000,14 +9210,14 @@ export const resolvers = {
       try {
         console.log('🔍 createBalanceInvoice: начало выполнения')
         console.log('📋 createBalanceInvoice: contractId:', contractId, 'amount:', amount)
-        
+
         const actualContext = context || getContext()
         console.log('🔑 createBalanceInvoice: контекст:', {
           clientId: actualContext.clientId,
           userId: actualContext.userId,
           userRole: actualContext.userRole
         })
-        
+
         if (!actualContext.clientId) {
           console.log('❌ createBalanceInvoice: клиент не авторизован')
           throw new Error('Пользователь не авторизован')
@@ -9059,8 +9269,8 @@ export const resolvers = {
         const { InvoiceService } = await import('../invoice-service')
 
         // Находим юридическое лицо клиента для этого договора
-        const clientLegalEntity = contract.client.legalEntities.find(le => 
-          le.shortName === contract.clientLegalEntity || 
+        const clientLegalEntity = contract.client.legalEntities.find(le =>
+          le.shortName === contract.clientLegalEntity ||
           le.fullName === contract.clientLegalEntity
         )
 
@@ -9116,7 +9326,7 @@ export const resolvers = {
 
     updateInvoiceStatus: async (_: any, { invoiceId, status }: { invoiceId: string; status: string }, context: any) => {
       console.log('updateInvoiceStatus резолвер вызван:', { invoiceId, status });
-      
+
       if (!context.userId || context.userRole !== 'ADMIN') {
         throw new Error('Доступ запрещен. Требуются права администратора.');
       }
@@ -9124,7 +9334,7 @@ export const resolvers = {
       try {
         const updatedInvoice = await prisma.balanceInvoice.update({
           where: { id: invoiceId },
-          data: { 
+          data: {
             status: status as any,
             updatedAt: new Date()
           },
@@ -9164,7 +9374,7 @@ export const resolvers = {
 
     getInvoicePDF: async (_: any, { invoiceId }: { invoiceId: string }, context: any) => {
       console.log('🔍 Получение PDF счета через GraphQL:', invoiceId);
-      
+
       try {
         // Получаем счет из базы данных
         const invoice = await prisma.balanceInvoice.findUnique({
@@ -9191,14 +9401,14 @@ export const resolvers = {
 
         // Проверяем авторизацию
         let hasAccess = false;
-        
-        console.log('🔍 Проверка доступа:', { 
-          userId: context.userId, 
-          userRole: context.userRole, 
+
+        console.log('🔍 Проверка доступа:', {
+          userId: context.userId,
+          userRole: context.userRole,
           clientId: context.clientId,
-          invoiceClientId: invoice.contract.clientId 
+          invoiceClientId: invoice.contract.clientId
         });
-        
+
         // Админ имеет доступ ко всем счетам
         if (context.userId && context.userRole === 'ADMIN') {
           hasAccess = true;
@@ -9236,7 +9446,7 @@ export const resolvers = {
         const filename = `Счет-${invoice.invoiceNumber}.pdf`;
 
         console.log('✅ PDF успешно сгенерирован');
-        
+
         return {
             success: true,
           pdfBase64,
@@ -9513,7 +9723,7 @@ export const resolvers = {
         })
 
         const sessionId = Math.random().toString(36).substring(7)
-        
+
         return {
           exists: !!client,
           client,
@@ -9528,14 +9738,14 @@ export const resolvers = {
     sendSMSCode: async (_: unknown, { phone, sessionId }: { phone: string; sessionId?: string }) => {
       try {
         // Используем импортированные сервисы
-        
+
         const finalSessionId = sessionId || Math.random().toString(36).substring(7)
-        
+
         // Проверяем, есть ли уже активный код для этого номера и сессии
         if (smsCodeStore.hasActiveCode(phone, finalSessionId)) {
           const ttl = smsCodeStore.getCodeTTL(phone, finalSessionId)
           console.log(`У номера ${phone} уже есть активный код, осталось ${ttl} секунд`)
-          
+
           return {
           success: true,
             sessionId: finalSessionId,
@@ -9548,10 +9758,10 @@ export const resolvers = {
 
         // Сохраняем код в хранилище
         await smsCodeStore.saveCode(phone, code, finalSessionId)
-        
+
         // Отправляем SMS через Билайн API
         const smsResult = await smsService.sendVerificationCode(phone, code)
-        
+
         if (smsResult.success) {
           return {
             success: true,
@@ -9564,7 +9774,7 @@ export const resolvers = {
           if (process.env.NODE_ENV !== 'development') {
             throw new Error(`Не удалось отправить SMS: ${smsResult.error}`)
           }
-          
+
           // В development режиме возвращаем успех и показываем код
           return {
             success: true,
@@ -9585,7 +9795,7 @@ export const resolvers = {
 
         // Проверяем код через наше хранилище
         const verification = await smsCodeStore.verifyCode(phone, code, sessionId)
-        
+
         if (!verification.valid) {
           console.log(`Код неверный: ${verification.error}`)
           throw new Error(verification.error || 'Неверный код')
@@ -9607,7 +9817,7 @@ export const resolvers = {
           // Если клиент существует - авторизуем его
           console.log(`Авторизуем существующего клиента: ${client.id}`)
           const token = `client_${client.id}_${Date.now()}`
-          
+
           return {
             success: true,
             client,
@@ -10211,7 +10421,7 @@ export const resolvers = {
           vehicleBrand = searchHistoryItem.vehicleBrand || undefined
           vehicleModel = searchHistoryItem.vehicleModel || undefined
           vehicleYear = searchHistoryItem.vehicleYear || undefined
-          
+
           // Формируем красивое название
           if (vehicleBrand && vehicleModel) {
             vehicleName = `${vehicleBrand} ${vehicleModel}`
@@ -10266,8 +10476,8 @@ export const resolvers = {
 
         // Проверяем, что запись принадлежит клиенту и имеет тип VIN
         const existingItem = await prisma.partsSearchHistory.findFirst({
-          where: { 
-            id, 
+          where: {
+            id,
             clientId,
             searchType: 'VIN' // Удаляем только VIN записи
           }
@@ -10724,30 +10934,30 @@ export const resolvers = {
     createOrder: async (_: unknown, { input }: { input: CreateOrderInput }, context: Context) => {
       try {
         const actualContext = context || getContext()
-        
+
         // Проверяем наличие товаров из нашего склада и резервируем их
         const internalItems = input.items.filter(item => item.productId) // Товары с productId - это наши товары
-        
+
         if (internalItems.length > 0) {
           console.log('createOrder: проверяем наличие внутренних товаров:', internalItems.length)
-          
+
           // Проверяем наличие каждого товара
           for (const item of internalItems) {
             const product = await prisma.product.findUnique({
               where: { id: item.productId! }
             })
-            
+
             if (!product) {
               throw new Error(`Товар с ID ${item.productId} не найден`)
             }
-            
+
             if (product.stock < item.quantity) {
               throw new Error(`Недостаточно товара "${product.name}" в наличии. Доступно: ${product.stock}, запрошено: ${item.quantity}`)
             }
           }
-          
+
           console.log('createOrder: все товары доступны, резервируем')
-          
+
           // Резервируем товары (вычитаем из наличия)
           for (const item of internalItems) {
             await prisma.product.update({
@@ -10761,12 +10971,12 @@ export const resolvers = {
             console.log(`createOrder: зарезервировано ${item.quantity} шт. товара ${item.productId}`)
           }
         }
-        
+
         // Генерируем номер заказа в формате ORD + 4 цифры
         // Используем счетчик заказов для уникальности
         const ordersCount = await prisma.order.count()
         const orderNumber = 'ORD' + (ordersCount + 1).toString().padStart(4, '0')
-        
+
         // Логируем входные данные для отладки
         console.log('createOrder: input.paymentMethod =', input.paymentMethod)
         console.log('createOrder: определяем статус:', input.paymentMethod === 'invoice' ? 'PENDING' : 'PROCESSING')
@@ -10783,7 +10993,7 @@ export const resolvers = {
         // Проверяем баланс для оплаты с баланса
         if (input.paymentMethod === 'balance') {
           console.log('createOrder: проверяем баланс для оплаты с баланса')
-          
+
           // Сначала ищем дефолтный активный контракт, если нет - любой активный
           let contract = await prisma.clientContract.findFirst({
             where: {
@@ -10792,7 +11002,7 @@ export const resolvers = {
               isDefault: true
             }
           })
-          
+
           if (!contract) {
             // Если дефолтного нет, ищем любой активный
             contract = await prisma.clientContract.findFirst({
@@ -10802,14 +11012,14 @@ export const resolvers = {
               }
             })
           }
-          
+
           if (!contract) {
             throw new Error('Активный контракт не найден')
           }
-          
+
           const availableBalance = (contract.balance || 0) + (contract.creditLimit || 0)
           console.log(`createOrder: доступный баланс: ${availableBalance}, сумма заказа: ${totalAmount}`)
-          
+
           if (availableBalance < totalAmount) {
             throw new Error('Недостаточно средств на балансе для оплаты заказа')
           }
@@ -10857,7 +11067,7 @@ export const resolvers = {
         // Если оплата с баланса, списываем средства и переводим заказ в обработку
         if (input.paymentMethod === 'balance') {
           console.log('createOrder: списываем средства с баланса')
-          
+
           // Ищем тот же контракт, который использовали для проверки баланса
           let contractToUpdate = await prisma.clientContract.findFirst({
             where: {
@@ -10866,7 +11076,7 @@ export const resolvers = {
               isDefault: true
             }
           })
-          
+
           if (!contractToUpdate) {
             contractToUpdate = await prisma.clientContract.findFirst({
               where: {
@@ -10875,7 +11085,7 @@ export const resolvers = {
               }
             })
           }
-          
+
           if (contractToUpdate) {
             await prisma.clientContract.update({
               where: {
@@ -10887,9 +11097,9 @@ export const resolvers = {
                 }
               }
             })
-            
+
             console.log(`createOrder: списано ${totalAmount} ₽ с баланса контракта ${contractToUpdate.contractNumber}`)
-            
+
             // Обновляем статус заказа на "В обработке"
             await prisma.order.update({
               where: { id: order.id },
@@ -11467,11 +11677,11 @@ export const resolvers = {
     confirmPayment: async (_: unknown, { orderId }: { orderId: string }, context: Context) => {
       try {
         console.log('confirmPayment: подтверждение платежа для заказа:', orderId)
-        
+
         // Находим заказ
         const order = await prisma.order.findUnique({
           where: { id: orderId },
-          include: { 
+          include: {
             client: true,
             items: {
               include: {
@@ -11481,11 +11691,11 @@ export const resolvers = {
             payments: true
           }
         })
-        
+
         if (!order) {
           throw new Error('Заказ не найден')
         }
-        
+
         // Если заказ уже находится не в ожидании оплаты, просто возвращаем его
         if (order.status !== PrismaOrderStatus.PENDING) {
           console.log('confirmPayment: статус заказа уже обновлён, текущий статус:', order.status)
@@ -11496,7 +11706,7 @@ export const resolvers = {
         const updatedOrder = await prisma.order.update({
           where: { id: orderId },
           data: { status: PrismaOrderStatus.PROCESSING },
-          include: { 
+          include: {
             client: true,
             items: {
               include: {
@@ -11509,7 +11719,7 @@ export const resolvers = {
 
         console.log('confirmPayment: статус заказа изменен на PROCESSING')
         return updatedOrder
-        
+
       } catch (error) {
         console.error('Ошибка подтверждения платежа:', error)
         if (error instanceof Error) {
@@ -11523,17 +11733,17 @@ export const resolvers = {
     createPayment: async (_: unknown, { input }: { input: CreatePaymentInput }, context: Context) => {
       try {
         console.log('createPayment: создание платежа для заказа:', input.orderId)
-        
+
         // Находим заказ
         const order = await prisma.order.findUnique({
           where: { id: input.orderId },
           include: { items: true }
         })
-        
+
         if (!order) {
           throw new Error('Заказ не найден')
         }
-        
+
         // Если заказ уже не ожидает оплаты, не создаем платеж в ЮКассе
         if (order.status !== PrismaOrderStatus.PENDING) {
           console.log('createPayment: заказ уже не в статусе PENDING, текущий статус:', order.status)
@@ -11545,10 +11755,10 @@ export const resolvers = {
             message: 'Заказ уже находится в обработке'
           }
         }
-        
+
         // Создаем платеж в ЮКассе
         const { yooKassaService } = await import('../yookassa-service')
-        
+
         const payment = await yooKassaService.createPayment({
           amount: order.finalAmount,
           currency: 'RUB',
@@ -11556,9 +11766,9 @@ export const resolvers = {
           returnUrl: input.returnUrl,
           metadata: { orderId: order.id }
         })
-        
+
         console.log('createPayment: платеж создан в ЮКассе:', payment.id)
-        
+
         // Маппинг статусов YooKassa на GraphQL enum
         const mapYooKassaStatus = (status: string) => {
           switch (status) {
@@ -11586,7 +11796,7 @@ export const resolvers = {
           success: true,
           message: 'Платеж успешно создан'
         }
-        
+
       } catch (error) {
         console.error('Ошибка создания платежа:', error)
         if (error instanceof Error) {
@@ -11597,7 +11807,7 @@ export const resolvers = {
     },
 
     // Мутация для получения офферов доставки
-    getDeliveryOffers: async (_: unknown, { input }: { 
+    getDeliveryOffers: async (_: unknown, { input }: {
       input: {
         items: Array<{
           name: string;
@@ -11620,10 +11830,10 @@ export const resolvers = {
       const maxSupplierDeliveryDays = Math.max(
         ...input.items.map(item => item.deliveryTime || 0)
       );
-      
+
       try {
         console.log('🚚 Получение офферов доставки для:', input.deliveryAddress)
-        
+
         console.log('📦 Максимальный срок поставки товаров на склад:', maxSupplierDeliveryDays, 'дней')
         console.log('📋 Товары в заказе:', input.items.map(item => ({
           name: item.name,
@@ -11631,7 +11841,7 @@ export const resolvers = {
           deliveryTime: item.deliveryTime,
           isExternal: item.isExternal
         })))
-        
+
         // Общие данные для Яндекс API
         const baseCartData = {
           items: input.items.map((item, index) => ({
@@ -11650,15 +11860,15 @@ export const resolvers = {
           paymentMethod: 'already_paid' as const, // По умолчанию оплата уже произведена
           maxSupplierDeliveryDays: maxSupplierDeliveryDays, // Передаем максимальный срок поставки
         }
-        
+
         const allOffers: any[] = []
-        
+
         // 1. Пробуем курьерскую доставку
         try {
           console.log('🚚 Пробуем курьерскую доставку...')
           const courierData = { ...baseCartData, deliveryType: 'courier' as const }
           const courierOffers = await yandexDeliveryService.createOfferFromCart(courierData)
-          
+
           if (courierOffers.offers && courierOffers.offers.length > 0) {
             console.log(`✅ Найдено ${courierOffers.offers.length} офферов курьерской доставки`)
             allOffers.push(...courierOffers.offers.map(offer => ({ ...offer, delivery_type: 'courier' })))
@@ -11666,13 +11876,13 @@ export const resolvers = {
         } catch (error) {
           console.log('⚠️ Курьерская доставка недоступна:', error instanceof Error ? error.message : 'Неизвестная ошибка')
         }
-        
+
         // 2. Пробуем ПВЗ
         try {
           console.log('📦 Пробуем доставку в ПВЗ...')
           const pickupData = { ...baseCartData, deliveryType: 'pickup' as const }
           const pickupOffers = await yandexDeliveryService.createOfferFromCart(pickupData)
-          
+
           if (pickupOffers.offers && pickupOffers.offers.length > 0) {
             console.log(`✅ Найдено ${pickupOffers.offers.length} офферов доставки в ПВЗ`)
             allOffers.push(...pickupOffers.offers.map(offer => ({ ...offer, delivery_type: 'pickup' })))
@@ -11680,9 +11890,9 @@ export const resolvers = {
         } catch (error) {
           console.log('⚠️ Доставка в ПВЗ недоступна:', error instanceof Error ? error.message : 'Неизвестная ошибка')
         }
-        
+
         console.log('✅ Всего получено офферов:', allOffers.length)
-        
+
         // Удаляем дубликаты офферов с одинаковыми delivery_type
         const uniqueOffers = allOffers.reduce((acc, current) => {
           const existingOffer = acc.find(offer => offer.delivery_type === current.delivery_type)
@@ -11691,34 +11901,34 @@ export const resolvers = {
           }
           return acc
         }, [] as any[])
-        
+
         console.log(`🔄 Удалены дубликаты: ${allOffers.length} → ${uniqueOffers.length} офферов`)
-        
+
         // Форматируем офферы для фронтенда
         const formattedOffers = uniqueOffers.map((offer, index) => {
           const deliveryInterval = offer.offer_details?.delivery_interval
           const pricing = offer.offer_details?.pricing
           const deliveryType = offer.delivery_type || 'courier'
-          
+
           console.log('📅 Обработка оффера:', {
             offer_id: offer.offer_id,
             delivery_type: deliveryType,
             delivery_interval: deliveryInterval,
             pricing: pricing
           })
-          
+
           // Правильно вычисляем дату доставки с учетом срока поставки товара
           const today = new Date()
           const deliveryDate = new Date(today)
           deliveryDate.setDate(today.getDate() + maxSupplierDeliveryDays + 1) // +1 день на саму доставку
-          
+
           let deliveryTime = '10:00-18:00'
           let deliveryCost = 0
-          
+
           if (deliveryInterval && typeof deliveryInterval === 'object' && 'min' in deliveryInterval) {
             // Проверяем, если это Unix timestamp
             let minDate: Date, maxDate: Date
-            
+
             if (typeof deliveryInterval.min === 'number' && deliveryInterval.min > 1000000000) {
               // Это Unix timestamp в секундах
               minDate = new Date(deliveryInterval.min * 1000)
@@ -11728,14 +11938,14 @@ export const resolvers = {
               minDate = new Date(deliveryInterval.min)
               maxDate = new Date(deliveryInterval.max)
             }
-            
+
             // Проверяем, что даты валидны
             if (!isNaN(minDate.getTime()) && !isNaN(maxDate.getTime())) {
               // Используем минимальную дату из интервала + время поставки товара
               const calculatedDate = new Date(minDate)
               calculatedDate.setDate(minDate.getDate() + maxSupplierDeliveryDays)
               deliveryDate.setTime(calculatedDate.getTime())
-              
+
               if (deliveryType === 'pickup') {
                 deliveryTime = `С ${deliveryDate.getDate()} ${deliveryDate.toLocaleDateString('ru-RU', { month: 'long' })}`
               } else {
@@ -11743,7 +11953,7 @@ export const resolvers = {
               }
             }
           }
-          
+
           if (pricing) {
             // Парсим стоимость из строки типа "192.15 RUB"
             const match = pricing.match(/(\d+(?:\.\d+)?)/);
@@ -11751,17 +11961,17 @@ export const resolvers = {
               deliveryCost = Math.round(parseFloat(match[1]))
             }
           }
-          
+
           // Определяем название и описание в зависимости от типа доставки
           let name = 'Курьерская доставка'
           let description = 'Доставка курьером до двери'
-          
+
           if (deliveryType === 'pickup') {
             name = 'Доставка в пункт выдачи (ПВЗ)'
             description = 'Получение в пункте выдачи заказов'
             deliveryCost = 0 // ПВЗ всегда бесплатно
           }
-          
+
           if (maxSupplierDeliveryDays > 0) {
             if (deliveryType === 'pickup') {
               description = `Доставка включает ${maxSupplierDeliveryDays} дн. поставки товара + доставку в ПВЗ`
@@ -11769,13 +11979,13 @@ export const resolvers = {
               description = `Доставка включает ${maxSupplierDeliveryDays} дн. поставки товара + доставку до двери`
             }
           }
-          
+
           const formattedDeliveryDate = deliveryDate.toLocaleDateString('ru-RU', {
             weekday: 'short',
             day: 'numeric',
             month: 'long'
           })
-          
+
           return {
             id: offer.offer_id || `offer_${deliveryType}_${index}`,
             name,
@@ -11787,18 +11997,18 @@ export const resolvers = {
             expiresAt: offer.expires_at ? new Date(offer.expires_at).toISOString() : null
           }
         })
-        
+
         // Проверяем есть ли оффер для ПВЗ среди полученных от Яндекса
         const hasPickupOffer = formattedOffers.some(offer => offer.type === 'pickup')
         const hasCourierOffer = formattedOffers.some(offer => offer.type === 'courier')
-        
+
         // Добавляем стандартный ПВЗ оффер если его нет
         if (!hasPickupOffer) {
           console.log('📦 Добавляем стандартный ПВЗ оффер')
-          
+
           const tomorrow = new Date()
           tomorrow.setDate(tomorrow.getDate() + 1 + maxSupplierDeliveryDays)
-          
+
           const standardPickupOffer = {
             id: 'standard_pickup',
             name: 'Доставка в пункт выдачи (ПВЗ)',
@@ -11809,23 +12019,23 @@ export const resolvers = {
             }),
             deliveryTime: `С ${tomorrow.getDate()} ${tomorrow.toLocaleDateString('ru-RU', { month: 'long' })}`,
             cost: 0, // Самовывоз бесплатно
-            description: maxSupplierDeliveryDays > 0 
+            description: maxSupplierDeliveryDays > 0
               ? `Доставка включает ${maxSupplierDeliveryDays} дн. поставки товара + доставку в ПВЗ`
               : 'Получение в пункте выдачи заказов',
             type: 'pickup',
             expiresAt: null
           }
-          
+
           formattedOffers.push(standardPickupOffer)
         }
-        
+
         // Добавляем стандартный курьерский оффер если его нет
         if (!hasCourierOffer) {
           console.log('🚚 Добавляем стандартный курьерский оффер')
-          
+
           const tomorrow = new Date()
           tomorrow.setDate(tomorrow.getDate() + 1 + maxSupplierDeliveryDays)
-          
+
           const standardCourierOffer = {
             id: 'standard_courier',
             name: 'Курьерская доставка',
@@ -11836,23 +12046,23 @@ export const resolvers = {
             }),
             deliveryTime: '10:00-18:00',
             cost: 300, // Стандартная стоимость
-            description: maxSupplierDeliveryDays > 0 
+            description: maxSupplierDeliveryDays > 0
               ? `Доставка включает ${maxSupplierDeliveryDays} дн. поставки товара + доставку до двери`
               : 'Доставка курьером до двери',
             type: 'courier',
             expiresAt: null
           }
-          
+
           formattedOffers.push(standardCourierOffer)
         }
-        
+
         // Если совсем нет офферов, возвращаем полный набор стандартных
         if (formattedOffers.length === 0) {
           console.log('⚠️ Нет офферов от Яндекс Доставки, возвращаем полный стандартный набор')
-          
+
           const tomorrow = new Date()
           tomorrow.setDate(tomorrow.getDate() + 1 + maxSupplierDeliveryDays)
-          
+
           const standardOffers = [
             {
               id: 'standard_courier',
@@ -11864,7 +12074,7 @@ export const resolvers = {
               }),
               deliveryTime: '10:00-18:00',
               cost: 300, // Стандартная стоимость
-              description: maxSupplierDeliveryDays > 0 
+              description: maxSupplierDeliveryDays > 0
                 ? `Доставка включает ${maxSupplierDeliveryDays} дн. поставки товара + доставку до двери`
                 : 'Доставка курьером до двери',
               type: 'courier',
@@ -11880,14 +12090,14 @@ export const resolvers = {
               }),
               deliveryTime: `С ${tomorrow.getDate()} ${tomorrow.toLocaleDateString('ru-RU', { month: 'long' })}`,
               cost: 0, // Самовывоз бесплатно
-              description: maxSupplierDeliveryDays > 0 
+              description: maxSupplierDeliveryDays > 0
                 ? `Доставка включает ${maxSupplierDeliveryDays} дн. поставки товара + доставку в ПВЗ`
                 : 'Получение в пункте выдачи заказов',
               type: 'pickup',
               expiresAt: null
             }
           ]
-          
+
           return {
             success: true,
             message: 'Получены стандартные варианты доставки',
@@ -11895,21 +12105,21 @@ export const resolvers = {
             offers: standardOffers
           }
         }
-        
+
         return {
           success: true,
           message: 'Офферы доставки успешно получены',
           error: null,
           offers: formattedOffers
         }
-        
+
       } catch (error) {
         console.error('❌ Ошибка получения офферов доставки:', error)
-        
+
         // В случае ошибки возвращаем стандартные варианты
         const tomorrow = new Date()
         tomorrow.setDate(tomorrow.getDate() + 1 + maxSupplierDeliveryDays)
-        
+
         const fallbackOffers = [
           {
             id: 'fallback_courier',
@@ -11921,7 +12131,7 @@ export const resolvers = {
             }),
             deliveryTime: '10:00-18:00',
             cost: 300,
-            description: maxSupplierDeliveryDays > 0 
+            description: maxSupplierDeliveryDays > 0
               ? `Доставка включает ${maxSupplierDeliveryDays} дн. поставки товара + доставку до двери`
               : 'Доставка курьером до двери',
             type: 'courier',
@@ -11937,14 +12147,14 @@ export const resolvers = {
             }),
             deliveryTime: `С ${tomorrow.getDate()} ${tomorrow.toLocaleDateString('ru-RU', { month: 'long' })}`,
             cost: 0, // Самовывоз бесплатно
-            description: maxSupplierDeliveryDays > 0 
+            description: maxSupplierDeliveryDays > 0
               ? `Доставка включает ${maxSupplierDeliveryDays} дн. поставки товара + доставку в ПВЗ`
               : 'Получение в пункте выдачи заказов',
             type: 'pickup',
             expiresAt: null
           }
         ]
-        
+
         // Определяем сообщение в зависимости от типа ошибки
         let errorMessage = 'Временные проблемы с сервисом доставки'
         if (error instanceof Error) {
@@ -11954,7 +12164,7 @@ export const resolvers = {
             errorMessage = 'Доставка в данный адрес временно недоступна'
           }
         }
-        
+
         return {
           success: true, // Меняем на true, так как мы предоставляем альтернативные варианты
           message: `${errorMessage}. Показаны стандартные варианты доставки.`,
@@ -12552,7 +12762,7 @@ export const resolvers = {
     },
 
     // Кража - мутации для работы с базой данных запчастей
-    
+
     // News mutations
     createNews: async (_: unknown, { input }: { input: NewsInput }, context: Context) => {
       try {
@@ -12652,10 +12862,10 @@ export const resolvers = {
           if (!groupId) {
             // If no groupId, try to fetch all groups for this category
             console.log('🔍 No groupId provided, fetching all groups for category:', categoryId)
-            
+
             const catalogGroups = await partsIndexService.getCatalogGroups(categoryId, 'ru')
             console.log('✅ Found groups for category:', catalogGroups.length)
-            
+
             if (catalogGroups.length === 0) {
               return {
                 success: false,
@@ -12667,14 +12877,14 @@ export const resolvers = {
 
             // Fetch products from all groups (limit per group to avoid too much data)
             const allProducts: any[] = []
-            const maxProductsPerGroup = fetchAll 
+            const maxProductsPerGroup = fetchAll
               ? Math.max(5000, Math.floor(50000 / catalogGroups.length)) // Гораздо более щедрый лимит при fetchAll
               : Math.max(1, Math.floor(limit / catalogGroups.length))
 
             for (const group of catalogGroups.slice(0, 10)) { // Limit to first 10 groups
               try {
                 let groupProducts: any[] = []
-                
+
                 if (fetchAll) {
                   // Используем новый метод для получения ВСЕХ товаров группы
                   groupProducts = await partsIndexService.getAllCatalogEntities(categoryId, group.id, {
@@ -12690,14 +12900,14 @@ export const resolvers = {
                   })
                   groupProducts = entitiesData?.list || []
                 }
-                
+
                 // Add group info to each product
                 const productsWithGroup = groupProducts.map(product => ({
                   ...product,
                   groupId: group.id,
                   groupName: group.name
                 }))
-                
+
                 allProducts.push(...productsWithGroup)
                 console.log(`✅ Fetched ${groupProducts.length} products from group: ${group.name}`)
               } catch (error) {
@@ -12724,7 +12934,7 @@ export const resolvers = {
               })
               products = entitiesData?.list || []
             }
-            
+
             console.log('✅ Fetched PartsIndex products from group:', products.length)
           }
 
@@ -12748,7 +12958,7 @@ export const resolvers = {
 
         console.log(`📊 About to insert ${products.length} products into database`)
         console.log(`📋 Sample product data:`, products.slice(0, 3))
-        
+
         // Insert products into parts database
         const { getPartsDb } = await import('../parts-db-wrapper')
         const partsDb = await getPartsDb()
@@ -12758,7 +12968,7 @@ export const resolvers = {
           categoryType.toLowerCase() as 'partsindex' | 'partsapi',
           products
         )
-        
+
         console.log(`✅ Database insertion result: ${insertedCount} of ${products.length} products saved`)
 
         const tableName = `category_${categoryType.toLowerCase()}_${categoryId.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()}`
@@ -12815,18 +13025,18 @@ export const resolvers = {
       }
     },
 
-    getCategoryProducts: async (_: unknown, { 
-      categoryId, 
-      categoryType, 
-      search, 
-      limit = 50, 
-      offset = 0 
-    }: { 
-      categoryId: string, 
-      categoryType: string, 
-      search?: string, 
-      limit?: number, 
-      offset?: number 
+    getCategoryProducts: async (_: unknown, {
+      categoryId,
+      categoryType,
+      search,
+      limit = 50,
+      offset = 0
+    }: {
+      categoryId: string,
+      categoryType: string,
+      search?: string,
+      limit?: number,
+      offset?: number
     }, context: Context) => {
       try {
         if (!context.userId || context.userRole !== 'ADMIN') {
@@ -13115,6 +13325,132 @@ export const resolvers = {
       return updated
     },
 
+    // Поставщики прайслистов
+    createSupplier: async (_: unknown, { input }: { input: any }, context: Context) => {
+      if (!context.userId) throw new Error('Не авторизовано')
+
+      // Проверка уникальности ИНН
+      const existing = await prisma.supplier.findUnique({ where: { inn: input.inn } })
+      if (existing) {
+        throw new Error('Поставщик с таким ИНН уже существует')
+      }
+
+      // Генерируем уникальный код поставщика в формате PR + 2-3 цифры
+      let supplierCode = ''
+      let isUnique = false
+
+      while (!isUnique) {
+        // Генерируем случайное число от 10 до 999 (2-3 цифры)
+        const randomNum = Math.floor(Math.random() * 990) + 10
+        supplierCode = `PR${randomNum}`
+
+        // Проверяем уникальность
+        const existingCode = await prisma.supplier.findUnique({
+          where: { supplierCode }
+        })
+
+        if (!existingCode) {
+          isUnique = true
+        }
+      }
+
+      return await prisma.supplier.create({
+        data: {
+          supplierCode,
+          inn: input.inn,
+          name: input.name,
+          bik: input.bik,
+          bankName: input.bankName,
+          accountNumber: input.accountNumber,
+          email: input.email,
+          phone: input.phone,
+          contactPerson: input.contactPerson,
+          address: input.address || null,
+          correspondentAccount: input.correspondentAccount || null,
+          ogrn: input.ogrn || null,
+          kpp: input.kpp || null,
+        },
+      })
+    },
+
+    updateSupplier: async (_: unknown, { id, input }: { id: string; input: any }, context: Context) => {
+      if (!context.userId) throw new Error('Не авторизовано')
+
+      // Если меняется ИНН, проверяем уникальность
+      if (input.inn) {
+        const existing = await prisma.supplier.findFirst({
+          where: { inn: input.inn, NOT: { id } }
+        })
+        if (existing) {
+          throw new Error('Поставщик с таким ИНН уже существует')
+        }
+      }
+
+      return await prisma.supplier.update({
+        where: { id },
+        data: {
+          ...(input.inn !== undefined && { inn: input.inn }),
+          ...(input.name !== undefined && { name: input.name }),
+          ...(input.bik !== undefined && { bik: input.bik }),
+          ...(input.bankName !== undefined && { bankName: input.bankName }),
+          ...(input.accountNumber !== undefined && { accountNumber: input.accountNumber }),
+          ...(input.email !== undefined && { email: input.email }),
+          ...(input.phone !== undefined && { phone: input.phone }),
+          ...(input.contactPerson !== undefined && { contactPerson: input.contactPerson }),
+          ...(input.address !== undefined && { address: input.address }),
+          ...(input.correspondentAccount !== undefined && { correspondentAccount: input.correspondentAccount }),
+          ...(input.ogrn !== undefined && { ogrn: input.ogrn }),
+          ...(input.kpp !== undefined && { kpp: input.kpp }),
+          ...(input.isActive !== undefined && { isActive: input.isActive }),
+        },
+      })
+    },
+
+    deleteSupplier: async (_: unknown, { id }: { id: string }, context: Context) => {
+      if (!context.userId) throw new Error('Не авторизовано')
+      await prisma.supplier.delete({ where: { id } })
+      return true
+    },
+
+    // Прайслисты
+    createPriceList: async (_: unknown, { input }: { input: { supplierId: string; fileName: string; fileUrl: string; fileSize: number } }, context: Context) => {
+      if (!context.userId) throw new Error('Не авторизовано')
+
+      const supplier = await prisma.supplier.findUnique({ where: { id: input.supplierId } })
+      if (!supplier) throw new Error('Поставщик не найден')
+
+      const priceList = await prisma.priceList.create({
+        data: {
+          supplierId: input.supplierId,
+          fileName: input.fileName,
+          fileUrl: input.fileUrl,
+          fileSize: input.fileSize,
+          status: 'pending',
+          itemsCount: 0,
+        },
+        include: {
+          supplier: true,
+        },
+      })
+
+      // Запускаем обработку прайслиста в фоне
+      fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/pricelists/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceListId: priceList.id })
+      }).catch(error => {
+        console.error('Ошибка запуска обработки прайслиста:', error)
+      })
+
+      return priceList
+    },
+
+    deletePriceList: async (_: unknown, { id }: { id: string }, context: Context) => {
+      if (!context.userId) throw new Error('Не авторизовано')
+      await prisma.priceList.delete({ where: { id } })
+      return true
+    },
+
     updateCartPrices: async (_: unknown, {}, context: Context) => {
       try {
         const clientId = context.clientId;
@@ -13286,4 +13622,4 @@ export const resolvers = {
       }
     }
   }
-} 
+}
